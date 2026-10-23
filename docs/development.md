@@ -9,7 +9,8 @@
 | sherpa-onnx | v1.12.17 binary | offline ASR (optional; transcription tests skip without it) |
 | Windows 10/11 | — | recording is Windows-only today |
 
-No cgo, no Node, no Bun. The frontend is embedded static files.
+No cgo, no Node, no Bun. The window is native UI written in Go, so there is no
+frontend to build.
 
 ## Run
 
@@ -17,7 +18,8 @@ No cgo, no Node, no Bun. The frontend is embedded static files.
 go run ./cmd/studio
 ```
 
-Right-click anywhere in the window → **Inspect** to open the WebView2 devtools.
+The window has no webview and so no devtools. `ui.NewTester` runs the view
+without a window, for tests (see below).
 
 ## Layout on disk
 
@@ -25,7 +27,7 @@ Right-click anywhere in the window → **Inspect** to open the WebView2 devtools
 cmd/studio/main.go      entry point
 internal/               services (see architecture.md)
 migrations/*.sql        embedded migrations
-ui/web/                 index.html, app.js, style.css (embedded)
+ui/native/              the window's state and its view
 docs/                   this documentation
 ```
 
@@ -68,6 +70,7 @@ Test suites and what they touch:
 | `internal/asr` | real sherpa-onnx run on a real WAV |
 | `internal/translate` | real HTTP call to MyMemory |
 | `internal/summary` | local `httptest` server exercising the production HTTP path |
+| `ui/native` | the view in `ui.NewTester`, over a real SQLite database |
 
 Tests that need an external dependency call `t.Skip` (never `t.Fatal` or a
 fake) when it is missing: no ffprobe, no recorder device, no ASR model, no
@@ -88,14 +91,13 @@ the full run takes ~25 s.
 2. It is embedded automatically by `migrations/migrations.go`.
 3. Never edit an applied file — add a new one.
 
-## Adding a bound service
+## Adding a page
 
-1. Define a type with exported methods (JSON-encodable args and results only).
-2. Call `mygo.BindAs("Name", svc)` in `main.go`.
-3. Call its `Open(db)` in `App.WhenReady` if it needs storage.
-4. Use only names that MyGo accepts as service identifiers.
-
-`mygo.Bind` panics at startup on a signature it cannot encode, so mistakes fail
-fast rather than at call time. Keep methods that take `http.ResponseWriter` out
-of bound types — expose them as package-level handlers instead (see
-`library.MediaHandler`, `capture.PreviewHandler`).
+1. Add the state it shows to `ui/native.App`, and a `func (a *App) page(c
+   *ui.Context)` that draws it.
+2. Wire it into `App.view`, beside the recording and session pages.
+3. If it runs a job, start it on a goroutine and change the state through
+   `a.update`. Report it in `App.pending` so the view keeps drawing frames
+   until it settles.
+4. Test it with `ui.NewTester(a.view, w, h)`: click by label, then `tt.Frame()`
+   until the job's result shows.

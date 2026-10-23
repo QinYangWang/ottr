@@ -7,10 +7,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -199,9 +197,10 @@ func (s *Service) add(ctx context.Context, db *sql.DB, path, source string) (Med
 	return s.Get(id)
 }
 
-// Remove asks for confirmation and deletes the record. The media file on
-// disk is only deleted when the user checks the box.
-func (s *Service) Remove(ctx context.Context, id int64) error {
+// Remove deletes the record, and the file with it when withFile is set. It
+// asks nothing: the caller confirms, so that the window that asked and the
+// window that answers are the same.
+func (s *Service) Remove(id int64, withFile bool) error {
 	db, err := s.store()
 	if err != nil {
 		return err
@@ -210,83 +209,16 @@ func (s *Service) Remove(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	res, err := mygo.Dialog.Message(mygo.MessageOptions{
-		Parent:        mygo.CallerWindow(ctx),
-		Type:          mygo.MessageWarning,
-		Title:         "Remove from library",
-		Message:       fmt.Sprintf("Remove %q from the library?", m.Name),
-		Buttons:       []string{"Cancel", "Remove"},
-		DefaultButton: 0,
-		CancelButton:  0,
-		CheckboxLabel: "Also delete the file from disk",
-	})
-	if err != nil || res.Button != 1 {
-		return err
-	}
 	if _, err := db.Exec(`DELETE FROM media WHERE id = ?`, id); err != nil {
 		return err
 	}
-	if res.CheckboxChecked {
+	if withFile {
 		if err := os.Remove(m.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("record removed, but deleting the file failed: %w", err)
 		}
 	}
 	Changed.Broadcast(struct{}{})
 	return nil
-}
-
-// serveMedia serves a media file over the "media" scheme, with range
-// requests for seeking: media://localhost/<id>
-func (s *Service) serveMedia(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/"), 10, 64)
-	if err != nil {
-		http.Error(w, "bad media id", http.StatusBadRequest)
-		return
-	}
-	m, err := s.Get(id)
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	f, err := os.Open(m.Path)
-	if err != nil {
-		http.Error(w, "file unavailable: "+err.Error(), http.StatusNotFound)
-		return
-	}
-	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if ct := contentType(m.Path); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	http.ServeContent(w, r, filepath.Base(m.Path), st.ModTime(), f)
-}
-
-// MediaHandler serves library media over the "media" scheme. It is not a
-// method, so mygo.Bind does not try to expose it to the frontend.
-func MediaHandler(s *Service) http.HandlerFunc { return s.serveMedia }
-
-func contentType(path string) string {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".mp4":
-		return "video/mp4"
-	case ".mov":
-		return "video/quicktime"
-	case ".mkv":
-		return "video/x-matroska"
-	case ".webm":
-		return "video/webm"
-	case ".mp3":
-		return "audio/mpeg"
-	case ".wav":
-		return "audio/wav"
-	case ".m4a":
-		return "audio/mp4"
-	}
-	return ""
 }
 
 type scanner interface {

@@ -2,21 +2,18 @@ package capture
 
 import (
 	"bytes"
-	"fmt"
 	"net"
-	"net/http"
 	"sync"
 )
 
-// previewHub relays the MJPEG stream ffmpeg writes over TCP to HTTP
-// consumers, keeping only the latest JPEG frame so a slow consumer never
-// grows memory.
+// previewHub reads the MJPEG stream ffmpeg writes over TCP and keeps only the
+// latest JPEG frame, which the window shows: a consumer slower than the
+// recording never grows memory.
 type previewHub struct {
 	ln net.Listener
 
 	mu     sync.Mutex
 	frame  []byte
-	ch     chan struct{} // closed when a new frame arrives, then replaced
 	closed bool
 }
 
@@ -25,7 +22,7 @@ func newPreviewHub() (*previewHub, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &previewHub{ln: ln, ch: make(chan struct{})}
+	h := &previewHub{ln: ln}
 	go h.run()
 	return h, nil
 }
@@ -82,44 +79,11 @@ func (h *previewHub) publish(f []byte) {
 		return
 	}
 	h.frame = f
-	close(h.ch)
-	h.ch = make(chan struct{})
-}
-
-// ServeHTTP streams frames as multipart/x-mixed-replace until the request
-// or the hub ends.
-func (h *previewHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-	fl, _ := w.(http.Flusher)
-	for {
-		h.mu.Lock()
-		frame, ch, closed := h.frame, h.ch, h.closed
-		h.mu.Unlock()
-		if closed {
-			return
-		}
-		if frame != nil {
-			fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(frame))
-			w.Write(frame)
-			w.Write([]byte("\r\n"))
-			if fl != nil {
-				fl.Flush()
-			}
-		}
-		select {
-		case <-ch:
-		case <-r.Context().Done():
-			return
-		}
-	}
 }
 
 func (h *previewHub) Close() {
 	h.mu.Lock()
-	if !h.closed {
-		h.closed = true
-		close(h.ch)
-	}
+	h.closed = true
 	h.mu.Unlock()
 	h.ln.Close()
 }

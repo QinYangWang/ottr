@@ -4,7 +4,7 @@ Offline-first screen recorder with live transcription, translation, AI summaries
 and a local video knowledge base.
 
 - **Language:** Go 1.27
-- **UI:** [MyGo](https://github.com/egoist/mygo) v0.6.2, web frontend (embedded, no build step)
+- **UI:** [MyGo](https://github.com/egoist/mygo) v0.6.2, native UI written in Go (no webview, no HTML)
 - **Database:** SQLite via `modernc.org/sqlite` (pure Go, no cgo)
 - **Media:** FFmpeg / ffprobe (system binaries)
 - **Capture:** GDI screen capture + WASAPI audio (Windows)
@@ -20,12 +20,13 @@ and a local video knowledge base.
 | [summary.md](summary.md) | Remote AI summarization, structured output, Markdown |
 | [storage.md](storage.md) | SQLite schema, migrations, cascade behavior |
 | [models.md](models.md) | ASR model discovery and validation |
-| [ui.md](ui.md) | Library and Session pages, interaction contracts |
+| [ui.md](ui.md) | The window: library, recording and session pages |
 | [development.md](development.md) | Running, testing, environment requirements |
 | [ROADMAP.md](ROADMAP.md) | What is not implemented yet |
 
 ## Status at a glance
 
-Phases 1–5 are implemented and tested on Windows. Cross-platform capture,
-live in-recording subtitles, and packaging remain open — see
-[ROADMAP.md](ROADMAP.md).
+Recording, offline transcription with live in-recording subtitles, online
+translation and AI summaries are implemented and tested on Windows, in a
+native window. Cross-platform capture, in-window playback and packaging remain
+open — see [ROADMAP.md](ROADMAP.md).

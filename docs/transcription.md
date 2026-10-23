@@ -87,7 +87,33 @@ negative values clamped to zero.
   asserts non-empty segments with sane timestamps. Skips (not fakes) when the
   binary or model is absent.
 
+## Live, in-recording recognition
+
+The recorder hands every PCM buffer the capture produces to a live sink
+(`capture.LiveStarter`), on a separate goroutine, dropping buffers rather than
+making the capture thread wait. `asr.StartLive` builds that sink.
+
+sherpa-onnx's binary cannot read a WAV stream from a pipe — its wave reader
+seeks — and it is not a library Ottr can call without cgo. So the live pass
+buffers audio and decodes it in chunks:
+
+1. Mono 16-bit samples accumulate in memory.
+2. Once 3 seconds are waiting, the chunk is cut at the quietest 20 ms in its
+   last third (never past 5.5 s), so a word is rarely split.
+3. The chunk is written to a temporary WAV and recognized with the same
+   `RunSherpa` the finished file uses, on a worker goroutine.
+4. Its segments become `LiveSubtitle`s with the chunk's offset added, which
+   are broadcast as `transcript:live` and kept in `Recorder.State.LiveText`.
+5. `Close` decodes what is left and waits for it.
+
+This is deliberately provisional: it is coarser than the pass over the finished
+file, which replaces it. The window labels it as such.
+
+`LiveEvent` (`transcript:live`) is therefore no longer declared-but-unused: it
+carries each live subtitle.
+
 ## Not implemented
 
-Live, in-recording streaming recognition. `asr.LiveEvent` is declared but never
-emitted; `capture.Recorder` only transcribes the finished file. See ROADMAP.
+- Streaming decoding itself (true incremental state instead of chunks), which
+  needs the sherpa-onnx C API through cgo or a PCM-pipe-capable binary.
+- Language detection: `saveTranscript` still writes `'zh'` (ROADMAP).

@@ -3,7 +3,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"path/filepath"
 
 	"github.com/egoist/mygo"
@@ -15,25 +14,26 @@ import (
 	"ottr/internal/storage"
 	"ottr/internal/summary"
 	"ottr/internal/translate"
-	"ottr/ui/web"
+	"ottr/ui/native"
 )
 
 func main() {
 	mygo.App.SetName("Ottr")
-	mygo.SetFrontend(web.FS)
 
-	svc := &library.Service{}
+	lib := &library.Service{}
 	mm := models.NewManager("", "")
-	asrSvc := asr.NewService(svc, mm)
-	trSvc := translate.NewService(svc, asrSvc)
-	sumSvc := summary.NewService(svc, asrSvc)
-	rec := &capture.Recorder{Lib: svc, ASR: asrSvc}
-	mygo.BindAs("Library", svc)
-	mygo.BindAs("Recorder", rec)
-	mygo.BindAs("Transcription", asrSvc)
-	mygo.BindAs("Translation", trSvc)
-	mygo.BindAs("Summary", sumSvc)
-	mygo.BindAs("Models", mm)
+	asrSvc := asr.NewService(lib, mm)
+	trSvc := translate.NewService(lib, asrSvc)
+	sumSvc := summary.NewService(lib, asrSvc)
+	rec := &capture.Recorder{Lib: lib, ASR: asrSvc}
+	rec.Live = func(rate, channels int) (capture.LiveWriter, error) {
+		return asrSvc.StartLive(rate, channels, func(sub asr.LiveSubtitle) {
+			rec.SetLiveText(sub.Text)
+			asr.BroadcastLive(sub)
+		})
+	}
+
+	app := &native.App{Lib: lib, Rec: rec, ASR: asrSvc, Trans: trSvc, Sum: sumSvc}
 
 	mygo.App.WhenReady(func() {
 		dir, err := mygo.App.Path(mygo.PathUserData)
@@ -45,32 +45,22 @@ func main() {
 		if err != nil {
 			log.Fatalf("open database: %v", err)
 		}
-		svc.Open(db)
+		lib.Open(db)
 		asrSvc.Open(db)
 		trSvc.Open(db)
 		sumSvc.Open(db)
 		rec.Dir = filepath.Join(dir, "recordings")
-		libH := library.MediaHandler(svc)
-		prevH := capture.PreviewHandler(rec)
-		err = mygo.Protocol.HandleFunc("media", func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/preview" {
-				prevH(w, r)
-				return
-			}
-			libH(w, r)
-		})
-		if err != nil {
-			log.Fatalf("media protocol: %v", err)
-		}
-		mygo.NewWindow(mygo.WindowOptions{
+
+		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:           "Ottr",
-			URL:             "/",
-			Width:           1200,
-			Height:          780,
-			MinWidth:        880,
+			Width:           1180,
+			Height:          760,
+			MinWidth:        860,
 			MinHeight:       560,
 			BackgroundColor: "#101014",
+			Content:         native.View(app),
 		})
+		app.Begin(win)
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

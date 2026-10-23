@@ -29,8 +29,9 @@ requires, and keeps FFmpeg from needing a build with Windows audio demuxers.
 ```
 gdigrab ──────────────┐
                       ├─► ffmpeg ─► .mp4 (libx264 + aac)
-WASAPI loopback ──pipe┘         └► mpjpeg over TCP ─► preview relay ─► media://localhost/preview
+WASAPI loopback ──pipe┘         └► mpjpeg over TCP ─► preview hub ─► window bitmap
 WASAPI microphone ─pipe┘
+WASAPI (any) ─────────┴─► liveFeed ─► asr live sink ─► live subtitles
 ```
 
 ## Sources
@@ -102,24 +103,35 @@ never be reported as successful.
 5. Verify the file exists and is non-empty; otherwise delete and error.
 6. Probe and insert into the library with `source = "recording"`.
 7. If the media has audio and an ASR service is configured, start background
-   transcription.
+   transcription. This pass replaces the live text with the accurate one.
 
 ## Live preview
 
 `previewHub` listens on `127.0.0.1:0` and receives FFmpeg's second output
 (`-f mpjpeg tcp://...`). It scans the byte stream for JPEG start/end markers and
-keeps **only the most recent frame**, waking HTTP consumers through a channel.
-Memory is therefore bounded by one frame regardless of how slow the page is.
+keeps **only the most recent frame**. Memory is therefore bounded by one frame
+regardless of how slow the window is.
 
-`MediaHandler` routing sends `/preview` here; when no recording is active the
-endpoint returns 404 and the page simply shows a broken image until a
-`recording:state` event arrives.
+`Recorder.Preview()` returns that frame, and the window decodes it into a
+bitmap at most five times a second, so the view never touches the JPEG bytes
+directly.
+
+## Live transcription
+
+The same WASAPI buffers go to `audioSink`, which hands one buffer at a time to
+the `LiveStarter` sink and drops the rest when the sink is behind: the capture
+thread never waits. The sink is `asr.StartLive`, and the text it recognizes
+appears in the window while the recording runs; see
+[Transcription](transcription.md#live-in-recording-recognition). Only the first
+audio stream is fed to it, so a recording of system audio and the microphone
+gets live text from one of them.
 
 ## Output
 
 Files are written to `<userData>/recordings/Recording YYYY-MM-DD HH.MM.SS.mp4`
 with `libx264 -preset veryfast -pix_fmt yuv420p` and `aac 160k` when audio is
-present. `yuv420p` is required for the WebView2 player to decode the result.
+present. `yuv420p` keeps the file playable everywhere, the system's own player
+included.
 
 ## Testing
 

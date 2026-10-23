@@ -1,32 +1,28 @@
 # Roadmap
 
-Everything below is **not implemented**. Items are grounded in the current code,
-not aspirations. Done work is described in the other documents.
+Items are grounded in the current code, not aspirations. Done work is
+described in the other documents; item 1 is kept here for what it leaves open.
 
 Status legend: `open` = no code exists; `partial` = some code exists but the
 requirement is not met.
 
 ---
 
-## 1. Live in-recording transcription — `partial`
+## 1. Live in-recording transcription — `done`
 
-**Requirement:** recognize speech and show subtitles *while* recording.
+Recognized speech now shows while recording: the capture's PCM goes to a live
+sink, chunks are decoded at quiet points, and `transcript:live` is emitted and
+shown in the window. See
+[Transcription](transcription.md#live-in-recording-recognition).
 
-**Current state:** `asr.LiveEvent` (`transcript:live`) is declared but never
-emitted. `capture.Recorder.Stop` transcribes the finished file only. The
-`#/record` page has a `#live-subtitle` element that always reads
-"Listening for audio…".
+What it still does not do:
 
-**Notes for implementation:**
-- The audio that FFmpeg receives is already PCM in `capture/audio_windows.go`.
-  A tee to a streaming recognizer is the natural insertion point.
-- sherpa-onnx ships an online/streaming mode (`sherpa-onnx-microphone`,
-  `SherpaOnnxOnlineRecognizer*` in the C API). Driving it as a subprocess needs
-  a pipe-based interface, or a second binary that reads PCM from stdin.
-- Must not block recording. Use a bounded queue and drop frames on overflow
-  rather than applying backpressure to the capture thread.
-- Final segments must reconcile with the post-recording pass, which is more
-  accurate; the live pass should be treated as provisional.
+- The chunks restart the recognizer each time, so a word at a chunk boundary
+  can be lost. True incremental state needs the sherpa-onnx C API (cgo) or a
+  binary that reads PCM from a pipe.
+- Only the first audio stream is transcribed, so system audio plus microphone
+  gives live text from one of them.
+- The live pass is provisional by design: the post-recording pass replaces it.
 
 ---
 
@@ -186,11 +182,16 @@ Related smaller gaps:
 
 ---
 
-## 13. Container playback support — `open`
+## 13. In-window playback — `open`
 
-MKV and MOV playback depends on WebView2's codecs. Unsupported containers
-currently surface as a player that does not start, with no explanation. Options:
-detect support and show a clear message, or remux/transcode on import.
+The window shows the live preview of a recording, but not the media of a
+finished file: `Play` hands the file to the system's player, and the timestamps
+in the transcript and summary are therefore not clickable. MyGo's `ui` has no
+video element yet, so this waits on one, or on decoding frames in Go and
+drawing them into a bitmap as the preview does.
+
+With no player to depend on, container support is whatever the system's player
+handles, which is the user's own business.
 
 ---
 

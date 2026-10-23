@@ -18,6 +18,7 @@ import (
 // audioStream is one WASAPI capture (system loopback or microphone)
 // writing f32le PCM to a named pipe that ffmpeg reads.
 type audioStream struct {
+	loopback bool
 	rate     int
 	channels int
 	pipe     string
@@ -31,13 +32,13 @@ const audclntBufferflagsSilent = 0x2
 // startAudioStream opens the default render (loopback) or capture endpoint
 // and starts streaming its mix format PCM. The stream is live once nil is
 // returned; ffmpeg connects to the pipe when its process starts.
-func startAudioStream(loopback bool) (*audioStream, error) {
+func startAudioStream(loopback bool, sink *liveFeed) (*audioStream, error) {
 	name := fmt.Sprintf(`\\.\pipe\ottr-audio-%d-%d`, os.Getpid(), pipeSeq.Add(1))
 	ln, err := winio.ListenPipe(name, nil)
 	if err != nil {
 		return nil, err
 	}
-	as := &audioStream{pipe: name}
+	as := &audioStream{pipe: name, loopback: loopback}
 	ready := make(chan error, 1)
 	done := make(chan struct{})
 	var once atomic.Bool
@@ -61,7 +62,7 @@ func startAudioStream(loopback bool) (*audioStream, error) {
 		}
 		defer de.Release()
 		flow := uint32(wca.ERender)
-		if !loopback {
+		if !as.loopback {
 			flow = wca.ECapture
 		}
 		var mmd *wca.IMMDevice
@@ -82,7 +83,7 @@ func startAudioStream(loopback bool) (*audioStream, error) {
 			return
 		}
 		var flags uint32
-		if loopback {
+		if as.loopback {
 			flags = wca.AUDCLNT_STREAMFLAGS_LOOPBACK
 		}
 		if err := ac.Initialize(wca.AUDCLNT_SHAREMODE_SHARED, flags, wca.REFERENCE_TIME(200*time.Millisecond/100), 0, wfx, nil); err != nil {
@@ -122,7 +123,7 @@ func startAudioStream(loopback bool) (*audioStream, error) {
 				return // device unplugged or session ended
 			}
 			if packet == 0 {
-				if loopback {
+				if as.loopback {
 					// Windows WASAPI loopback produces no packets when the audio engine is idle;
 					// write silence to keep the pipe fed and synchronized.
 					silenceFrames := as.rate / 50 // 20ms
@@ -130,6 +131,7 @@ func startAudioStream(loopback bool) (*audioStream, error) {
 					if _, err := conn.Write(silenceBytes); err != nil {
 						return
 					}
+					sink.write(silenceBytes, as.rate, as.channels)
 					time.Sleep(20 * time.Millisecond)
 					continue
 				}
@@ -153,6 +155,9 @@ func startAudioStream(loopback bool) (*audioStream, error) {
 				if _, err := conn.Write(b); err != nil {
 					acc.ReleaseBuffer(frames)
 					return
+				}
+				if bflags&audclntBufferflagsSilent == 0 {
+					sink.write(b, as.rate, as.channels)
 				}
 			}
 			if err := acc.ReleaseBuffer(frames); err != nil {

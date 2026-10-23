@@ -3,7 +3,8 @@
 // Video comes from the platform's native capture (GDI on Windows) through
 // FFmpeg; audio is captured in-process from WASAPI (system loopback and
 // microphone) and streamed to FFmpeg over named pipes. FFmpeg encodes and
-// muxes the result.
+// muxes the result. The same PCM goes to a Live sink, which recognizes speech
+// while the recording runs.
 package capture
 
 import (
@@ -11,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,6 +42,7 @@ type State struct {
 	Recording bool      `json:"recording"`
 	StartedAt time.Time `json:"startedAt,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	LiveText  string    `json:"liveText,omitempty"` // the last live subtitle
 }
 
 // StateChanged is broadcast when recording starts, stops or fails.
@@ -55,23 +56,40 @@ type Transcriber interface {
 // Recorder records one session at a time. It is bound to the frontend as
 // "Recorder".
 type Recorder struct {
-	Dir string            // where recordings are written
-	Lib *library.Service  // finished recordings land here
-	ASR Transcriber       // optional auto-transcriber
+	Dir string           // where recordings are written
+	Lib *library.Service // finished recordings land here
+	ASR Transcriber      // optional auto-transcriber
+
+	// Live opens the sink that transcribes the audio as it records, or
+	// returns nil when there is none. It is called when a recording starts;
+	// nil keeps live text off.
+	Live LiveStarter
 
 	mu      sync.Mutex
 	current *session
 }
 
 type session struct {
-	file    string
-	started time.Time
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	stderr  *bytes.Buffer
-	audio   []*audioStream
-	preview *previewHub
-	done    chan error
+	file     string
+	started  time.Time
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	stderr   *bytes.Buffer
+	audio    []*audioStream
+	preview  *previewHub
+	done     chan error
+	sink     *liveFeed
+	liveText string
+}
+
+// SetLiveText records the last live subtitle for State, called by the live
+// sink as it recognizes one.
+func (r *Recorder) SetLiveText(text string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.current != nil {
+		r.current.liveText = text
+	}
 }
 
 // Sources lists what can be recorded.
@@ -90,7 +108,7 @@ func (r *Recorder) stateLocked() State {
 	if r.current == nil {
 		return State{}
 	}
-	return State{Recording: true, StartedAt: r.current.started}
+	return State{Recording: true, StartedAt: r.current.started, LiveText: r.current.liveText}
 }
 
 // Start begins a recording. It fails without side effects when a device is
@@ -105,9 +123,10 @@ func (r *Recorder) Start(cfg Config) error {
 	if err != nil {
 		return err
 	}
+	sink := newLiveFeed(r.Live)
 	var audio []*audioStream
 	if cfg.SystemAudio {
-		as, err := startAudioStream(true)
+		as, err := startAudioStream(true, sink)
 		if err != nil {
 			stopAudio(audio)
 			return fmt.Errorf("system audio: %w", err)
@@ -115,7 +134,7 @@ func (r *Recorder) Start(cfg Config) error {
 		audio = append(audio, as)
 	}
 	if cfg.Mic {
-		as, err := startAudioStream(false)
+		as, err := startAudioStream(false, sink)
 		if err != nil {
 			stopAudio(audio)
 			return fmt.Errorf("microphone: %w", err)
@@ -162,7 +181,7 @@ func (r *Recorder) Start(cfg Config) error {
 	}
 	sess := &session{
 		file: file, started: time.Now(), cmd: cmd, stdin: stdin, stderr: stderr,
-		audio: audio, preview: preview, done: make(chan error, 1),
+		audio: audio, preview: preview, done: make(chan error, 1), sink: sink,
 	}
 	r.current = sess
 	go func() {
@@ -235,6 +254,7 @@ func (s *session) cleanup() {
 	stopAudio(s.audio)
 	s.preview.Close()
 	s.stdin.Close()
+	s.sink.close()
 }
 
 func stopAudio(streams []*audioStream) {
@@ -257,6 +277,18 @@ func waitError(err error, stderr *bytes.Buffer) string {
 	return msg
 }
 
+// Preview returns the latest frame of the active recording's preview, nil
+// before the first frame or when nothing records.
+func (r *Recorder) Preview() []byte {
+	hub := r.previewHubOf()
+	if hub == nil {
+		return nil
+	}
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	return hub.frame
+}
+
 // previewHubOf returns the preview of the active recording, if any.
 func (r *Recorder) previewHubOf() *previewHub {
 	r.mu.Lock()
@@ -265,17 +297,4 @@ func (r *Recorder) previewHubOf() *previewHub {
 		return nil
 	}
 	return r.current.preview
-}
-
-// PreviewHandler serves the live preview of the active recording as MJPEG.
-// Not a method so mygo.Bind does not expose it to the frontend.
-func PreviewHandler(r *Recorder) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		hub := r.previewHubOf()
-		if hub == nil {
-			http.Error(w, "no active recording", http.StatusNotFound)
-			return
-		}
-		hub.ServeHTTP(w, req)
-	}
 }
