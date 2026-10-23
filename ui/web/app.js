@@ -106,6 +106,9 @@ async function renderLibrary() {
 let currentSessionID = 0;
 let currentTab = 0; // 0: transcript, 1: translate, 2: summary
 let subQuery = "";
+let currentTargetLang = "en";
+let transQuery = "";
+let showTransSettings = false;
 
 async function renderSession(id) {
   currentSessionID = id;
@@ -164,8 +167,7 @@ async function renderTabBody(m) {
   if (!body) return;
 
   if (currentTab === 1) {
-    body.innerHTML = `<div class="tab-pane dim"><p class="title">Translation</p><p>Offline translation arrives in Phase 4.</p></div>`;
-    return;
+    return renderTranslateTab(m, body);
   }
   if (currentTab === 2) {
     body.innerHTML = `<div class="tab-pane dim"><p class="title">AI Summary</p><p>Offline AI summarization arrives in Phase 5.</p></div>`;
@@ -247,7 +249,6 @@ async function renderTabBody(m) {
         <span class="sub-text">${esc(s.text)}</span>
       </div>`).join("");
 
-    // Click to jump
     const player = document.getElementById("media-player");
     listEl.querySelectorAll(".sub-item").forEach((el) => {
       el.onclick = () => {
@@ -277,7 +278,6 @@ async function renderTabBody(m) {
   document.getElementById("exp-vtt").onclick = () => doExport("vtt");
   document.getElementById("exp-txt").onclick = () => doExport("txt");
 
-  // Highlight active subtitle as video plays
   const player = document.getElementById("media-player");
   if (player) {
     player.ontimeupdate = () => {
@@ -298,6 +298,226 @@ async function renderTabBody(m) {
       }
     };
   }
+}
+
+async function renderTranslateTab(m, body) {
+  if (m.transcriptStatus !== "done") {
+    body.innerHTML = `
+      <div class="empty">
+        <p class="title">Transcript Required</p>
+        <p>Please transcribe the video first before translating subtitles.</p>
+        <button id="goto-transcript" class="primary">Go to Transcript</button>
+      </div>`;
+    document.getElementById("goto-transcript").onclick = () => {
+      currentTab = 0;
+      app.querySelectorAll(".tabs button").forEach((b, i) => b.classList.toggle("active", i === 0));
+      renderTabBody(m);
+    };
+    return;
+  }
+
+  let tr;
+  try {
+    tr = await call("Translation.Get", m.id, currentTargetLang);
+  } catch (err) {
+    showError(err);
+    return;
+  }
+
+  const langs = [
+    { code: "en", name: "English" },
+    { code: "zh", name: "Chinese (中文)" },
+    { code: "ja", name: "Japanese (日本語)" },
+  ];
+
+  const langOptions = langs.map((l) =>
+    `<option value="${l.code}" ${l.code === currentTargetLang ? "selected" : ""}>${l.name}</option>`
+  ).join("");
+
+  const settings = await call("Translation.GetSettings").catch(() => ({ provider: "mymemory" }));
+
+  body.innerHTML = `
+    <div class="transcript-pane">
+      <div class="sub-header">
+        <select id="sel-target-lang" class="lang-select">
+          ${langOptions}
+        </select>
+        <input type="search" id="trans-search" placeholder="Search translation…" value="${esc(transQuery)}" />
+        <div class="exp-group">
+          ${(tr && tr.segments && tr.segments.length > 0) ? `
+            <span class="dim">Export:</span>
+            <button class="btn-sm" id="exp-trans-srt" title="Translated subtitles only">SRT</button>
+            <button class="btn-sm" id="exp-trans-bi" title="Bilingual original + translated">Bilingual</button>
+            <button class="btn-sm" id="exp-trans-vtt">VTT</button>
+            <button class="btn-sm" id="exp-trans-txt">TXT</button>
+          ` : ""}
+          <button class="btn-sm" id="btn-trans-settings" title="Translation Settings">⚙ Config</button>
+        </div>
+      </div>
+      ${showTransSettings ? renderSettingsBox(settings) : ""}
+      <div class="sub-list" id="trans-list">
+        ${(!tr || !tr.segments || tr.segments.length === 0) ? `
+          <div class="empty" style="margin-top:5vh;">
+            <p class="title">Not Translated Yet</p>
+            <p>Translate subtitles into ${langs.find((l) => l.code === currentTargetLang)?.name || currentTargetLang}.</p>
+            <button id="btn-do-translate" class="primary">Translate</button>
+          </div>` : ""}
+      </div>
+    </div>`;
+
+  document.getElementById("sel-target-lang").onchange = (e) => {
+    currentTargetLang = e.target.value;
+    renderTranslateTab(m, body);
+  };
+
+  document.getElementById("btn-trans-settings").onclick = () => {
+    showTransSettings = !showTransSettings;
+    renderTranslateTab(m, body);
+  };
+
+  if (showTransSettings) {
+    bindSettingsBox(m, body);
+  }
+
+  const btnTrans = document.getElementById("btn-do-translate");
+  if (btnTrans) {
+    btnTrans.onclick = async () => {
+      btnTrans.disabled = true;
+      btnTrans.textContent = "Translating online…";
+      try {
+        await call("Translation.Translate", m.id, currentTargetLang);
+        renderTranslateTab(m, body);
+      } catch (err) {
+        btnTrans.disabled = false;
+        btnTrans.textContent = "Translate";
+        showError(err);
+      }
+    };
+  }
+
+  if (tr && tr.segments && tr.segments.length > 0) {
+    const listEl = document.getElementById("trans-list");
+    const renderList = (filter) => {
+      const q = filter.trim().toLowerCase();
+      const filtered = q
+        ? tr.segments.filter((s) => s.translatedText.toLowerCase().includes(q) || s.originalText.toLowerCase().includes(q))
+        : tr.segments;
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `<div class="dim" style="text-align:center;padding:24px;">No matching subtitles</div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map((s) => `
+        <div class="sub-item trans-item" data-start="${s.startMs}" data-end="${s.endMs}">
+          <span class="sub-time">${fmtDuration(s.startMs)}</span>
+          <div class="sub-content">
+            <div class="trans-text">${esc(s.translatedText)}</div>
+            <div class="orig-text dim">${esc(s.originalText)}</div>
+          </div>
+        </div>`).join("");
+
+      const player = document.getElementById("media-player");
+      listEl.querySelectorAll(".trans-item").forEach((el) => {
+        el.onclick = () => {
+          if (!player) return;
+          player.currentTime = +el.dataset.start / 1000;
+          player.play();
+        };
+      });
+    };
+
+    renderList(transQuery);
+
+    const searchEl = document.getElementById("trans-search");
+    if (searchEl) {
+      searchEl.oninput = () => {
+        transQuery = searchEl.value;
+        renderList(transQuery);
+      };
+    }
+
+    const doExport = async (fmt) => {
+      try {
+        await call("Translation.Export", m.id, currentTargetLang, fmt);
+      } catch (err) {
+        showError(err);
+      }
+    };
+    document.getElementById("exp-trans-srt")?.addEventListener("click", () => doExport("srt"));
+    document.getElementById("exp-trans-bi")?.addEventListener("click", () => doExport("bilingual_srt"));
+    document.getElementById("exp-trans-vtt")?.addEventListener("click", () => doExport("vtt"));
+    document.getElementById("exp-trans-txt")?.addEventListener("click", () => doExport("txt"));
+
+    const player = document.getElementById("media-player");
+    if (player) {
+      player.ontimeupdate = () => {
+        const curMs = player.currentTime * 1000;
+        let activeEl = null;
+        listEl.querySelectorAll(".trans-item").forEach((el) => {
+          const start = +el.dataset.start;
+          const end = +el.dataset.end;
+          if (curMs >= start && curMs < end) {
+            el.classList.add("active");
+            activeEl = el;
+          } else {
+            el.classList.remove("active");
+          }
+        });
+        if (activeEl && !listEl.matches(":hover")) {
+          activeEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      };
+    }
+  }
+}
+
+function renderSettingsBox(s) {
+  return `
+    <div class="settings-drawer">
+      <div style="font-weight:600;margin-bottom:8px;">Online Translation Provider</div>
+      <div class="check" style="margin-bottom:6px;">
+        <label><input type="radio" name="trans-prov" value="mymemory" ${s.provider !== "custom" ? "checked" : ""}> Free Online API (MyMemory, zero key needed)</label>
+      </div>
+      <div class="check" style="margin-bottom:12px;">
+        <label><input type="radio" name="trans-prov" value="custom" ${s.provider === "custom" ? "checked" : ""}> Custom AI Model (OpenAI / DeepSeek / Ollama)</label>
+      </div>
+      <div id="custom-cfg" style="${s.provider === "custom" ? "" : "display:none;"}display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+        <label style="font-size:12px;" class="dim">API Base URL</label>
+        <input type="text" id="cfg-base-url" placeholder="https://api.deepseek.com/v1" value="${esc(s.baseUrl)}" />
+        <label style="font-size:12px;" class="dim">API Key</label>
+        <input type="password" id="cfg-api-key" placeholder="sk-..." value="${esc(s.apiKey)}" />
+        <label style="font-size:12px;" class="dim">Model</label>
+        <input type="text" id="cfg-model" placeholder="deepseek-chat or gpt-4o-mini" value="${esc(s.model)}" />
+      </div>
+      <div><button class="primary btn-sm" id="btn-save-settings">Save Settings</button></div>
+    </div>`;
+}
+
+function bindSettingsBox(m, body) {
+  const radios = document.querySelectorAll('input[name="trans-prov"]');
+  const customBox = document.getElementById("custom-cfg");
+  radios.forEach((r) => {
+    r.onchange = () => {
+      customBox.style.display = r.value === "custom" ? "flex" : "none";
+    };
+  });
+  document.getElementById("btn-save-settings").onclick = async () => {
+    const isCustom = document.querySelector('input[name="trans-prov"]:checked')?.value === "custom";
+    const cfg = {
+      provider: isCustom ? "custom" : "mymemory",
+      baseUrl: document.getElementById("cfg-base-url")?.value.trim() || "",
+      apiKey: document.getElementById("cfg-api-key")?.value.trim() || "",
+      model: document.getElementById("cfg-model")?.value.trim() || "",
+    };
+    try {
+      await call("Translation.SaveSettings", cfg);
+      showTransSettings = false;
+      renderTranslateTab(m, body);
+    } catch (err) {
+      showError(err);
+    }
+  };
 }
 
 let recTimer = null;
@@ -407,6 +627,12 @@ mygo.on("transcript:live", (sub) => {
 mygo.on("transcript:ready", (mediaID) => {
   if (location.hash === `#/session/${mediaID}`) {
     renderSession(mediaID);
+  }
+});
+
+mygo.on("translation:ready", (tr) => {
+  if (location.hash === `#/session/${tr.mediaId}` && currentTab === 1) {
+    call("Library.Get", tr.mediaId).then((m) => renderTranslateTab(m, document.getElementById("tab-body")));
   }
 });
 

@@ -175,6 +175,29 @@ video { max-height: 58vh; }
 }
 .sub-text { flex: 1; word-break: break-word; line-height: 1.5; }
 
+/* Translate Tab */
+.lang-select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  outline: none;
+}
+.sub-content { flex: 1; display: flex; flex-direction: column; gap: 3px; word-break: break-word; }
+.trans-text { color: var(--text); line-height: 1.5; font-size: 14px; }
+.orig-text { font-size: 12px; }
+
+.settings-drawer {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* Record */
 .rec-form { display: flex; flex-direction: column; gap: 14px; max-width: 420px; }
 .rec-form select {

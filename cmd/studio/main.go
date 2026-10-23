@@ -13,6 +13,7 @@ import (
 	"ottr/internal/library"
 	"ottr/internal/models"
 	"ottr/internal/storage"
+	"ottr/internal/translate"
 	"ottr/ui/web"
 )
 
@@ -23,10 +24,12 @@ func main() {
 	svc := &library.Service{}
 	mm := models.NewManager("", "")
 	asrSvc := asr.NewService(svc, mm)
+	trSvc := translate.NewService(svc, asrSvc)
 	rec := &capture.Recorder{Lib: svc, ASR: asrSvc}
 	mygo.BindAs("Library", svc)
 	mygo.BindAs("Recorder", rec)
 	mygo.BindAs("Transcription", asrSvc)
+	mygo.BindAs("Translation", trSvc)
 	mygo.BindAs("Models", mm)
 
 	mygo.App.WhenReady(func() {
@@ -41,6 +44,7 @@ func main() {
 		}
 		svc.Open(db)
 		asrSvc.Open(db)
+		trSvc.Open(db)
 		rec.Dir = filepath.Join(dir, "recordings")
 		libH := library.MediaHandler(svc)
 		prevH := capture.PreviewHandler(rec)
