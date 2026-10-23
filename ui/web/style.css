@@ -198,6 +198,33 @@ video { max-height: 58vh; }
   gap: 6px;
 }
 
+.settings-drawer select, .settings-drawer input {
+  width: 100%;
+}
+
+/* Summary Tab */
+.sum-section { margin-bottom: 22px; }
+.sum-section h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.sum-section p { margin: 0; line-height: 1.6; }
+.sum-section ul { margin: 0; padding-left: 20px; line-height: 1.7; }
+.sum-section ul.todo { list-style: none; padding-left: 0; }
+.sum-section ul.todo li::before { content: "☐  "; color: var(--accent); }
+.chapter-item {
+  display: flex;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.chapter-item:hover { background: var(--surface); }
+
 /* Record */
 .rec-form { display: flex; flex-direction: column; gap: 14px; max-width: 420px; }
 .rec-form select {

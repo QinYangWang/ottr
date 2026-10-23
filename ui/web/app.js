@@ -170,8 +170,7 @@ async function renderTabBody(m) {
     return renderTranslateTab(m, body);
   }
   if (currentTab === 2) {
-    body.innerHTML = `<div class="tab-pane dim"><p class="title">AI Summary</p><p>Offline AI summarization arrives in Phase 5.</p></div>`;
-    return;
+    return renderSummaryTab(m, body);
   }
 
   // Tab 0: Transcript
@@ -472,6 +471,190 @@ async function renderTranslateTab(m, body) {
   }
 }
 
+let showSumSettings = false;
+
+async function renderSummaryTab(m, body) {
+  if (m.transcriptStatus !== "done") {
+    body.innerHTML = `
+      <div class="empty">
+        <p class="title">Transcript Required</p>
+        <p>Please transcribe the video first before generating an AI summary.</p>
+        <button id="goto-transcript" class="primary">Go to Transcript</button>
+      </div>`;
+    document.getElementById("goto-transcript").onclick = () => {
+      currentTab = 0;
+      app.querySelectorAll(".tabs button").forEach((b, i) => b.classList.toggle("active", i === 0));
+      renderTabBody(m);
+    };
+    return;
+  }
+
+  let sum;
+  try {
+    sum = await call("Summary.Get", m.id);
+  } catch (err) {
+    showError(err);
+    return;
+  }
+
+  const has = sum && sum.contentMarkdown;
+
+  if (m.summaryStatus === "pending") {
+    body.innerHTML = `
+      <div class="empty">
+        <div class="spinner"></div>
+        <p class="title">Generating Summary…</p>
+        <p>Analyzing transcript with the remote AI model.</p>
+      </div>`;
+    return;
+  }
+
+  const header = `
+    <div class="sub-header">
+      <span class="dim" style="flex:1;font-size:12px;">${has ? `Model: ${esc(sum.model)}` : "No summary yet"}</span>
+      ${has ? `
+        <div class="exp-group">
+          <button class="btn-sm" id="btn-copy-sum">Copy</button>
+          <button class="btn-sm" id="btn-export-sum">Export</button>
+        </div>` : ""}
+      <button class="btn-sm" id="btn-sum-settings" title="AI Model Settings">⚙ Config</button>
+    </div>`;
+
+  if (!has) {
+    body.innerHTML = `
+      <div class="transcript-pane">
+        ${header}
+        ${showSumSettings ? renderSumSettingsBox() : ""}
+        <div class="empty" style="margin-top:5vh;">
+          <p class="title">${m.summaryStatus === "error" ? "Summary Failed" : "No Summary Yet"}</p>
+          <p>Generate an overview, key points, action items, chapters and highlights from the transcript.</p>
+          <button id="btn-do-summary" class="primary">Generate</button>
+        </div>
+      </div>`;
+  } else {
+    const chapters = (sum.chapters || []).map((c) => `
+      <div class="chapter-item" data-start="${c.startMs}">
+        <span class="sub-time">${fmtDuration(c.startMs)}</span>
+        <div class="sub-content">
+          <div class="trans-text">${esc(c.title)}</div>
+          <div class="orig-text dim">${esc(c.summary)}</div>
+        </div>
+      </div>`).join("");
+
+    const highlights = (sum.highlights || []).map((h) => `
+      <div class="chapter-item" data-start="${h.startMs}">
+        <span class="sub-time">${fmtDuration(h.startMs)}</span>
+        <div class="sub-content"><div class="orig-text">${esc(h.note)}</div></div>
+      </div>`).join("");
+
+    body.innerHTML = `
+      <div class="transcript-pane">
+        ${header}
+        ${showSumSettings ? renderSumSettingsBox() : ""}
+        <div class="sub-list">
+          <section class="sum-section">
+            <h3>Overview</h3>
+            <p>${esc(sum.overview)}</p>
+          </section>
+          ${(sum.keyPoints || []).length ? `
+          <section class="sum-section">
+            <h3>Key Points</h3>
+            <ul>${sum.keyPoints.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>
+          </section>` : ""}
+          ${(sum.actionItems || []).length ? `
+          <section class="sum-section">
+            <h3>Action Items</h3>
+            <ul class="todo">${sum.actionItems.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+          </section>` : ""}
+          ${chapters ? `<section class="sum-section"><h3>Chapters</h3>${chapters}</section>` : ""}
+          ${highlights ? `<section class="sum-section"><h3>Highlights</h3>${highlights}</section>` : ""}
+        </div>
+      </div>`;
+
+    body.querySelectorAll(".chapter-item").forEach((el) => {
+      el.onclick = () => {
+        const player = document.getElementById("media-player");
+        if (!player) return;
+        player.currentTime = +el.dataset.start / 1000;
+        player.play();
+      };
+    });
+
+    document.getElementById("btn-copy-sum").onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(sum.contentMarkdown);
+        const btn = document.getElementById("btn-copy-sum");
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      } catch (err) {
+        showError(new Error("Clipboard unavailable: " + err.message));
+      }
+    };
+    document.getElementById("btn-export-sum").onclick = async () => {
+      try {
+        await call("Summary.Export", m.id);
+      } catch (err) {
+        showError(err);
+      }
+    };
+  }
+
+  document.getElementById("btn-sum-settings").onclick = () => {
+    showSumSettings = !showSumSettings;
+    renderSummaryTab(m, body);
+  };
+  if (showSumSettings) bindSumSettingsBox(m, body);
+
+  const btnGen = document.getElementById("btn-do-summary");
+  if (btnGen) {
+    btnGen.onclick = async () => {
+      btnGen.disabled = true;
+      btnGen.textContent = "Generating…";
+      try {
+        await call("Summary.Generate", m.id);
+        m.summaryStatus = "done";
+        renderSummaryTab(m, body);
+      } catch (err) {
+        btnGen.disabled = false;
+        btnGen.textContent = "Generate";
+        showError(err);
+      }
+    };
+  }
+}
+
+async function renderSumSettingsBox() {
+  const s = await call("Summary.GetSettings").catch(() => ({}));
+  return `
+    <div class="settings-drawer">
+      <div style="font-weight:600;margin-bottom:8px;">Remote AI Model</div>
+      <label style="font-size:12px;" class="dim">API Base URL</label>
+      <input type="text" id="sum-base-url" placeholder="https://api.deepseek.com/v1" value="${esc(s.baseUrl || "")}" />
+      <label style="font-size:12px;" class="dim">API Key</label>
+      <input type="password" id="sum-api-key" placeholder="sk-..." value="${esc(s.apiKey || "")}" />
+      <label style="font-size:12px;" class="dim">Model</label>
+      <input type="text" id="sum-model" placeholder="deepseek-chat / gpt-4o-mini" value="${esc(s.model || "")}" />
+      <div><button class="primary btn-sm" id="btn-save-sum-settings">Save Settings</button></div>
+    </div>`;
+}
+
+function bindSumSettingsBox(m, body) {
+  document.getElementById("btn-save-sum-settings").onclick = async () => {
+    const cfg = {
+      baseUrl: document.getElementById("sum-base-url").value.trim(),
+      apiKey: document.getElementById("sum-api-key").value.trim(),
+      model: document.getElementById("sum-model").value.trim(),
+    };
+    try {
+      await call("Summary.SaveSettings", cfg);
+      showSumSettings = false;
+      renderSummaryTab(m, body);
+    } catch (err) {
+      showError(err);
+    }
+  };
+}
+
 function renderSettingsBox(s) {
   return `
     <div class="settings-drawer">
@@ -633,6 +816,12 @@ mygo.on("transcript:ready", (mediaID) => {
 mygo.on("translation:ready", (tr) => {
   if (location.hash === `#/session/${tr.mediaId}` && currentTab === 1) {
     call("Library.Get", tr.mediaId).then((m) => renderTranslateTab(m, document.getElementById("tab-body")));
+  }
+});
+
+mygo.on("summary:ready", (s) => {
+  if (location.hash === `#/session/${s.mediaId}` && currentTab === 2) {
+    call("Library.Get", s.mediaId).then((m) => renderSummaryTab(m, document.getElementById("tab-body")));
   }
 });
 
