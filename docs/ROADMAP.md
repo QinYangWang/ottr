@@ -26,58 +26,76 @@ What it still does not do:
 
 ---
 
-## 2. Jobs module: persisted task state, progress, cancellation — `open`
+## 2. Jobs module: persisted task state, progress, cancellation — `done`
 
-**Requirement:** background tasks expose status, progress, error, and
-cancellation; long tasks are cancellable.
+`internal/jobs/` records every long task in the `job` table (kind, state,
+progress, error) and keeps the context that ends it, so `Cancel(id)` stops the
+work. `Transcribe`, `StartTranslate` and `StartGenerate` all return a job ID;
+the window reads the newest job of the media shown each frame, draws its
+progress, offers **Cancel**, and shows the error of the last failed one. A job
+still `running` at startup is marked `interrupted` and its media is cleared from
+`pending`. See [Storage](storage.md#job) and
+[Architecture](architecture.md#concurrency-model).
 
-**Current state:** `internal/jobs/` does not exist. There is no `job` table.
-Progress is a spinner only. `Transcribe` runs in the background but cannot be
-cancelled. `Translate` and `Generate` block the caller until finished.
+What it still does not do:
 
-**Notes:**
-- Add `migrations/0005_jobs.sql` with `job(id, media_id, kind, state, progress,
-  error, created_at, updated_at)`.
-- Services return a job ID; the page subscribes to a `job:progress` event.
-- Cancellation needs a registry of `context.CancelFunc` keyed by job ID and a
-  bound `Jobs.Cancel(id)` method.
-- The two blocking calls (`Translate`, `Generate`) should move to the same
-  fire-and-forget + event pattern that `Transcribe` already uses, for
-  consistency.
-
----
-
-## 3. Import → full pipeline — `partial`
-
-**Requirement:** importing a file runs probe → audio extract → normalize → ASR →
-translate → summarize → save.
-
-**Current state:** `Library.Import` probes and inserts. It does not transcribe,
-translate, or summarize. Recording does auto-transcribe (see
-`Recorder.Stop`), but import does not.
-
-**Notes:** reuse the same background path as recording, ideally expressed as
-jobs (item 2). Consider making the chain opt-in per import so a user with a paid
-API key is not billed unexpectedly.
+- Translation and summarization report progress only where the work has stages
+  worth reporting; translation is one batch, so its bar is indeterminate.
+- Nothing runs two jobs over one media file on purpose, but nothing forbids it
+  either: starting a second summary while one runs leaves two rows and the
+  later one wins.
+- `job:progress` is broadcast for web pages that do not exist yet.
 
 ---
 
-## 4. Model management UI — `partial`
+## 3. Import → full pipeline — `done`
 
-**Requirement:** detect, validate, show size, load, unload, switch models, CPU/GPU.
+`Library.Import` probes and inserts, then the window runs one `import` job per
+file with audio: `asr.TranscribeNow` (the offline pass a recording gets), and,
+when the `Translate + summarize imports` switch is on, translation into the
+Translate tab's language and a summary, in that order. A file already in that
+language skips translation rather than spending quota on it. One job means one
+progress bar and one Cancel for the whole chain. See
+[UI](ui.md#library-sidebar).
 
-**Current state:** `models.Manager` detects, validates, and reports size and
-errors. There is **no UI**: no Settings/Models page exists, `Models` is bound but
-never called from the frontend, and `FindASRModel` always takes the first valid
-directory, so switching is impossible.
+What it still does not do:
 
-**Notes:**
-- Add a Models page listing `ListModels()` results with sizes and validation
-  errors, plus an "open folder" action.
-- Model selection needs a persisted `asr_model_dir` setting consumed by
-  `FindASRModel`.
-- GPU selection is not wired anywhere; sherpa-onnx accepts `--provider`, but no
+- The checkbox is per session, not per file, and is not remembered across
+  launches.
+- The chain is all or nothing: no "translate but do not summarize".
+- The target language is the one last chosen in the Translate tab, which is
+  English until the user changes it.
+
+---
+
+## 4. Model management UI — `done`
+
+The **Models** section of Settings (Transcription tab) lists `ListModels()`
+with sizes and the reason a folder is unusable, marks the model transcription uses, and switches
+with `Use`; `Open folder` and `Re-check` are there too. The choice is
+`settings.asr_model_dir`, read by `Manager.Open` and consumed by
+`FindASRModel`. See [Models](models.md#choosing-a-model).
+
+What it still does not do:
+
+- GPU selection: sherpa-onnx is still invoked with `--provider=cpu`, and no
   build with CUDA providers is shipped.
+- No download, install, load/unload or disk management: the user puts the files
+  there.
+- Only ASR models are listed; `Info.Kind` has room for llm and translation
+  models, which are still remote.
+
+---
+
+## 4b. Area and camera capture — `open`
+
+Two cards of the source grid say "Not yet": `Area`, which would record part of
+the screen, and `Camera only`, which would record a camera with no screen.
+
+`gdigrab` already takes `-offset_x`, `-offset_y` and `-video_size`, so an area
+is a rectangle and a selection gesture; a camera is an FFmpeg `dshow` input and
+an enumeration of devices. Both need work in `capture` and a selection or device
+UI, so neither is implemented.
 
 ---
 
@@ -129,40 +147,64 @@ everything bundled.
 
 ---
 
-## 8. Settings table as a migration — `open`
+## 8. Settings table as a migration — `done`
 
-`settings` is created lazily by `translate` and `summary` with
-`CREATE TABLE IF NOT EXISTS`. Two services doing DDL at runtime is fragile: a
-schema change must be edited in two places and races on first launch. Move it
-into `migrations/0005_settings.sql` (or fold it into the jobs migration).
-
----
-
-## 9. Orphaned recording files — `open`
-
-`Library.Remove` deletes the media row and, only when the user opts in, the
-media file. Files under `%APPDATA%\Ottr\recordings\` whose row was removed
-without the checkbox are left on disk forever. There is no cleanup view or
-startup reconciliation. Decide the policy (keep silently, surface a "N orphaned
-files" notice, or always delete managed recordings) and implement it.
+`migrations/0006_settings.sql` creates `settings (key, value)`; the services
+that used to create it lazily only read and write keys now. The keys are the
+provider settings for translation and summaries, plus `asr_model_dir` for the
+model chosen in the Models page.
 
 ---
 
-## 10. Chunked summarization — `open`
+## 9. Orphaned recording files — `done`
 
-`summary.Generate` sends the entire transcript in a single prompt. Transcripts
-longer than the model's context window will be truncated by the provider or
-fail. A map-reduce (per-chapter summaries, then a rollup) or sliding-window
-approach is needed for long recordings.
+The policy is to surface them and let the user decide; nothing is deleted
+silently. `Library.Orphans(dir)` lists the media files in the recordings folder
+that no record refers to, the window shows "N recording files are not in the
+library" under the list, and `Add back` (`Library.AddFiles`) or
+`Delete files…` (`Library.DeleteFiles`, behind a modal that names the count)
+acts on them. See [UI](ui.md#library-sidebar).
+
+What it still does not do:
+
+- The scan runs on each library reload, not on a schedule, and covers only the
+  folder Ottr writes recordings to — an imported file whose record is deleted is
+  out of reach.
+- `Add back` probes with FFmpeg like any import: a file FFmpeg cannot read comes
+  back as an error rather than a record.
 
 ---
 
-## 11. Source language detection — `open`
+## 10. Chunked summarization — `done`
 
-`transcript.language` is written as `'zh'` unconditionally by
-`asr.saveTranscript`, and translation uses it as the source language. An English
-recording is therefore declared Chinese. Either detect the language (sherpa-onnx
-offers language identification) or let the user state it.
+`summary.generateSummary` cuts the transcript into groups under 6000
+characters, summarizes each part (`map`), then rolls the parts up into one
+overview, key points and action items (`reduce`); chapters and highlights are
+merged from the parts in time order so their timestamps stay real. The job's
+progress follows the parts. See [Summary](summary.md#long-recordings-parts-then-a-rollup).
+
+What it still does not do:
+
+- The rollup is a second full pass over what the parts said, not a token-budget
+  calculation: a two-hour recording still makes many map requests.
+- A part is bounded by characters, not tokens, and the model's window is not
+  known to Ottr, so a model with a small context can still refuse a part.
+
+---
+
+## 11. Source language detection — `done`
+
+`asr.DetectLanguage` reads the script of the recognized text (kana → `ja`,
+hangul → `ko`, Han → `zh`, Latin → `en`, otherwise `und`), `saveTranscript`
+stores that, and the Transcript tab's **Spoken language** select overrules it
+through `asr.SetLanguage`. Translation uses it, sending `Autodetect` when it is
+`und`. See [Transcription](transcription.md#language).
+
+What it still does not do:
+
+- It is script counting, not language identification: French, Spanish and
+  English all say `en`, and Cantonese says `zh`.
+- Switching the language does not retranslate stored translations.
 
 ---
 

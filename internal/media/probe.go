@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+
+	"ottr/internal/tools"
 )
 
 // Info is what ffprobe reports about a media file.
@@ -35,9 +37,9 @@ type probeOutput struct {
 // Probe runs ffprobe on path. It fails with a clear error when ffprobe is
 // not installed.
 func Probe(ctx context.Context, path string) (Info, error) {
-	ffprobe, err := exec.LookPath("ffprobe")
+	ffprobe, err := tools.FFprobe()
 	if err != nil {
-		return Info{}, fmt.Errorf("ffprobe not found: install FFmpeg and make sure ffprobe is on PATH")
+		return Info{}, err
 	}
 	cmd := exec.CommandContext(ctx, ffprobe,
 		"-v", "error", "-show_format", "-show_streams", "-of", "json", path)

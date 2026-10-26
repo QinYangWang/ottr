@@ -1,7 +1,12 @@
 package native
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +14,7 @@ import (
 
 	"ottr/internal/asr"
 	"ottr/internal/capture"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/models"
 	"ottr/internal/storage"
@@ -27,16 +33,20 @@ func newTestApp(t *testing.T) (*App, int64) {
 	t.Cleanup(func() { db.Close() })
 	lib := &library.Service{}
 	lib.Open(db)
+	js := &jobs.Service{}
+	js.Open(db)
 	mm := models.NewManager(t.TempDir(), t.TempDir())
-	asrSvc := asr.NewService(lib, mm)
-	trSvc, sumSvc := translate.NewService(lib, asrSvc), summary.NewService(lib, asrSvc)
+	mm.Open(db)
+	asrSvc := asr.NewService(lib, mm, js)
+	trSvc, sumSvc := translate.NewService(lib, asrSvc, js), summary.NewService(lib, asrSvc, js)
 	asrSvc.Open(db)
 	trSvc.Open(db)
 	sumSvc.Open(db)
 	a := &App{
 		Lib: lib,
 		Rec: &capture.Recorder{Lib: lib, Dir: t.TempDir()},
-		ASR: asrSvc, Trans: trSvc, Sum: sumSvc,
+		ASR: asrSvc, Trans: trSvc, Sum: sumSvc, Jobs: js, MM: mm,
+		wide: true,
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := db.Exec(`INSERT INTO media (name, source, path, duration_ms, has_audio, has_video, created_at, transcript_status)
@@ -125,5 +135,390 @@ func TestDeleteMedia(t *testing.T) {
 	}
 	if !tt.HasText("Nothing yet: record the screen, or import a file.") {
 		t.Errorf("the empty library says %q", tt.Texts())
+	}
+}
+
+// A summary being generated is a job the window can watch and stop, and
+// stopping it leaves the summary as it was rather than as an error.
+func TestCancelStopsTheSummaryJob(t *testing.T) {
+	a, id := newTestApp(t)
+	started := make(chan struct{}, 1)
+	gone := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read the body so that the server notices the client hanging up.
+		io.Copy(io.Discard, r.Body)
+		r.Body.Close()
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		select {
+		case <-r.Context().Done(): // answer only once the caller gives up
+		case <-gone:
+		}
+	}))
+	defer server.Close()
+	defer close(gone)
+	if err := a.Sum.SaveSettings(summary.Settings{BaseURL: server.URL, APIKey: "test-key", Model: "mock"}); err != nil {
+		t.Fatal(err)
+	}
+
+	tt := ui.NewTester(a.view, 1100, 720)
+	if err := tt.Click("Summary"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 40 && !tt.HasText("Generate"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if err := tt.Click("Generate"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the summary request never went out: %q", tt.Texts())
+	}
+
+	for i := 0; i < 40 && !tt.HasText("Cancel"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if !tt.HasText("Cancel") {
+		t.Fatalf("the window offers no way to stop the job: %q", tt.Texts())
+	}
+	if err := tt.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		job, ok := a.Jobs.Latest(id)
+		if ok && !job.Running() {
+			if job.State != jobs.StateCancelled {
+				t.Errorf("the job ended as %q: %+v", job.State, job)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the job did not stop: %+v", job)
+		}
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+
+	for i := 0; i < 20 && tt.HasText("Cancel"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if tt.HasText("Cancel") {
+		t.Errorf("the window still offers to cancel: %q", tt.Texts())
+	}
+}
+
+// Importing a file runs the offline transcription as a job of its own, so that
+// the window shows it, can stop it, and hears why it failed.
+func TestImportChainRecordsWhatItDid(t *testing.T) {
+	a, id := newTestApp(t)
+	a.startImport(id, false, "en")
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		job, ok := a.Jobs.Latest(id)
+		if ok && !job.Running() {
+			if job.Kind != jobs.KindImport {
+				t.Errorf("the import job is of kind %q", job.Kind)
+			}
+			// The test app has no sherpa-onnx binary, so this is the honest
+			// end of the chain rather than a fabricated one.
+			if job.State != jobs.StateFailed || !strings.Contains(job.Error, "sherpa-onnx") {
+				t.Errorf("the import job ended as %q: %+v", job.State, job)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the import job did not end: %+v", job)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	m, err := a.Lib.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.TranscriptStatus == "pending" {
+		t.Errorf("the media is left pending after a failed import: %+v", m)
+	}
+}
+
+// Recordings the library does not hold are reported rather than silently left
+// on disk, and deleting them asks first.
+func TestOrphanNoticeAndDelete(t *testing.T) {
+	a, _ := newTestApp(t)
+	orphan := filepath.Join(a.Rec.Dir, "left-behind.mp4")
+	if err := os.WriteFile(orphan, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+
+	tt := ui.NewTester(a.view, 1100, 720)
+	tt.Frame()
+	if !tt.HasText("1 recording file is not in the library.") {
+		t.Fatalf("the window says %q", tt.Texts())
+	}
+
+	if err := tt.Click("Delete files…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("Delete 1 recording files?") {
+		t.Fatalf("the window does not ask first: %q", tt.Texts())
+	}
+	if err := tt.Click("Delete"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 40; i++ {
+		if _, err := os.Stat(orphan); os.IsNotExist(err) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("the orphan file is still there: %v", err)
+	}
+	for i := 0; i < 20 && tt.HasText("1 recording file is not in the library."); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if tt.HasText("1 recording file is not in the library.") {
+		t.Errorf("the notice outlived the files: %q", tt.Texts())
+	}
+}
+
+// Settings lists what is installed, shows what cannot be used, and choosing a
+// model is what transcription uses from then on.
+func TestSettingsChooseAModel(t *testing.T) {
+	a, _ := newTestApp(t)
+	base := a.MM.ModelsDir()
+	for _, name := range []string{"aaa-model", "zzz-model"} {
+		dir := filepath.Join(base, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range []string{"tokens.txt", "encoder.onnx", "decoder.onnx", "joiner.onnx"} {
+			if err := os.WriteFile(filepath.Join(dir, f), []byte("dummy"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(base, "not-a-model"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tt := ui.NewTester(a.view, 1100, 720)
+	if err := tt.Click("Settings"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Transcription"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 40 && !tt.HasText("zzz-model"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if !tt.HasText("aaa-model") || !tt.HasText("zzz-model") {
+		t.Fatalf("the installed models are not listed: %q", tt.Texts())
+	}
+	if !tt.HasText("missing tokens.txt") {
+		t.Errorf("the unusable folder does not say why: %q", tt.Texts())
+	}
+	if !tt.HasText("sherpa-onnx binary not found") {
+		t.Errorf("the page does not say the binary is missing: %q", tt.Texts())
+	}
+
+	// Without a choice the first valid model is the one in use; the other is
+	// offered.
+	if a.modelInUse != filepath.Join(base, "aaa-model") {
+		t.Fatalf("in use: %q", a.modelInUse)
+	}
+	if err := tt.Click("Use"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for a.MM.SelectedDir() != filepath.Join(base, "zzz-model") {
+		if time.Now().After(deadline) {
+			t.Fatalf("the choice was not recorded: %q", a.MM.SelectedDir())
+		}
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	for i := 0; i < 40 && a.modelInUse != filepath.Join(base, "zzz-model"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if a.modelInUse != filepath.Join(base, "zzz-model") {
+		t.Errorf("transcription still uses %q", a.modelInUse)
+	}
+
+	// Closing the page gives the window back to the recording form.
+	if err := tt.Click("Close"); err != nil {
+		t.Fatalf("the page does not close: %v", err)
+	}
+	tt.Frame()
+	if a.wide || a.page != "" {
+		t.Errorf("closing left the page open on %q", a.page)
+	}
+}
+
+// What can be recorded is laid out as cards in the sidebar, and windows, which
+// are too many for it, are chosen on a page of their own after a search.
+func TestSourceCardsAndPicker(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.sources = []capture.Source{
+		{ID: "screen", Kind: "screen", Name: "Full screen"},
+		{ID: "window:Alpha — Editor", Kind: "window", Name: "Alpha — Editor", Detail: "1560x992"},
+		{ID: "window:Beta", Kind: "window", Name: "Beta", Detail: "800x600"},
+	}
+	a.pickSource()
+	if a.sourceID != "screen" {
+		t.Fatalf("the whole screen is not chosen by default: %q", a.sourceID)
+	}
+
+	tt := ui.NewTester(a.view, 1100, 720)
+	tt.Frame()
+	if !tt.HasText("Choose a capture source") || !tt.HasText("Choose your audio") {
+		t.Fatalf("the sidebar says %q", tt.Texts())
+	}
+	if !tt.HasText("Full screen") || !tt.HasText("Window") || !tt.HasText("Microphone") {
+		t.Fatalf("the cards are not there: %q", tt.Texts())
+	}
+
+	// The Window card stands for all windows and opens the picker.
+	if err := tt.Click("Window"); err != nil {
+		t.Fatal(err)
+	}
+	if a.page != "sources" {
+		t.Fatalf("the Window card went to page %q", a.page)
+	}
+
+	// The picker lists them, the search narrows them, and a click chooses one.
+	a.page, a.pickKind, a.pickQuery = "sources", "window", ""
+	a.sources = []capture.Source{
+		{ID: "window:Alpha — Editor", Kind: "window", Name: "Alpha — Editor", Detail: "1560x992"},
+		{ID: "window:Beta", Kind: "window", Name: "Beta", Detail: "800x600"},
+	}
+	tt.Frame()
+	if !tt.HasText("Alpha — Editor") || !tt.HasText("1560x992") {
+		t.Fatalf("the windows are not listed: %q", tt.Texts())
+	}
+	a.pickQuery = "beta"
+	tt.Frame()
+	if tt.HasText("Alpha — Editor") || !tt.HasText("Beta") {
+		t.Fatalf("the search did not narrow the list: %q", tt.Texts())
+	}
+	if err := tt.Click("Beta"); err != nil {
+		t.Fatal(err)
+	}
+	if a.sourceID != "window:Beta" || a.page != "" {
+		t.Errorf("choosing Beta left source %q on page %q", a.sourceID, a.page)
+	}
+
+	// Back on the sidebar, the card says what is recorded.
+	tt.Frame()
+	if !tt.HasText("Beta") {
+		t.Errorf("the card does not say what is chosen: %q", tt.Texts())
+	}
+}
+
+// The window draws its own title bar, in the strip the window controls sit in,
+// and keeps its name clear of the room they take at the right.
+func TestTitleBarKeepsClearOfTheWindowControls(t *testing.T) {
+	a, _ := newTestApp(t)
+	tt := ui.NewTester(a.view, 1100, 720)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
+	tt.Frame()
+
+	name, ok := tt.Find("Ottr")
+	if !ok {
+		t.Fatalf("the title bar has no name: %q", tt.Texts())
+	}
+	if name.Y+name.H > titleBarHeight {
+		t.Errorf("the name is at y=%.0f, below the title bar", name.Y)
+	}
+	if right := name.X + name.W; right > 1100-138 {
+		t.Errorf("the name ends at x=%.0f, under the window controls", right)
+	}
+}
+
+// The window is the recording form alone until something is opened, and grows
+// when it is.
+func TestCompactWindowOpensThePageBesideIt(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.wide = false
+	a.sources = []capture.Source{{ID: "screen", Kind: "screen", Name: "Full screen"}}
+	a.pickSource()
+
+	tt := ui.NewTester(a.view, CompactWidth, CompactHeight)
+	tt.Frame()
+	if !tt.HasText("Choose a capture source") {
+		t.Fatalf("the form is not there: %q", tt.Texts())
+	}
+	if tt.HasText("Transcript") || tt.HasText("No transcript yet") {
+		t.Errorf("a page is open beside the form: %q", tt.Texts())
+	}
+	// The import button is an icon alone: its label is what names it.
+	if _, ok := tt.Find("Import"); !ok {
+		t.Errorf("the library has no import button: %q", tt.Texts())
+	}
+
+	// A click on a recording opens it, which is what the window grows for.
+	if err := tt.Click("standup"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.wide {
+		t.Fatal("choosing a recording did not open its page")
+	}
+	tt.SetSize(WideWidth, WideHeight) // what the window does for the page
+	tt.Frame()
+	for i := 0; i < 20 && !tt.HasText("Transcript"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if !tt.HasText("Transcript") {
+		t.Fatalf("the page did not open: %q", tt.Texts())
+	}
+
+	// Closing it gives the room back.
+	if err := tt.Click("Close"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.wide || a.page != "" {
+		t.Errorf("closing left the page open on %q", a.page)
+	}
+}
+
+// The look can be fixed to light or dark, or left to the desktop.
+func TestAppearanceChangesTheLook(t *testing.T) {
+	a, _ := newTestApp(t)
+	tt := ui.NewTester(a.view, WideWidth, WideHeight)
+
+	if err := tt.Click("Settings"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	for _, look := range []string{"System", "Light", "Dark"} {
+		if !tt.HasText(look) {
+			t.Fatalf("the looks to pick are not there: %q", tt.Texts())
+		}
+	}
+
+	if err := tt.Click("Dark"); err != nil {
+		t.Fatal(err)
+	}
+	if a.theme != "dark" {
+		t.Errorf("the app kept the look %q", a.theme)
 	}
 }

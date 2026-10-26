@@ -14,6 +14,7 @@ import (
 
 	"github.com/egoist/mygo"
 
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/models"
 )
@@ -30,11 +31,12 @@ type Service struct {
 	db     *sql.DB
 	lib    *library.Service
 	models *models.Manager
+	jobs   *jobs.Service
 }
 
 // NewService creates a transcription service.
-func NewService(lib *library.Service, mm *models.Manager) *Service {
-	return &Service{lib: lib, models: mm}
+func NewService(lib *library.Service, mm *models.Manager, js *jobs.Service) *Service {
+	return &Service{lib: lib, models: mm, jobs: js}
 }
 
 // Open connects the service to the database.
@@ -117,69 +119,115 @@ func (s *Service) Search(mediaID int64, query string) ([]Segment, error) {
 	return list, rows.Err()
 }
 
-// Transcribe triggers ASR processing for the given media.
-func (s *Service) Transcribe(mediaID int64) error {
+// Transcribe starts speech recognition for the given media in the background
+// and returns the job that runs it. The transcript and its segments replace
+// any earlier ones when it ends; TranscriptReady says so.
+func (s *Service) Transcribe(mediaID int64) (int64, error) {
+	job, err := s.prepare(mediaID)
+	if err != nil {
+		return 0, err
+	}
+	jobID, err := s.jobs.Run(mediaID, jobs.KindTranscribe, func(ctx context.Context, progress func(float64)) error {
+		return s.recognize(ctx, job, progress)
+	})
+	if err != nil {
+		s.setStatus(mediaID, "error")
+		return 0, err
+	}
+	return jobID, nil
+}
+
+// TranscribeNow does the same work in the caller's goroutine and context, for
+// work that is already a job of its own — importing a file, which goes on to
+// translate and summarize it.
+func (s *Service) TranscribeNow(ctx context.Context, mediaID int64, progress func(float64)) error {
+	job, err := s.prepare(mediaID)
+	if err != nil {
+		return err
+	}
+	return s.recognize(ctx, job, progress)
+}
+
+// recognition is what one transcription needs: where the media is, and which
+// binary and model read it.
+type recognition struct {
+	mediaID int64
+	path    string
+	bin     string
+	model   *models.ASRModel
+}
+
+// prepare checks that the media can be transcribed and marks it pending, so
+// that the window shows the work before it starts.
+func (s *Service) prepare(mediaID int64) (recognition, error) {
 	m, err := s.lib.Get(mediaID)
 	if err != nil {
-		return err
+		return recognition{}, err
 	}
 	if !m.HasAudio {
-		return errors.New("this media file has no audio stream to transcribe")
+		return recognition{}, errors.New("this media file has no audio stream to transcribe")
 	}
-
 	bin, err := s.models.FindSherpaBin()
 	if err != nil {
-		return err
+		return recognition{}, err
 	}
 	mdl, err := s.models.FindASRModel()
 	if err != nil {
-		return err
+		return recognition{}, err
 	}
-
 	db, err := s.store()
 	if err != nil {
-		return err
+		return recognition{}, err
 	}
-
-	// Mark status as pending
 	if _, err := db.Exec(`UPDATE media SET transcript_status = 'pending' WHERE id = ?`, mediaID); err != nil {
-		return err
+		return recognition{}, err
 	}
 	library.Changed.Broadcast(struct{}{})
+	return recognition{mediaID: mediaID, path: m.Path, bin: bin, model: mdl}, nil
+}
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
+// recognize turns the audio into segments and stores them.
+func (s *Service) recognize(ctx context.Context, r recognition, progress func(float64)) error {
+	tmpWav := filepath.Join(os.TempDir(), fmt.Sprintf("ottr-asr-%d-%d.wav", r.mediaID, time.Now().UnixNano()))
+	defer os.Remove(tmpWav)
 
-		tmpWav := filepath.Join(os.TempDir(), fmt.Sprintf("ottr-asr-%d-%d.wav", mediaID, time.Now().UnixNano()))
-		defer os.Remove(tmpWav)
-
-		if err := ExtractWav(ctx, m.Path, tmpWav); err != nil {
-			s.markError(mediaID, err)
-			return
-		}
-		segments, err := RunSherpa(ctx, bin, mdl, tmpWav)
-		if err != nil {
-			s.markError(mediaID, err)
-			return
-		}
-		if err := s.saveTranscript(mediaID, segments); err != nil {
-			s.markError(mediaID, err)
-			return
-		}
-		TranscriptReady.Broadcast(mediaID)
-		library.Changed.Broadcast(struct{}{})
-	}()
-
+	progress(0.05)
+	if err := ExtractWav(ctx, r.path, tmpWav); err != nil {
+		return s.endFailed(r.mediaID, ctx, err)
+	}
+	progress(0.15) // extraction done; sherpa-onnx then runs the file in one go
+	segments, err := RunSherpa(ctx, r.bin, r.model, tmpWav)
+	if err != nil {
+		return s.endFailed(r.mediaID, ctx, err)
+	}
+	progress(0.9)
+	if err := s.saveTranscript(r.mediaID, segments); err != nil {
+		return s.endFailed(r.mediaID, ctx, err)
+	}
+	TranscriptReady.Broadcast(r.mediaID)
+	library.Changed.Broadcast(struct{}{})
 	return nil
 }
 
-func (s *Service) markError(mediaID int64, err error) {
-	db, errDb := s.store()
-	if errDb != nil {
+// endFailed records why recognition stopped, and leaves the record as it was
+// when the user cancelled rather than failed.
+func (s *Service) endFailed(mediaID int64, ctx context.Context, err error) error {
+	status := "error"
+	if ctx.Err() != nil {
+		status = "none"
+	}
+	s.setStatus(mediaID, status)
+	return err
+}
+
+func (s *Service) setStatus(mediaID int64, status string) {
+	db, err := s.store()
+	if err != nil {
 		return
 	}
-	db.Exec(`UPDATE media SET transcript_status = 'error' WHERE id = ?`, mediaID)
+	if _, err := db.Exec(`UPDATE media SET transcript_status = ? WHERE id = ?`, status, mediaID); err != nil {
+		return
+	}
 	library.Changed.Broadcast(struct{}{})
 }
 
@@ -199,8 +247,8 @@ func (s *Service) saveTranscript(mediaID int64, segments []Segment) error {
 		return err
 	}
 
-	res, err := tx.Exec(`INSERT INTO transcript (media_id, language, created_at) VALUES (?, 'zh', ?)`,
-		mediaID, time.Now().UTC().Format(time.RFC3339))
+	res, err := tx.Exec(`INSERT INTO transcript (media_id, language, created_at) VALUES (?, ?, ?)`,
+		mediaID, DetectLanguage(segments), time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return err
 	}

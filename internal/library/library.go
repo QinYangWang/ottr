@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -113,10 +115,6 @@ func (s *Service) Get(id int64) (Media, error) {
 // Import asks for media files, probes them and adds them to the library.
 // It returns the imported records.
 func (s *Service) Import(ctx context.Context) ([]Media, error) {
-	db, err := s.store()
-	if err != nil {
-		return nil, err
-	}
 	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 		Parent:   mygo.CallerWindow(ctx),
 		Title:    "Import media",
@@ -128,23 +126,102 @@ func (s *Service) Import(ctx context.Context) ([]Media, error) {
 	if err != nil || len(paths) == 0 {
 		return nil, err
 	}
-	imported := []Media{}
+	return s.AddFiles(paths)
+}
+
+// AddFiles probes existing files and adds them to the library, as recordings:
+// the files Ottr wrote that no record holds any more, found by Orphans.
+func (s *Service) AddFiles(paths []string) ([]Media, error) {
+	db, err := s.store()
+	if err != nil {
+		return nil, err
+	}
+	added := []Media{}
 	var errs []string
 	for _, path := range paths {
-		m, err := s.add(ctx, db, path, "import")
+		m, err := s.add(context.Background(), db, path, "recording")
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", filepath.Base(path), err))
 			continue
 		}
-		imported = append(imported, m)
+		added = append(added, m)
 	}
-	if len(imported) > 0 {
+	if len(added) > 0 {
 		Changed.Broadcast(struct{}{})
 	}
 	if len(errs) > 0 {
-		return imported, errors.New(strings.Join(errs, "\n"))
+		return added, errors.New(strings.Join(errs, "\n"))
 	}
-	return imported, nil
+	return added, nil
+}
+
+// Orphans lists the media files in dir, the folder Ottr writes recordings to,
+// that no record refers to: files kept when their record was deleted, or left
+// by a recording that never landed in the library.
+func (s *Service) Orphans(dir string) ([]string, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	db, err := s.store()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	known := map[string]bool{}
+	rows, err := db.Query(`SELECT path FROM media`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		known[filepath.Clean(path)] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var orphans []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		if known[filepath.Clean(path)] {
+			continue
+		}
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(e.Name()), "."))
+		if !slices.Contains(Extensions, ext) {
+			continue // not a file Ottr wrote
+		}
+		orphans = append(orphans, path)
+	}
+	sort.Strings(orphans)
+	return orphans, nil
+}
+
+// DeleteFiles removes files from disk. It only ever touches files, never
+// records: deleting a record stays Remove's business.
+func (s *Service) DeleteFiles(paths []string) error {
+	var errs []string
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Sprintf("%s: %v", filepath.Base(path), err))
+		}
+	}
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "\n"))
+	}
+	return nil
 }
 
 // AddRecording probes a finished recording and adds it to the library.

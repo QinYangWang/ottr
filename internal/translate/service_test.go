@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"ottr/internal/asr"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/models"
 	"ottr/internal/storage"
@@ -23,11 +24,13 @@ func setupTestTranslate(t *testing.T) (*Service, *asr.Service, *library.Service)
 	lib := &library.Service{}
 	lib.Open(db)
 
+	js := &jobs.Service{}
+	js.Open(db)
 	mm := models.NewManager(t.TempDir(), t.TempDir())
-	asrSvc := asr.NewService(lib, mm)
+	asrSvc := asr.NewService(lib, mm, js)
 	asrSvc.Open(db)
 
-	trSvc := NewService(lib, asrSvc)
+	trSvc := NewService(lib, asrSvc, js)
 	trSvc.Open(db)
 
 	return trSvc, asrSvc, lib

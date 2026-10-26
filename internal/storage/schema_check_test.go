@@ -22,7 +22,7 @@ func TestAllTablesExist(t *testing.T) {
 		rows.Scan(&n)
 		got[n] = true
 	}
-	for _, want := range []string{"media", "transcript", "segment", "translation", "translation_segment", "summary", "schema_migrations"} {
+	for _, want := range []string{"media", "transcript", "segment", "translation", "translation_segment", "summary", "job", "settings", "schema_migrations"} {
 		if !got[want] {
 			t.Errorf("missing table %q (have %v)", want, got)
 		}

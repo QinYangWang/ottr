@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"ottr/internal/asr"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/translate"
 )
@@ -26,6 +27,25 @@ func langName(code string) string {
 		}
 	}
 	return code
+}
+
+// langChoices are the spoken languages the user can set, in the order the
+// select shows them: what was detected first, then the ones this app knows.
+func langChoices() (names, codes []string) {
+	names = append(names, "Detected")
+	codes = append(codes, asr.DefaultLanguage)
+	for _, l := range langs {
+		names = append(names, l.name)
+		codes = append(codes, l.code)
+	}
+	return names, codes
+}
+
+func langLabel(code string) string {
+	if code == "" || code == asr.DefaultLanguage {
+		return "Detected"
+	}
+	return langName(code)
 }
 
 // sessionPage is what the app made of the media chosen: its transcript, its
@@ -58,6 +78,9 @@ func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
 		if ui.Button(c, "Delete…").Clicked() {
 			a.delID, a.confirmDel = m.ID, true
 		}
+		if ui.Button(c, "Close").Tooltip("Back to the recording form").Clicked() {
+			a.closePane()
+		}
 	})
 }
 
@@ -87,8 +110,11 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 		return
 	}
 	if m.TranscriptStatus != "done" {
-		a.emptyTab(c, t, "No transcript yet",
-			"Offline speech recognition turns the audio into timestamped subtitles.",
+		detail := "Offline speech recognition turns the audio into timestamped subtitles."
+		if a.job.Kind == jobs.KindTranscribe && a.job.State == jobs.StateFailed && a.job.Error != "" {
+			detail = a.job.Error
+		}
+		a.emptyTab(c, t, "No transcript yet", detail,
 			[]action{{"Transcribe", m.HasAudio, func() { a.startTranscribe(m.ID) }}})
 		return
 	}
@@ -119,6 +145,7 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 				a.startTranscribe(m.ID)
 			}
 		})
+		a.spokenLanguageRow(c, t, m)
 		rows := a.filteredSegments()
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Gap(1).Children(func() {
@@ -142,6 +169,23 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 }
 
+// spokenLanguageRow says what language the subtitles are in, which
+// translation takes as its source, and lets the user overrule the guess.
+func (a *App) spokenLanguageRow(c *ui.Context, t *ui.Theme, m library.Media) {
+	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "Spoken language").FontSize(t.FontSize - 3).TextColor(t.TextMuted)
+		names, codes := langChoices()
+		lang := langLabel(a.lang)
+		ui.Select(c, &lang, names).Label("Spoken language").Width(130).Changed()
+		for i, name := range names {
+			if name == lang && codes[i] != a.lang {
+				a.setLanguage(m.ID, codes[i])
+			}
+		}
+		ui.Spacer(c)
+	})
+}
+
 func (a *App) filteredSegments() []asr.Segment {
 	q := strings.TrimSpace(strings.ToLower(a.segQuery))
 	if q == "" {
@@ -157,11 +201,22 @@ func (a *App) filteredSegments() []asr.Segment {
 }
 
 func (a *App) startTranscribe(id int64) {
-	if err := a.ASR.Transcribe(id); err != nil {
+	if _, err := a.ASR.Transcribe(id); err != nil {
 		a.setError(err)
 		return
 	}
 	a.reload()
+}
+
+// setLanguage says what language a transcript is in, which translation takes
+// as its source.
+func (a *App) setLanguage(id int64, code string) {
+	a.lang = code
+	go func() {
+		if err := a.ASR.SetLanguage(id, code); err != nil {
+			a.update(func() { a.setError(err) })
+		}
+	}()
 }
 
 func (a *App) exportTranscript(id int64, format string) {
@@ -186,7 +241,7 @@ func (a *App) translateTab(c *ui.Context, t *ui.Theme, m library.Media) {
 		a.transLang = a.trLang
 		a.loadTranslation()
 	}
-	if a.transPending {
+	if a.jobRunning(jobs.KindTranslate) {
 		a.working(c, t, "Translating", "Sending the subtitles to the provider.")
 		return
 	}
@@ -219,16 +274,7 @@ func (a *App) translateTab(c *ui.Context, t *ui.Theme, m library.Media) {
 					a.exportTranslation(m.ID, "txt")
 				}
 			}
-			if ui.Button(c, "Settings").Clicked() {
-				a.transOpen = !a.transOpen
-				if a.transOpen && !a.loadedTrans {
-					a.loadTransSettings()
-				}
-			}
 		})
-		if a.transOpen {
-			a.translateSettings(c, t)
-		}
 		if !has {
 			a.emptyTab(c, t, "Not translated yet",
 				"Translate the subtitles into "+langName(a.trLang)+" with the online provider.",
@@ -278,23 +324,9 @@ func (a *App) loadTranslation() {
 }
 
 func (a *App) startTranslate(id int64) {
-	lang := a.trLang
-	a.transPending = true
-	go func() {
-		tr, err := a.Trans.Translate(context.Background(), id, lang)
-		a.update(func() {
-			a.transPending = false
-			if err != nil {
-				a.setError(err)
-				a.reload()
-				return
-			}
-			if id == a.sel && lang == a.trLang {
-				a.trans = tr
-			}
-			a.reload()
-		})
-	}()
+	if _, err := a.Trans.StartTranslate(id, a.trLang); err != nil {
+		a.setError(err)
+	}
 }
 
 func (a *App) exportTranslation(id int64, format string) {
@@ -307,62 +339,6 @@ func (a *App) exportTranslation(id int64, format string) {
 	}()
 }
 
-func (a *App) loadTransSettings() {
-	go func() {
-		cfg := a.Trans.GetSettings()
-		a.update(func() { a.transCfg, a.loadedTrans = cfg, true })
-	}()
-}
-
-func (a *App) translateSettings(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Gap(t.Space(2)).Padding(t.Space(3)).Radius(t.Radius).
-		Background(t.Surface).Children(func() {
-		ui.Text(c, "Online translation").Bold()
-		provider := a.transCfg.Provider
-		if provider == "" {
-			provider = "mymemory"
-		}
-		options := []string{"Free online provider", "Custom AI model"}
-		chosen := options[1]
-		if provider != "custom" {
-			chosen = options[0]
-		}
-		ui.Select(c, &chosen, options).Label("Provider").Changed()
-		if chosen == options[0] {
-			a.transCfg.Provider = "mymemory"
-		} else {
-			a.transCfg.Provider = "custom"
-		}
-		if a.transCfg.Provider == "custom" {
-			ui.TextInput(c, &a.transCfg.BaseURL).Placeholder("https://api.deepseek.com/v1").Label("API base URL")
-			ui.TextInput(c, &a.transCfg.APIKey).Password().Label("API key")
-			ui.TextInput(c, &a.transCfg.Model).Placeholder("deepseek-chat").Label("Model")
-		}
-		ui.Row(c).Gap(t.Space(2)).Justify(ui.End).Children(func() {
-			if ui.Button(c, "Cancel").Clicked() {
-				a.transOpen = false
-			}
-			if ui.PrimaryButton(c, "Save").Clicked() {
-				a.saveTransSettings()
-			}
-		})
-	})
-}
-
-func (a *App) saveTransSettings() {
-	cfg := a.transCfg
-	go func() {
-		err := a.Trans.SaveSettings(cfg)
-		a.update(func() {
-			if err != nil {
-				a.setError(err)
-				return
-			}
-			a.transOpen = false
-		})
-	}()
-}
-
 // ---------------------------------------------------------------- summary
 
 func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
@@ -372,7 +348,7 @@ func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
 			[]action{{"Go to Transcript", true, func() { a.tab = 0 }}})
 		return
 	}
-	if m.SummaryStatus == "pending" || a.sumPending {
+	if m.SummaryStatus == "pending" || a.jobRunning(jobs.KindSummarize) {
 		a.working(c, t, "Summarizing", "Asking the AI model for the overview, key points and chapters.")
 		return
 	}
@@ -395,16 +371,7 @@ func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
 					a.exportSummary(m.ID)
 				}
 			}
-			if ui.Button(c, "Settings").Clicked() {
-				a.sumOpen = !a.sumOpen
-				if a.sumOpen && !a.loadedSum {
-					a.loadSumSettings()
-				}
-			}
 		})
-		if a.sumOpen {
-			a.summarySettings(c, t)
-		}
 		if !has {
 			a.emptyTab(c, t, "No summary yet",
 				"Generate an overview, key points, action items, chapters and highlights from the transcript.",
@@ -500,22 +467,9 @@ func (a *App) loadSummary() {
 }
 
 func (a *App) startSummary(id int64) {
-	a.sumPending = true
-	go func() {
-		s, err := a.Sum.Generate(context.Background(), id)
-		a.update(func() {
-			a.sumPending = false
-			if err != nil {
-				a.setError(err)
-				a.reload()
-				return
-			}
-			if id == a.sel {
-				a.sum, a.sumLoaded = s, true
-			}
-			a.reload()
-		})
-	}()
+	if _, err := a.Sum.StartGenerate(id); err != nil {
+		a.setError(err)
+	}
 }
 
 func (a *App) exportSummary(id int64) {
@@ -524,45 +478,6 @@ func (a *App) exportSummary(id int64) {
 		if err != nil {
 			a.update(func() { a.setError(err) })
 		}
-	}()
-}
-
-func (a *App) loadSumSettings() {
-	go func() {
-		cfg := a.Sum.GetSettings()
-		a.update(func() { a.sumCfg, a.loadedSum = cfg, true })
-	}()
-}
-
-func (a *App) summarySettings(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Gap(t.Space(2)).Padding(t.Space(3)).Radius(t.Radius).
-		Background(t.Surface).Children(func() {
-		ui.Text(c, "AI model").Bold()
-		ui.TextInput(c, &a.sumCfg.BaseURL).Placeholder("https://api.deepseek.com/v1").Label("API base URL")
-		ui.TextInput(c, &a.sumCfg.APIKey).Password().Label("API key")
-		ui.TextInput(c, &a.sumCfg.Model).Placeholder("deepseek-chat").Label("Model")
-		ui.Row(c).Gap(t.Space(2)).Justify(ui.End).Children(func() {
-			if ui.Button(c, "Cancel").Clicked() {
-				a.sumOpen = false
-			}
-			if ui.PrimaryButton(c, "Save").Clicked() {
-				a.saveSumSettings()
-			}
-		})
-	})
-}
-
-func (a *App) saveSumSettings() {
-	cfg := a.sumCfg
-	go func() {
-		err := a.Sum.SaveSettings(cfg)
-		a.update(func() {
-			if err != nil {
-				a.setError(err)
-				return
-			}
-			a.sumOpen = false
-		})
 	}()
 }
 
@@ -592,12 +507,26 @@ func (a *App) emptyTab(c *ui.Context, t *ui.Theme, title, detail string, actions
 	})
 }
 
-// working shows what a long job is doing, with a spinner.
+// working shows what a long job is doing, how far it has come, and how to
+// stop it.
 func (a *App) working(c *ui.Context, t *ui.Theme, title, detail string) {
 	ui.Column(c).Fill().Center().Gap(t.Space(2)).Children(func() {
 		ui.Spinner(c).Label(title)
 		ui.Text(c, title+"…").Bold()
 		ui.Text(c, detail).TextColor(t.TextMuted).MaxWidth(420).TextAlign(ui.Center)
+		if !a.job.Running() {
+			return
+		}
+		// A negative value is a bar of unknown length, which is what work
+		// that has not reported any progress yet has.
+		value := a.job.Progress
+		if value <= 0 {
+			value = -1
+		}
+		ui.Progress(c, value).Width(240)
+		if ui.Button(c, "Cancel").Label("Stop this job").Clicked() {
+			a.cancelJob()
+		}
 	})
 }
 
@@ -616,6 +545,7 @@ func (a *App) loadTranscript() {
 				return
 			}
 			a.transcript, a.segs = tr, tr.Segments
+			a.lang = tr.Language
 		})
 	}()
 }

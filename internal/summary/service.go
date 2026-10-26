@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo"
 
 	"ottr/internal/asr"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 )
 
@@ -25,13 +26,15 @@ type Service struct {
 	db       *sql.DB
 	lib      *library.Service
 	asr      *asr.Service
+	jobs     *jobs.Service
 	settings Settings
 }
 
-func NewService(lib *library.Service, asrSvc *asr.Service) *Service {
+func NewService(lib *library.Service, asrSvc *asr.Service, js *jobs.Service) *Service {
 	return &Service{
-		lib: lib,
-		asr: asrSvc,
+		lib:  lib,
+		asr:  asrSvc,
+		jobs: js,
 		settings: Settings{
 			BaseURL: "https://api.deepseek.com/v1",
 			Model:   "deepseek-chat",
@@ -60,7 +63,6 @@ func (s *Service) loadSettingsLocked() {
 	if s.db == nil {
 		return
 	}
-	s.db.Exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`)
 	var baseURL, apiKey, model string
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'llm_base_url'`).Scan(&baseURL)
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'llm_api_key'`).Scan(&apiKey)
@@ -141,8 +143,22 @@ func (s *Service) Get(mediaID int64) (Summary, error) {
 	return sum, nil
 }
 
+// StartGenerate summarizes the media's transcript in the background and
+// returns the job that runs it. The summary is readable with Get when it ends.
+func (s *Service) StartGenerate(mediaID int64) (int64, error) {
+	return s.jobs.Run(mediaID, jobs.KindSummarize, func(ctx context.Context, progress func(float64)) error {
+		_, err := s.generate(ctx, mediaID, progress)
+		return err
+	})
+}
+
 // Generate generates a structured summary using the remote AI API.
 func (s *Service) Generate(ctx context.Context, mediaID int64) (Summary, error) {
+	return s.generate(ctx, mediaID, nil)
+}
+
+// generate does the work, reporting progress when it is called from a job.
+func (s *Service) generate(ctx context.Context, mediaID int64, progress func(float64)) (Summary, error) {
 	m, err := s.lib.Get(mediaID)
 	if err != nil {
 		return Summary{}, err
@@ -168,9 +184,13 @@ func (s *Service) Generate(ctx context.Context, mediaID int64) (Summary, error) 
 	db.Exec(`UPDATE media SET summary_status = 'pending' WHERE id = ?`, mediaID)
 	library.Changed.Broadcast(struct{}{})
 
-	res, err := GenerateSummary(ctx, cfg, m.Name, tr)
+	res, err := generateSummary(ctx, cfg, m.Name, tr, progress)
 	if err != nil {
-		db.Exec(`UPDATE media SET summary_status = 'error' WHERE id = ?`, mediaID)
+		status := "error"
+		if ctx.Err() != nil {
+			status = "none" // cancelled: nothing was produced, so nothing failed
+		}
+		db.Exec(`UPDATE media SET summary_status = ? WHERE id = ?`, status, mediaID)
 		library.Changed.Broadcast(struct{}{})
 		return Summary{}, err
 	}

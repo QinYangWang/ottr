@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
 
 	"ottr/internal/models"
+	"ottr/internal/tools"
 )
 
 type sherpaResult struct {
@@ -21,9 +21,9 @@ type sherpaResult struct {
 
 // ExtractWav converts any media file's audio stream to 16kHz mono 16-bit WAV PCM.
 func ExtractWav(ctx context.Context, mediaPath, wavPath string) error {
-	ffmpeg, err := exec.LookPath("ffmpeg")
+	ffmpeg, err := tools.FFmpeg()
 	if err != nil {
-		return errors.New("ffmpeg not found: ensure FFmpeg is on PATH")
+		return err
 	}
 	cmd := exec.CommandContext(ctx, ffmpeg, "-y", "-i", mediaPath,
 		"-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", wavPath)

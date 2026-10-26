@@ -14,20 +14,32 @@ import (
 
 	"ottr/internal/asr"
 	"ottr/internal/capture"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
+	"ottr/internal/models"
+	"ottr/internal/settings"
 	"ottr/internal/summary"
 	"ottr/internal/translate"
 )
 
 // App is the app's state, which the view reads, and the window it draws.
 type App struct {
-	Lib   *library.Service
-	Rec   *capture.Recorder
-	ASR   *asr.Service
-	Trans *translate.Service
-	Sum   *summary.Service
+	Lib     *library.Service
+	Rec     *capture.Recorder
+	ASR     *asr.Service
+	Trans   *translate.Service
+	Sum     *summary.Service
+	Jobs    *jobs.Service
+	MM      *models.Manager
+	Preview *capture.Previewer // the picture of the source, before recording
+	Prefs   *settings.Service  // what the window itself remembers
 
 	win *mygo.Window
+
+	// wide is whether the window shows the page beside the library. It starts
+	// narrow, with the recording form alone, and opens with what was chosen.
+	wide  bool
+	theme string // system | light | dark
 
 	// The library.
 	media []library.Media
@@ -37,13 +49,18 @@ type App struct {
 	err   string
 
 	// The recording pane.
-	sources  []capture.Source
-	sourceID string
-	source   string // the label of sourceID
-	sysAudio bool
-	micAudio bool
-	busy     bool
-	discard  bool
+	sources    []capture.Source
+	sourceID   string
+	source     string // the label of sourceID
+	sysAudio   bool
+	micAudio   bool
+	busy       bool
+	previewErr string
+
+	// What importing does beyond probing: transcription always, translation
+	// into trLang and a summary only when asked for.
+	importChain bool
+	discard     bool
 
 	// The recording in progress, mirrored from the recorder each frame.
 	recording bool
@@ -59,26 +76,51 @@ type App struct {
 	transcript   asr.Transcript
 	segs         []asr.Segment
 	trLoaded     bool
+	lang         string // the language the transcript says it is in
 	trLang       string
 	trans        translate.Translation
 	transLang    string
 	transLoading bool
-	transPending bool
 	sum          summary.Summary
 	sumLoaded    bool
-	sumPending   bool
 	segQuery     string
 
-	// Settings drawers, read when opened.
-	transOpen   bool
+	// job is background work over the media shown: what it does, how far it
+	// has come, and what became of it.
+	job jobs.Job
+
+	// The page beside the library: "" is the session of the media shown,
+	// "sources" the picker for a kind of source, "settings" what can be
+	// configured.
+	page string
+
+	// The source picker.
+	pickKind  string
+	pickQuery string
+
+	// The Settings page and what it shows.
+	settingsTab int
+	ffmpeg      string // the program found, or ""
+	ffmpegNote  string // where it is, or why it is not
+	modelList   []models.Info
+	modelInUse  string
+	modelBin    string
+	modelBinErr string
+	modelLoaded  bool
+	modelLoading bool
+
+	// Provider settings, read when the Settings page opens them.
 	transCfg    translate.Settings
 	loadedTrans bool
-	sumOpen     bool
 	sumCfg      summary.Settings
 	loadedSum   bool
 
 	confirmDel bool
 	delID      int64
+
+	// orphans are files in the recordings folder that no record holds.
+	orphans       []string
+	confirmOrphans bool
 
 	// queued functions run on the next frame, for work done elsewhere: the
 	// window's own Update does that for a window, and a test has none.
@@ -100,41 +142,162 @@ func (a *App) Begin(win *mygo.Window) {
 	a.win = win
 	a.trLang = "en"
 	a.sysAudio = true
+	if a.Prefs != nil {
+		if source := a.Prefs.Get(settings.Theme); source != "" {
+			a.theme = source
+		}
+	}
 	a.reload()
 	if srcs, err := a.Rec.Sources(); err != nil {
 		a.setError(err)
 	} else {
 		a.sources = srcs
 		a.pickSource()
+		a.showPreview()
 	}
 }
 
+// showPreview draws the source chosen, so that what will be recorded is visible
+// before it is.
+func (a *App) showPreview() {
+	if a.Preview == nil || a.sourceID == "" {
+		return
+	}
+	a.previewErr = ""
+	a.Preview.Show(a.sourceID)
+}
+
+// The room the window takes: the recording form alone, and beside it the page
+// of what was chosen.
+const (
+	CompactWidth  = 420
+	CompactHeight = 800
+	WideWidth     = 1180
+	WideHeight    = 800
+)
+
+// openPane shows the page beside the library, growing the window for it.
+func (a *App) openPane() {
+	if a.wide {
+		return
+	}
+	a.wide = true
+	a.resize()
+}
+
+// closePane gives that room back: the window returns to the recording form.
+func (a *App) closePane() {
+	if !a.wide {
+		return
+	}
+	a.wide, a.page = false, ""
+	a.resize()
+}
+
+func (a *App) resize() {
+	if a.win == nil {
+		return
+	}
+	if a.wide {
+		a.win.SetSize(WideWidth, WideHeight)
+		return
+	}
+	a.win.SetSize(CompactWidth, CompactHeight)
+}
+
 // ---------------------------------------------------------------- the view
+
+// titleBarHeight is the strip the window controls sit in. The window is created
+// with a hidden title bar of this height (mygo.WindowOptions), and the view
+// draws its own bar there.
+const titleBarHeight = 46
+
+// sidebarWidth is the column the library and the recording form take.
+const sidebarWidth = 320
 
 func (a *App) view(c *ui.Context) {
 	t := c.Theme()
 	a.drain()
 	a.mirror(c)
 	a.poll(c)
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		a.sidebar(c, t)
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			switch {
-			case a.recording:
-				a.recorderPage(c, t)
-			default:
-				if m, ok := a.current(); ok {
-					a.sessionPage(c, t, m)
-				} else {
-					a.emptyPage(c, t)
-				}
+	ui.Column(c).Fill().Children(func() {
+		a.titleBar(c, t)
+		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+			a.sidebar(c, t)
+			if !a.wide {
+				return // the recording form alone, until something is opened
 			}
+			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+				switch {
+				case a.recording:
+					a.recorderPage(c, t)
+				case a.page == "sources":
+					a.sourcesPage(c, t)
+				case a.page == "settings":
+					a.settingsPage(c, t)
+				default:
+					if m, ok := a.current(); ok {
+						a.sessionPage(c, t, m)
+					} else {
+						a.emptyPage(c, t)
+					}
+				}
+			})
 		})
 	})
 	if a.err != "" {
 		a.banner(c, t)
 	}
 	a.dialogs(c, t)
+}
+
+// titleBar is the window's own title bar, in the strip the window controls
+// sit in: the app's name and what it is doing over the library's column, and
+// drag room everywhere else. The controls themselves are the system's, at the
+// far right, so the bar keeps their room free (ui.TitleBar).
+func (a *App) titleBar(c *ui.Context, t *ui.Theme) {
+	bar := c.TitleBar()
+	height := max(bar.Height, float32(titleBarHeight))
+
+	if !a.wide {
+		// The form alone: the whole bar drags the window, its right end left
+		// clear for the controls.
+		row := ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).
+			Padding(0, bar.Right+t.Space(2), 0, t.Space(4)+bar.Left).
+			Background(t.Surface).DragWindow()
+		row.Children(func() {
+			ui.Text(c, "Ottr").FontSize(t.FontSize + 3).Bold()
+			a.recordingPill(c, t)
+		})
+		return
+	}
+
+	// Beside a page: the name sits over the library's column, and the rest is
+	// drag room up to the controls.
+	ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).
+		Padding(0, bar.Right, 0, 0).Background(t.Surface).Children(func() {
+		name := ui.Row(c).Grow(1).MinWidth(0).FillHeight().AlignItems(ui.Center).
+			Gap(t.Space(2.5)).Padding(0, t.Space(2), 0, t.Space(4)+bar.Left).DragWindow()
+		name.Width(sidebarWidth - bar.Left).Shrink(0)
+		name.Children(func() {
+			ui.Text(c, "Ottr").FontSize(t.FontSize + 3).Bold()
+			a.recordingPill(c, t)
+		})
+		ui.Row(c).Grow(1).FillHeight().DragWindow() // drag room beside the controls
+	})
+}
+
+// recordingPill says a recording runs, and for how long.
+func (a *App) recordingPill(c *ui.Context, t *ui.Theme) {
+	if !a.recording {
+		return
+	}
+	ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
+		dot := ui.Box(c).Size(8, 8).Radius(4).Background(t.Danger)
+		dot.Opacity(float32(0.35 + 0.65*dot.Loop("pulse", 1100*time.Millisecond, ui.EaseInOut)))
+		ui.Text(c, fmtDuration(time.Since(a.startedAt).Milliseconds())).
+			FontSize(t.FontSize - 1).TextColor(t.TextMuted).FontFeatures("tnum")
+	})
 }
 
 // update runs fn in a frame, from any goroutine: through the window when
@@ -174,10 +337,21 @@ func (a *App) mirror(c *ui.Context) {
 		a.recording, a.late, a.preview = false, nil, nil
 		a.reload()
 		a.showLatest()
+		a.showPreview()
 	case st.Recording && !a.recording:
 		a.recording, a.startedAt, a.late, a.preview = true, st.StartedAt, nil, nil
 	}
 	if !a.recording {
+		// The source is still shown, so that what will be recorded is visible
+		// before it is: five frames a second are plenty.
+		if a.Preview != nil {
+			a.previewErr = ""
+			if err := a.Preview.Err(); err != nil {
+				a.previewErr = err.Error()
+			}
+			a.grabPreview()
+			c.After(200 * time.Millisecond)
+		}
 		return
 	}
 	a.startedAt = st.StartedAt
@@ -191,12 +365,64 @@ func (a *App) mirror(c *ui.Context) {
 	c.After(150 * time.Millisecond)
 }
 
-// poll keeps frames coming while a job the window shows is still running, so
-// that its end is seen: the services announce theirs to pages, and a window
-// of native UI has none.
+// poll keeps frames coming while something the window shows is still moving,
+// and reads what a job did: the services announce theirs to pages, and a
+// window of native UI has none.
 func (a *App) poll(c *ui.Context) {
+	prev := a.job
+	a.refreshJob()
+	if prev.State != a.job.State && (prev.Running() || a.job.Running()) {
+		a.reload()
+		if !a.job.Running() {
+			a.afterJob(a.job)
+		}
+	}
 	if !a.recording && a.pending() {
-		c.After(400 * time.Millisecond)
+		c.After(250 * time.Millisecond)
+	}
+}
+
+// refreshJob reads the newest job over the media shown.
+func (a *App) refreshJob() {
+	if a.Jobs == nil || a.sel == 0 {
+		a.job = jobs.Job{}
+		return
+	}
+	job, ok := a.Jobs.Latest(a.sel)
+	if !ok {
+		job = jobs.Job{}
+	}
+	a.job = job
+}
+
+// jobRunning reports whether work of this kind is running over the media shown.
+func (a *App) jobRunning(kind string) bool {
+	return a.job.Kind == kind && a.job.Running()
+}
+
+// afterJob reads what a job that ended left behind, and says why it failed.
+func (a *App) afterJob(job jobs.Job) {
+	switch job.Kind {
+	case jobs.KindTranscribe:
+		a.trLoaded = false // the lines may be new ones
+	case jobs.KindTranslate:
+		a.loadTranslation()
+	case jobs.KindSummarize:
+		a.sumLoaded = false
+		a.loadSummary()
+	}
+	if job.State == jobs.StateFailed && job.Error != "" {
+		a.setError(fmt.Errorf("%s: %s", job.Kind, job.Error))
+	}
+}
+
+// cancelJob stops the job over the media shown.
+func (a *App) cancelJob() {
+	if a.Jobs == nil {
+		return
+	}
+	if err := a.Jobs.Cancel(a.job.ID); err != nil {
+		a.setError(err)
 	}
 }
 
@@ -238,6 +464,11 @@ func (a *App) reload() {
 		return
 	}
 	a.media = items
+	if a.Rec != nil && a.Rec.Dir != "" {
+		if orphans, err := a.Lib.Orphans(a.Rec.Dir); err == nil {
+			a.orphans = orphans
+		}
+	}
 	if _, ok := a.current(); !ok {
 		a.forget()
 	}
@@ -256,10 +487,12 @@ func (a *App) reload() {
 
 func (a *App) selectMedia(id int64) {
 	if a.sel == id {
+		a.page = ""
 		return
 	}
 	a.forget()
 	a.sel = id
+	a.page = ""
 }
 
 // forget drops what was loaded for the media shown.
@@ -269,13 +502,13 @@ func (a *App) forget() {
 	a.trLoaded, a.sumLoaded = false, false
 	a.trans, a.sum = translate.Translation{}, summary.Summary{}
 	a.transLang, a.segQuery = "", ""
-	a.transPending, a.sumPending = false, false
+	a.lang = ""
 }
 
 // pending reports whether something the window shows is still being worked
 // on, so that the window asks for frames until it settles.
 func (a *App) pending() bool {
-	if a.recording || a.transPending || a.sumPending || a.busy {
+	if a.recording || a.busy || a.job.Running() {
 		return true
 	}
 	m, ok := a.current()
@@ -311,6 +544,22 @@ func (a *App) dialogs(c *ui.Context, t *ui.Theme) {
 			})
 		})
 	}
+	if a.confirmOrphans {
+		ui.Modal(c, &a.confirmOrphans, func() {
+			ui.Text(c, fmt.Sprintf("Delete %d recording files?", len(a.orphans))).Bold()
+			ui.Text(c, "They were recorded here but no record in the library holds them. Deleting them cannot be undone.").
+				TextColor(t.TextMuted).FontSize(t.FontSize - 1)
+			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+				if ui.Button(c, "Keep files").Clicked() {
+					a.confirmOrphans = false
+				}
+				if ui.PrimaryButton(c, "Delete").Clicked() {
+					a.confirmOrphans = false
+					a.deleteOrphans()
+				}
+			})
+		})
+	}
 	if a.confirmDel {
 		ui.Modal(c, &a.confirmDel, func() {
 			name := "this file"
@@ -334,8 +583,11 @@ func (a *App) dialogs(c *ui.Context, t *ui.Theme) {
 }
 
 func (a *App) banner(c *ui.Context, t *ui.Theme) {
+	// Below the title bar, so that the app's name and the window controls stay
+	// reachable while an error is up.
+	top := max(c.TitleBar().Height, float32(titleBarHeight)) + t.Space(2)
 	ui.Overlay(c, func() {
-		ui.Row(c).Attach(ui.AnchorTop, ui.AnchorTop).Top(t.Space(3)).MaxWidth(680).
+		ui.Row(c).Attach(ui.AnchorTop, ui.AnchorTop).Top(top).MaxWidth(680).
 			Padding(t.Space(2.5), t.Space(4)).Radius(t.Radius).Gap(t.Space(3)).
 			AlignItems(ui.Center).Background(t.Danger).TextColor(t.AccentText).Children(func() {
 			ui.Text(c, a.err).FontSize(t.FontSize - 1).Grow(1).Selectable()

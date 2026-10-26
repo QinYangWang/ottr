@@ -3,6 +3,7 @@ package native
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"strings"
 	"time"
@@ -10,54 +11,81 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"ottr/internal/asr"
 	"ottr/internal/capture"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 )
 
-// sidebar holds the library and what adds to it. Recording happens here, so
-// that what it records and what is imported land in the one list.
+// sidebar holds the recording form and the library, with the way to the
+// settings at the bottom. It is the whole window until something is opened.
 func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Width(320).Shrink(0).FillHeight().Background(t.Surface).
-		BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Children(func() {
-		a.recordPane(c, t)
+	side := ui.Column(c).FillHeight().Background(t.Surface)
+	if a.wide {
+		side.Width(sidebarWidth).Shrink(0).BorderWidth(0, 0, 0, 1).BorderColor(t.Border)
+	} else {
+		side.Grow(1)
+	}
+	side.Children(func() {
+		// The cards and the picture are what scroll in a short window; the
+		// audio and the button that starts a recording stay in reach, and the
+		// library keeps the rest of the column.
+		ui.Scroll(c).Shrink(0).MaxHeight(formHeight).Children(func() {
+			a.recordForm(c, t)
+		})
+		a.audioBar(c, t)
+		a.startBar(c, t)
 		ui.Divider(c)
 		a.libraryPane(c, t)
+		ui.Divider(c)
+		a.sidebarFooter(c, t)
 	})
 }
 
-// recordPane chooses what to record, and starts it; while recording it shows
-// how long it has run and how to end it.
-func (a *App) recordPane(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Padding(t.Space(4)).Gap(t.Space(2.5)).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Ottr").FontSize(t.FontSize + 5).Bold().Grow(1)
-			if a.recording {
-				ui.Badge(c, "Recording")
-			}
-		})
+// formHeight bounds the scrolling part of the recording form — the cards and
+// the picture — which leaves the library its room in a short window.
+const formHeight = 400
+
+// recordForm chooses what to record: the sources as the cards of a grid, and the
+// picture of what is chosen.
+func (a *App) recordForm(c *ui.Context, t *ui.Theme) {
+	ui.Column(c).Padding(t.Space(4), t.Space(4), t.Space(2), t.Space(4)).Gap(t.Space(3)).Children(func() {
 		if a.recording {
-			a.recordingControls(c, t)
+			ui.Text(c, "Choosing another file is off until it stops.").
+				FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 			return
 		}
-		names, ids := a.sourceOptions()
-		if len(names) == 0 {
+		if len(a.sources) == 0 {
 			ui.Text(c, "Nothing can be recorded on this system yet.").
 				FontSize(t.FontSize - 1).TextColor(t.TextMuted)
 			return
 		}
-		if a.source == "" {
-			a.source = names[0]
-		}
-		ui.Select(c, &a.source, names).Label("Record from").Disabled(a.busy)
-		for i, name := range names {
-			if name == a.source {
-				a.sourceID = ids[i]
-			}
-		}
-		ui.Row(c).Gap(t.Space(4)).Children(func() {
-			ui.Checkbox(c, &a.sysAudio, "System audio")
-			ui.Checkbox(c, &a.micAudio, "Microphone")
-		})
+		a.caption(c, t, "Choose a capture source")
+		a.sourceCards(c, t)
+		a.sourcePreview(c, t)
+	})
+}
+
+// audioBar chooses what sound goes into the recording, under the form: the two
+// sounds side by side, so that they take a row rather than two.
+func (a *App) audioBar(c *ui.Context, t *ui.Theme) {
+	if a.recording || len(a.sources) == 0 {
+		return
+	}
+	ui.Column(c).Padding(t.Space(2), t.Space(4), 0, t.Space(4)).Gap(t.Space(2)).Children(func() {
+		a.caption(c, t, "Choose your audio")
+		a.audioRow(c, t, &a.sysAudio, iconSpeaker, "System audio", "What plays on this computer")
+		a.audioRow(c, t, &a.micAudio, iconMic, "Microphone", "Your voice")
+	})
+}
+
+// startBar is the button that begins the recording, under the form and always
+// in reach.
+func (a *App) startBar(c *ui.Context, t *ui.Theme) {
+	if a.recording || len(a.sources) == 0 {
+		return
+	}
+	ui.Column(c).Padding(t.Space(2.5), t.Space(4), t.Space(3), t.Space(4)).Gap(t.Space(2)).Children(func() {
 		if ui.PrimaryButton(c, "Start recording").Disabled(a.busy).Clicked() {
 			a.startRecording()
 		}
@@ -70,34 +98,203 @@ func (a *App) recordPane(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// recordingControls tells how long the recording has run; the page beside
-// the library has the buttons that end it.
-func (a *App) recordingControls(c *ui.Context, t *ui.Theme) {
-	ui.Row(c).Gap(t.Space(2.5)).AlignItems(ui.Center).Children(func() {
-		dot := ui.Box(c).Size(9, 9).Radius(5).Background(t.Danger)
-		dot.Opacity(float32(0.35 + 0.65*dot.Loop("pulse", 1100*time.Millisecond, ui.EaseInOut)))
-		ui.Text(c, fmtDuration(time.Since(a.startedAt).Milliseconds())).FontFeatures("tnum").Bold()
-		ui.Text(c, "recording").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-		ui.Spacer(c)
+// sidebarFooter holds the way to the settings, at the bottom of the window
+// where a toolbar's last item would be.
+func (a *App) sidebarFooter(c *ui.Context, t *ui.Theme) {
+	row := ui.ButtonBase(c).Label("Settings").Padding(t.Space(2.5), t.Space(4)).
+		Cursor(ui.CursorPointer).TextColor(t.TextMuted)
+	row.Children(func() {
+		// A row of its own, so that the items sit at the left rather than in
+		// the middle of the button.
+		ui.Row(c).Grow(1).AlignItems(ui.Center).Gap(t.Space(2.5)).Children(func() {
+			ui.Icon(c, iconSliders).FontSize(t.FontSize + 3)
+			ui.Text(c, "Settings").FontSize(t.FontSize - 1)
+		})
 	})
-	ui.Text(c, "Choosing another file is off until it stops.").
-		FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+	if row.Hovered() {
+		row.Background(t.SurfaceHover)
+	}
+	if row.Clicked() {
+		a.page = "settings"
+		a.openPane()
+	}
 }
 
-// libraryPane searches the library and lists it.
+// sourcePreviewHeight is the height of the picture of the source: 16:9 of the
+// library's column.
+const sourcePreviewHeight = 96
+
+// sourcePreview shows the source before it is recorded — the frames the
+// previewer draws — or what keeps them away.
+func (a *App) sourcePreview(c *ui.Context, t *ui.Theme) {
+	height := float32(sourcePreviewHeight)
+	if a.previewErr != "" {
+		height = 168 // room for what FFmpeg said
+	}
+	box := ui.Column(c).Height(height).Radius(t.Radius).
+		BorderWidth(1).BorderColor(t.Border).Background(t.Background).Clip()
+	box.Children(func() {
+		if a.preview != nil {
+			ui.Image(c, a.preview).Fit(ui.Cover).Grow(1)
+			return
+		}
+		ui.Column(c).Grow(1).Center().Padding(t.Space(2)).Gap(t.Space(1)).Children(func() {
+			ui.Icon(c, iconScreen).FontSize(t.FontSize + 5).TextColor(t.TextMuted)
+			label := a.sourceName()
+			if detail := a.sourceDetail(); detail != "" {
+				label += " · " + detail
+			}
+			ui.Text(c, label).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine()
+			if a.previewErr == "" {
+				ui.Text(c, "Waiting for the first frame…").FontSize(t.FontSize - 3).
+					TextColor(t.TextMuted).SingleLine().TextAlign(ui.Center)
+				return
+			}
+			// What FFmpeg said, whole: it is the only clue there is.
+			ui.Text(c, a.previewErr).FontSize(t.FontSize - 3).TextColor(t.TextMuted).
+				MaxWidth(300).TextAlign(ui.Center).Selectable()
+			if ui.Button(c, "Try again").Clicked() {
+				a.showPreview()
+			}
+		})
+	})
+}
+
+// caption names what the controls under it choose.
+func (a *App) caption(c *ui.Context, t *ui.Theme, text string) {
+	ui.Text(c, text).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+}
+
+// iconButton is a button showing only an icon, named by label for assistive
+// technology and by its tooltip for the pointer.
+func (a *App) iconButton(c *ui.Context, t *ui.Theme, icon *ui.SVG, label string, onClick func()) {
+	btn := ui.ButtonBase(c).Label(label).Tooltip(label).TextColor(t.TextMuted).
+		Padding(t.Space(1.5)).Radius(t.Radius)
+	btn.Children(func() { ui.Icon(c, icon).FontSize(t.FontSize + 3) })
+	if btn.Hovered() {
+		btn.Background(t.SurfaceHover)
+	}
+	if btn.Clicked() {
+		onClick()
+	}
+}
+
+// audioRow is one sound to record, and the switch that takes it in or leaves
+// it out. The tooltip says what the sound is: the row keeps the name whole.
+func (a *App) audioRow(c *ui.Context, t *ui.Theme, on *bool, icon *ui.SVG, label, detail string) {
+	row := ui.Row(c).Gap(t.Space(2.5)).Padding(t.Space(1.5), t.Space(2.5)).
+		Radius(t.Radius).BorderWidth(1).BorderColor(t.Border).AlignItems(ui.Center).
+		Tooltip(detail)
+	row.Children(func() {
+		picture := ui.Icon(c, icon).FontSize(t.FontSize + 2)
+		if *on {
+			picture.TextColor(t.Text)
+		} else {
+			picture.TextColor(t.TextMuted)
+		}
+		ui.Text(c, label).FontSize(t.FontSize - 2).Grow(1).MinWidth(0).SingleLine()
+		ui.Switch(c, on).Label(label).Changed()
+	})
+}
+
+// sourceCard is one tile of the capture-source grid: the screen and each
+// display choose themselves, and Window opens the picker.
+type sourceCard struct {
+	label   string
+	detail  string
+	icon    *ui.SVG
+	id      string // the source a click chooses
+	pick    string // the kind a click opens the picker for, instead
+	chosen  bool
+	blocked string // why this source cannot be recorded yet
+}
+
+// sourceCardHeight is the height every card of the grid takes, so that the rows
+// line up whatever each says.
+const sourceCardHeight = 56
+
+// sourceCards lays the sources out two to a row, as large tiles.
+func (a *App) sourceCards(c *ui.Context, t *ui.Theme) {
+	cards := a.sourceCardsOf(a.sources)
+	for i := 0; i < len(cards); i += 2 {
+		ui.Row(c).Gap(t.Space(2)).Children(func() {
+			for _, card := range cards[i:min(i+2, len(cards))] {
+				a.sourceCard(c, t, card)
+			}
+			if i+2 > len(cards) {
+				ui.Spacer(c) // keeps a lone card the width of a column
+			}
+		})
+	}
+}
+
+func (a *App) sourceCard(c *ui.Context, t *ui.Theme, card sourceCard) {
+	btn := ui.ButtonBase(c).Label(card.label).Grow(1).MinWidth(0).Height(sourceCardHeight).
+		Padding(t.Space(2), t.Space(2)).Radius(t.Radius).BorderWidth(1)
+	if card.blocked != "" {
+		btn.Disabled(true).Tooltip(card.blocked).TextColor(t.TextMuted)
+	} else {
+		btn.Cursor(ui.CursorPointer)
+	}
+	if card.chosen {
+		btn.BorderColor(t.Accent).Background(t.Surface)
+	} else {
+		btn.BorderColor(t.Border)
+	}
+	btn.Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(0.5)).Children(func() {
+			picture := ui.Icon(c, card.icon).FontSize(t.FontSize + 5)
+			if card.chosen {
+				picture.TextColor(t.Accent)
+			} else {
+				picture.TextColor(t.TextMuted)
+			}
+			ui.Text(c, card.label).FontSize(t.FontSize - 2).Bold().
+				SingleLine().TextAlign(ui.Center)
+			if card.detail != "" {
+				ui.Text(c, card.detail).FontSize(t.FontSize - 4).TextColor(t.TextMuted).
+					SingleLine().TextAlign(ui.Center)
+			}
+		})
+	})
+	if card.blocked == "" && !card.chosen && btn.Hovered() {
+		btn.Background(t.SurfaceHover)
+	}
+	if card.blocked == "" && btn.Clicked() {
+		if card.pick != "" {
+			a.openPicker(card.pick)
+		} else {
+			a.chooseSource(card.id)
+		}
+	}
+}
+
+// libraryPane searches the library and lists it, in the room the form leaves.
 func (a *App) libraryPane(c *ui.Context, t *ui.Theme) {
 	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).Padding(t.Space(4), t.Space(4), t.Space(2), t.Space(4)).Gap(t.Space(2)).Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
 				ui.Text(c, "Library").FontSize(t.FontSize - 1).Bold().TextColor(t.TextMuted).Grow(1)
-				if ui.Button(c, "Import…").Tooltip("Add a media file to the library").
-					Disabled(a.recording).Clicked() {
+				// The one action of the header is a button with an icon alone:
+				// the name is in its label and tooltip.
+				imp := ui.ButtonBase(c).Label("Import").Tooltip("Add a media file to the library").
+					Disabled(a.recording).Padding(t.Space(1.5)).Radius(t.Radius).TextColor(t.TextMuted)
+				imp.Children(func() { ui.Icon(c, iconImport).FontSize(t.FontSize + 3) })
+				if imp.Hovered() && !a.recording {
+					imp.Background(t.SurfaceHover)
+				}
+				if imp.Clicked() && !a.recording {
 					a.importFiles()
 				}
 			})
 			if ui.SearchField(c, &a.query).Label("Search the library").Changed() {
 				a.reload()
 			}
+			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Translate + summarize imports").FontSize(t.FontSize - 3).
+					TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine()
+				ui.Switch(c, &a.importChain).Label("Translate and summarize imports").Changed()
+			})
 		})
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Padding(0, t.Space(2), t.Space(3), t.Space(2)).Gap(1).Children(func() {
@@ -109,6 +306,31 @@ func (a *App) libraryPane(c *ui.Context, t *ui.Theme) {
 					a.mediaRow(c, t, m)
 				}
 			})
+		})
+		if len(a.orphans) > 0 {
+			a.orphanNotice(c, t)
+		}
+	})
+}
+
+// orphanNotice says that recordings on disk are not in the library, and offers
+// the two things to do about it: add them back, or delete them.
+func (a *App) orphanNotice(c *ui.Context, t *ui.Theme) {
+	ui.Divider(c)
+	ui.Column(c).Padding(t.Space(2.5), t.Space(4), t.Space(3), t.Space(4)).Gap(t.Space(2)).Children(func() {
+		n := len(a.orphans)
+		said := fmt.Sprintf("%d recording files are not in the library.", n)
+		if n == 1 {
+			said = "1 recording file is not in the library."
+		}
+		ui.Text(c, said).FontSize(t.FontSize-2).TextColor(t.TextMuted)
+		ui.Row(c).Gap(t.Space(2)).Children(func() {
+			if ui.Button(c, "Add back").Tooltip("Add these files to the library again").Clicked() {
+				a.addOrphans()
+			}
+			if ui.Button(c, "Delete files…").Tooltip("Delete these files from disk").Clicked() {
+				a.confirmOrphans = true
+			}
 		})
 	})
 }
@@ -149,19 +371,24 @@ func (a *App) mediaRow(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 	if row.Clicked() {
 		a.selectMedia(id)
+		a.page = ""
+		a.openPane()
 	}
 	row.ContextMenu(func(mn *ui.Menu) {
 		if mn.Item("Transcript").Chosen() {
 			a.selectMedia(id)
-			a.tab = 0
+			a.page, a.tab = "", 0
+			a.openPane()
 		}
 		if mn.Item("Translate").Chosen() {
 			a.selectMedia(id)
-			a.tab = 1
+			a.page, a.tab = "", 1
+			a.openPane()
 		}
 		if mn.Item("Summary").Chosen() {
 			a.selectMedia(id)
-			a.tab = 2
+			a.page, a.tab = "", 2
+			a.openPane()
 		}
 		mn.Separator()
 		if mn.Item("Show the file").Chosen() {
@@ -194,35 +421,124 @@ func mediaMeta(m library.Media) string {
 	return strings.Join(parts, " · ")
 }
 
-// sourceOptions returns the recordable sources as labels and IDs, grouped by
-// kind. A single display is the screen, so it is left out.
-func (a *App) sourceOptions() (names, ids []string) {
-	labels := map[string]string{"screen": "Screen", "display": "Display", "window": "Window"}
-	for _, kind := range []string{"screen", "display", "window"} {
-		var group []capture.Source
-		for _, s := range a.sources {
-			if s.Kind == kind {
-				group = append(group, s)
-			}
-		}
-		if kind == "display" && len(group) < 2 {
-			continue
-		}
-		for _, s := range group {
-			names = append(names, labels[kind]+" · "+s.Name)
-			ids = append(ids, s.ID)
+// sourceCardsOf is the grid over the sources: the screen, each display, and
+// one card that stands for every window and opens the picker.
+func (a *App) sourceCardsOf(sources []capture.Source) []sourceCard {
+	var cards []sourceCard
+	windows := 0
+	for _, s := range sources {
+		switch s.Kind {
+		case "screen":
+			cards = append(cards, sourceCard{
+				label: "Full screen", detail: s.Detail, icon: iconScreen,
+				id: s.ID, chosen: a.sourceID == s.ID,
+			})
+		case "display":
+			cards = append(cards, sourceCard{
+				label: s.Name, detail: s.Detail, icon: iconScreen,
+				id: s.ID, chosen: a.sourceID == s.ID,
+			})
+		case "window":
+			windows++
 		}
 	}
-	return names, ids
+	if windows > 0 {
+		card := sourceCard{label: "Window", detail: "Choose a window", icon: iconWindow, pick: "window"}
+		if strings.HasPrefix(a.sourceID, "window:") {
+			card.label, card.detail, card.chosen = a.sourceName(), "Change", true
+		}
+		cards = append(cards, card)
+	} else if len(sources) > 0 {
+		// No visible window to record: say so where the card would be.
+		cards = append(cards, sourceCard{label: "Window", detail: "No windows", icon: iconWindow, blocked: "No visible window can be recorded right now"})
+	}
+	cards = append(cards,
+		sourceCard{label: "Area", detail: "Not yet", icon: iconArea,
+			blocked: "Recording part of the screen is not implemented yet"},
+		sourceCard{label: "Camera only", detail: "Not yet", icon: iconCamera,
+			blocked: "Recording a camera is not implemented yet"},
+	)
+	return cards
+}
+
+// sourcesOfKind returns the sources of one kind, in the order the platform
+// listed them.
+func (a *App) sourcesOfKind(kind string) []capture.Source {
+	var list []capture.Source
+	for _, s := range a.sources {
+		if s.Kind == kind {
+			list = append(list, s)
+		}
+	}
+	return list
+}
+
+// sourceName is the label of the source chosen, or the kind when it is gone.
+func (a *App) sourceName() string {
+	for _, s := range a.sources {
+		if s.ID == a.sourceID {
+			return s.Name
+		}
+	}
+	return "Window"
+}
+
+// sourceDetail is the size the platform reports for the source chosen.
+func (a *App) sourceDetail() string {
+	for _, s := range a.sources {
+		if s.ID == a.sourceID {
+			return s.Detail
+		}
+	}
+	return ""
+}
+
+// chooseSource makes one source the one recorded, and shows it.
+func (a *App) chooseSource(id string) {
+	a.sourceID = id
+	a.source = a.sourceName()
+	a.showPreview()
+}
+
+// openPicker reads what can be recorded now — windows come and go — and
+// shows it, so that a window opened since the app started can be chosen.
+func (a *App) openPicker(kind string) {
+	a.page, a.pickKind, a.pickQuery = "sources", kind, ""
+	a.openPane()
+	sources, err := a.Rec.Sources()
+	if err != nil {
+		a.setError(err)
+		return
+	}
+	a.sources = sources
+	if a.sourceID == "" || !a.hasSource(a.sourceID) {
+		a.pickSource()
+	}
+}
+
+func (a *App) hasSource(id string) bool {
+	for _, s := range a.sources {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // pickSource chooses the whole screen when it can, else the first source.
 func (a *App) pickSource() {
-	names, ids := a.sourceOptions()
-	if len(names) == 0 {
+	if len(a.sources) == 0 {
+		a.sourceID = ""
 		return
 	}
-	a.source, a.sourceID = names[0], ids[0]
+	chosen := a.sources[0]
+	for _, s := range a.sources {
+		if s.Kind == "screen" {
+			chosen = s
+			break
+		}
+	}
+	a.chooseSource(chosen.ID)
 }
 
 func (a *App) startRecording() {
@@ -230,6 +546,10 @@ func (a *App) startRecording() {
 		return
 	}
 	a.busy = true
+	a.openPane() // the picture and the live transcript need the room
+	if a.Preview != nil {
+		a.Preview.Stop() // the recording draws its own preview
+	}
 	cfg := capture.Config{SourceID: a.sourceID, SystemAudio: a.sysAudio, Mic: a.micAudio}
 	go func() {
 		err := a.Rec.Start(cfg)
@@ -237,6 +557,7 @@ func (a *App) startRecording() {
 			a.busy = false
 			if err != nil {
 				a.setError(err)
+				a.showPreview()
 				return
 			}
 			st := a.Rec.State()
@@ -270,11 +591,13 @@ func (a *App) stopRecording(discard bool) {
 			a.reload()
 			a.selectMedia(m.ID)
 			a.tab = 0
+			a.showPreview() // back to showing the source, not the recording
 		})
 	}()
 }
 
 func (a *App) importFiles() {
+	chain, lang := a.importChain, a.trLang
 	go func() {
 		imported, err := a.Lib.Import(context.Background())
 		a.update(func() {
@@ -286,7 +609,52 @@ func (a *App) importFiles() {
 				a.selectMedia(imported[0].ID)
 			}
 		})
+		for _, m := range imported {
+			if m.HasAudio {
+				a.startImport(m.ID, chain, lang)
+			}
+		}
 	}()
+}
+
+// startImport runs what importing does once the file is in the library: the
+// offline transcription recording does too, and when the import asked for it,
+// translation into lang and a summary — all as one job, so one Cancel stops
+// the chain.
+func (a *App) startImport(id int64, chain bool, lang string) {
+	if a.Jobs == nil || a.ASR == nil {
+		return
+	}
+	_, err := a.Jobs.Run(id, jobs.KindImport, func(ctx context.Context, progress func(float64)) error {
+		share := 1.0
+		if chain {
+			share = 0.6
+		}
+		if err := a.ASR.TranscribeNow(ctx, id, func(p float64) { progress(p * share) }); err != nil {
+			return err
+		}
+		if !chain {
+			return nil
+		}
+		progress(0.6)
+		// Translating into the language it is already in would spend the
+		// provider's quota saying nothing.
+		translated := asr.Transcript{Language: lang}
+		if tr, err := a.ASR.Get(id); err == nil {
+			translated = tr
+		}
+		if translated.Language != lang {
+			if _, err := a.Trans.Translate(ctx, id, lang); err != nil {
+				return err
+			}
+		}
+		progress(0.8)
+		_, err := a.Sum.Generate(ctx, id)
+		return err
+	})
+	if err != nil {
+		a.setError(err)
+	}
 }
 
 // removeMedia deletes a record, and its file when withFile is set.
@@ -305,13 +673,20 @@ func (a *App) removeMedia(id int64, withFile bool) {
 	}()
 }
 
-// grabPreview decodes the recorder's latest preview frame into the bitmap,
-// at most five times a second: an MJPEG frame is a JPEG.
+// grabPreview decodes the latest frame of what is being recorded, or of what
+// will be, into the bitmap — at most five times a second: an MJPEG frame is a
+// JPEG. It is the big picture of a recording in progress, and the small one of
+// the source chosen.
 func (a *App) grabPreview() {
 	if time.Since(a.previewAt) < 200*time.Millisecond {
 		return
 	}
-	frame := a.Rec.Preview()
+	var frame []byte
+	if a.recording {
+		frame = a.Rec.Preview()
+	} else if a.Preview != nil {
+		frame = a.Preview.Frame()
+	}
 	if len(frame) == 0 {
 		return
 	}
@@ -320,10 +695,41 @@ func (a *App) grabPreview() {
 		return
 	}
 	a.previewAt = time.Now()
-	if a.preview == nil {
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	if a.preview == nil || w != a.previewW || h != a.previewH {
+		// A new source, or a new recording: the size may have changed.
 		a.preview = ui.NewBitmap(img)
-		a.previewW, a.previewH = img.Bounds().Dx(), img.Bounds().Dy()
+		a.previewW, a.previewH = w, h
 		return
 	}
 	a.preview.Update(img)
+}
+
+// addOrphans puts the files Ottr made back in the library.
+func (a *App) addOrphans() {
+	paths := a.orphans
+	go func() {
+		_, err := a.Lib.AddFiles(paths)
+		a.update(func() {
+			if err != nil {
+				a.setError(err)
+			}
+			a.reload()
+		})
+	}()
+}
+
+// deleteOrphans deletes the files Ottr made and nothing else; the records are
+// already gone.
+func (a *App) deleteOrphans() {
+	paths := a.orphans
+	go func() {
+		err := a.Lib.DeleteFiles(paths)
+		a.update(func() {
+			if err != nil {
+				a.setError(err)
+			}
+			a.reload()
+		})
+	}()
 }

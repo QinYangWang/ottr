@@ -5,12 +5,21 @@
 | Tool | Version | Why |
 |---|---|---|
 | Go | 1.27+ | MyGo requires 1.27 |
-| FFmpeg + ffprobe | any recent build | probing, recording, audio extraction |
+| FFmpeg + ffprobe | any recent build | probing, recording, the live preview, audio extraction |
 | sherpa-onnx | v1.12.17 binary | offline ASR (optional; transcription tests skip without it) |
 | Windows 10/11 | — | recording is Windows-only today |
 
 No cgo, no Node, no Bun. The window is native UI written in Go, so there is no
 frontend to build.
+
+FFmpeg and ffprobe are searched for in `<userData>/bin` (the folder sherpa-onnx
+lives in), `%APPDATA%\Ottr\bin`, the folders `winget` installs into
+(`%LOCALAPPDATA%\Microsoft\WinGet`), next to the executable, and the `PATH`
+(`internal/tools`). Dropping the two binaries beside sherpa-onnx is enough — no
+system `PATH` change — and so is `winget install Gyan.FFmpeg` followed by
+`Re-check` in Settings, even in a running app: the folders are read at the
+moment the program is looked for. `Choose…` in Settings ▸ Transcription points
+Ottr at any `ffmpeg.exe` and remembers it.
 
 ## Run
 
@@ -96,8 +105,14 @@ the full run takes ~25 s.
 1. Add the state it shows to `ui/native.App`, and a `func (a *App) page(c
    *ui.Context)` that draws it.
 2. Wire it into `App.view`, beside the recording and session pages.
-3. If it runs a job, start it on a goroutine and change the state through
-   `a.update`. Report it in `App.pending` so the view keeps drawing frames
-   until it settles.
+3. If it runs a job, record it with `internal/jobs` (`jobs.Run` returns its
+   ID and gives the work a context and a progress function). Change the state
+   through `a.update`. `App.pending` asks the job table whether something is
+   still running, so the view keeps drawing frames until it settles and can
+   offer `Cancel` (`Jobs.Cancel`).
 4. Test it with `ui.NewTester(a.view, w, h)`: click by label, then `tt.Frame()`
    until the job's result shows.
+5. To look at a page while working on it, run
+   `OTTR_PREVIEW=<folder> go test ./ui/native -run TestPreview`: it writes PNGs
+   of the sidebar, the session, the sources page and the settings page into
+   that folder. See `ui/native/preview_test.go`.

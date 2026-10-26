@@ -2,6 +2,7 @@
 package models
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -35,13 +36,67 @@ type ASRModel struct {
 // Manager finds and validates models in configured directories.
 type Manager struct {
 	mu        sync.Mutex
+	db        *sql.DB
 	modelsDir string
 	binDir    string
+	selected  string // the model the user chose, preferred by FindASRModel
 }
 
 // NewManager creates a manager given the base models and bin directories.
 func NewManager(modelsDir, binDir string) *Manager {
 	return &Manager{modelsDir: modelsDir, binDir: binDir}
+}
+
+// Open connects the manager to the database, where the chosen model is
+// remembered across launches.
+func (m *Manager) Open(db *sql.DB) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.db = db
+	var selected string
+	if err := db.QueryRow(`SELECT value FROM settings WHERE key = 'asr_model_dir'`).Scan(&selected); err == nil {
+		m.selected = selected
+	}
+}
+
+// Select makes one model directory the one FindASRModel returns, and remembers
+// it. The directory is not checked here: ListModels says whether it is valid.
+func (m *Manager) Select(dir string) error {
+	m.mu.Lock()
+	db := m.db
+	m.mu.Unlock()
+	if db == nil {
+		return errors.New("models are not ready")
+	}
+	if _, err := db.Exec(`INSERT INTO settings (key, value) VALUES ('asr_model_dir', ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, dir); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.selected = dir
+	m.mu.Unlock()
+	return nil
+}
+
+// SelectedDir returns the model the user chose, or "" when none was chosen.
+func (m *Manager) SelectedDir() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.selected
+}
+
+// ModelsDir returns the folder models are installed in.
+func (m *Manager) ModelsDir() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.modelsDir
+}
+
+// BinDir returns the folder the sherpa-onnx binary is installed in.
+func (m *Manager) BinDir() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.binDir
 }
 
 // SetDirs updates the search directories.
@@ -87,11 +142,21 @@ func (m *Manager) FindSherpaBin() (string, error) {
 	return "", fmt.Errorf("sherpa-onnx binary not found; please ensure it is installed in %s or on PATH", binDir)
 }
 
-// FindASRModel searches for a valid sherpa-onnx streaming zipformer model.
+// FindASRModel returns the model the user chose, or the first valid one in the
+// models directory when none was chosen.
 func (m *Manager) FindASRModel() (*ASRModel, error) {
 	m.mu.Lock()
 	dir := m.modelsDir
+	selected := m.selected
 	m.mu.Unlock()
+
+	if selected != "" {
+		mdl, err := inspectASRDir(selected)
+		if err != nil {
+			return nil, fmt.Errorf("the chosen ASR model in %s cannot be used, choose another in Models: %w", selected, err)
+		}
+		return mdl, nil
+	}
 
 	var dirs []string
 	if dir != "" {

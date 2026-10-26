@@ -29,11 +29,17 @@ func monitorRects() ([]rect, error) {
 	return rects, nil
 }
 
-// windowTitles lists the titles of visible top-level windows, excluding
-// this process.
-func windowTitles() ([]string, error) {
+// windowSource is one capturable window: its title and, when Windows reports
+// a sane rectangle for it, its size.
+type windowSource struct {
+	title string
+	w, h  int32
+}
+
+// windowSources lists the visible top-level windows of other processes.
+func windowSources() ([]windowSource, error) {
 	self := uint32(syscall.Getpid())
-	var titles []string
+	var windows []windowSource
 	cb := syscall.NewCallback(func(hwnd, lparam uintptr) uintptr {
 		ret, _, _ := user32.NewProc("IsWindowVisible").Call(hwnd)
 		if ret == 0 {
@@ -50,30 +56,59 @@ func windowTitles() ([]string, error) {
 		}
 		buf := make([]uint16, n+1)
 		user32.NewProc("GetWindowTextW").Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), n+1)
-		titles = append(titles, syscall.UTF16ToString(buf))
+		w := windowSource{title: syscall.UTF16ToString(buf)}
+		var r rect
+		if ok, _, _ := user32.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&r))); ok != 0 {
+			// A minimized window sits far off screen; its size says nothing
+			// about what capturing it would show.
+			if r.Right > r.Left && r.Bottom > r.Top && r.Left > -30000 {
+				w.w, w.h = r.Right-r.Left, r.Bottom-r.Top
+			}
+		}
+		windows = append(windows, w)
 		return 1
 	})
 	ret, _, err := user32.NewProc("EnumWindows").Call(cb, 0)
 	if ret == 0 {
 		return nil, fmt.Errorf("EnumWindows: %w", err)
 	}
-	return titles, nil
+	return windows, nil
 }
 
 func listSources() ([]Source, error) {
-	sources := []Source{{ID: "screen", Kind: "screen", Name: "Full screen"}}
-	if rects, err := monitorRects(); err == nil && len(rects) > 1 {
+	screen := Source{ID: "screen", Kind: "screen", Name: "Full screen"}
+	rects, err := monitorRects()
+	if err != nil {
+		rects = nil
+	}
+	if len(rects) > 0 {
+		// The whole screen is the box around every display.
+		left, top := rects[0].Left, rects[0].Top
+		right, bottom := rects[0].Right, rects[0].Bottom
+		for _, r := range rects[1:] {
+			left, top = min(left, r.Left), min(top, r.Top)
+			right, bottom = max(right, r.Right), max(bottom, r.Bottom)
+		}
+		screen.Detail = fmt.Sprintf("%dx%d", right-left, bottom-top)
+	}
+	sources := []Source{screen}
+	if len(rects) > 1 {
 		for i, r := range rects {
 			sources = append(sources, Source{
-				ID:   fmt.Sprintf("display:%d", i),
-				Kind: "display",
-				Name: fmt.Sprintf("Display %d (%dx%d)", i+1, r.Right-r.Left, r.Bottom-r.Top),
+				ID:     fmt.Sprintf("display:%d", i),
+				Kind:   "display",
+				Name:   fmt.Sprintf("Display %d", i+1),
+				Detail: fmt.Sprintf("%dx%d", r.Right-r.Left, r.Bottom-r.Top),
 			})
 		}
 	}
-	if titles, err := windowTitles(); err == nil {
-		for _, t := range titles {
-			sources = append(sources, Source{ID: "window:" + t, Kind: "window", Name: t})
+	if windows, err := windowSources(); err == nil {
+		for _, w := range windows {
+			src := Source{ID: "window:" + w.title, Kind: "window", Name: w.title}
+			if w.w > 0 {
+				src.Detail = fmt.Sprintf("%dx%d", w.w, w.h)
+			}
+			sources = append(sources, src)
 		}
 	}
 	return sources, nil

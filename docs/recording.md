@@ -44,14 +44,54 @@ WASAPI (any) ─────────┴─► liveFeed ─► asr live sink 
 | `display` | `display:N` | `gdigrab` with `-offset_x/-offset_y/-video_size` from `EnumDisplayMonitors` |
 | `window` | `window:<title>` | `gdigrab -i title=<title>` |
 
-Monitor rectangles come from `EnumDisplayMonitors`; window titles from
-`EnumWindows`, filtered to visible windows with a non-empty title, excluding the
-Ottr process itself. Display sources are only offered when more than one monitor
-exists.
+Monitor rectangles come from `EnumDisplayMonitors`; window titles and sizes from
+`EnumWindows` and `GetWindowRect`, filtered to visible windows with a non-empty
+title, excluding the Ottr process itself. Display sources are only offered when
+more than one monitor exists. Both carry a `Detail` — the rectangle's size, as
+`1920x1080` — which the Sources page shows under the name; a window that reports
+no sane rectangle (minimized, or in another session) carries none.
 
 Window capture matches by title. If two windows share a title, or the title
 contains characters FFmpeg's `title=` parser mishandles, capture fails — this is
 a known limitation, see ROADMAP.
+
+## Preview before recording
+
+`capture.Previewer` runs the same FFmpeg `resolveSource` resolves for a
+recording, but writes an `mpjpeg` stream over TCP — `-map 0:v -vf
+fps=5,scale=480:-2`, the arguments of the recording's own preview output — into
+a `previewHub`, which keeps only the newest frame. The window decodes it into a
+bitmap five times a second and draws it in the sidebar, and the page that shows
+a recording in progress keeps drawing the recorder's own preview the same way.
+
+Starting a recording stops the previewer — the recording draws its own frames —
+and stopping it starts the previewer again. Switching sources restarts it; a
+newer switch wins if two arrive while FFmpeg starts.
+
+When FFmpeg stops on its own — bad arguments, a window that closed, no FFmpeg at
+all — the panel shows the first line of what FFmpeg said, with `Try again` to
+start it afresh. `OTTR_LIVE=1 go test ./internal/capture -run
+TestPreviewerShowsTheScreen` grabs the real screen and checks that what comes
+back is a JPEG.
+
+## Where FFmpeg and ffprobe come from
+
+`internal/tools` finds both, in this order:
+
+1. the folder or program chosen in Settings ▸ Transcription (`settings.ffmpeg_path`),
+   which is how a user fixes an install Ottr cannot find;
+2. the folder the app keeps its binaries in (`<userData>/bin`, the one
+   sherpa-onnx lives in), then `%APPDATA%\Ottr\bin`;
+3. the folders `winget` installs into — `%LOCALAPPDATA%\Microsoft\WinGet\Links`
+   and `Packages\*\*\bin`, where a portable FFmpeg lands;
+4. next to the executable: its `bin` folder, then its own;
+5. the `PATH`.
+
+Looking in the folders before the `PATH` matters: a program installed while Ottr
+runs cannot appear in the `PATH` of a process already started, so `winget
+install Gyan.FFmpeg` followed by `Re-check` works without a restart. A missing
+program names all of this in its error, which the preview panel, the error
+banner and the settings row show whole.
 
 ## Audio
 

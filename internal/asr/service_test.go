@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/models"
 	"ottr/internal/storage"
@@ -22,8 +23,10 @@ func setupTestASR(t *testing.T) (*Service, *library.Service) {
 	lib := &library.Service{}
 	lib.Open(db)
 
+	js := &jobs.Service{}
+	js.Open(db)
 	mm := models.NewManager(t.TempDir(), t.TempDir())
-	svc := NewService(lib, mm)
+	svc := NewService(lib, mm, js)
 	svc.Open(db)
 	return svc, lib
 }

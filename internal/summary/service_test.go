@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ottr/internal/asr"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/models"
 	"ottr/internal/storage"
@@ -26,11 +27,13 @@ func setupTestSummary(t *testing.T) (*Service, *asr.Service, *library.Service) {
 	lib := &library.Service{}
 	lib.Open(db)
 
+	js := &jobs.Service{}
+	js.Open(db)
 	mm := models.NewManager(t.TempDir(), t.TempDir())
-	asrSvc := asr.NewService(lib, mm)
+	asrSvc := asr.NewService(lib, mm, js)
 	asrSvc.Open(db)
 
-	sumSvc := NewService(lib, asrSvc)
+	sumSvc := NewService(lib, asrSvc, js)
 	sumSvc.Open(db)
 
 	return sumSvc, asrSvc, lib

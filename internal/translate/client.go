@@ -112,6 +112,9 @@ func myMemoryLang(code string) string {
 		return "en-GB"
 	case "ja", "japanese":
 		return "ja-JP"
+	case "auto", "und", "":
+		// MyMemory detects the source language itself for this pair.
+		return "Autodetect"
 	default:
 		return code
 	}
@@ -167,9 +170,13 @@ func (o *OpenAICompatibleTranslator) Translate(ctx context.Context, texts []stri
 	if len(texts) == 0 {
 		return nil, nil
 	}
+	from := sourceLang
+	if from == "auto" || from == "" {
+		from = "the source language"
+	}
 	prompt := fmt.Sprintf("Translate the following numbered subtitle lines from %s to %s. "+
 		"Preserve the line numbers. Return ONLY the translated lines in the format: 1. Translated text\n\n",
-		sourceLang, targetLang)
+		from, targetLang)
 
 	for i, t := range texts {
 		prompt += fmt.Sprintf("%d. %s\n", i+1, t)

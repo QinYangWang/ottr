@@ -56,7 +56,17 @@ link to the source segment.
 re-translating replaces the previous one inside a transaction.
 
 Supported target languages in the UI: `en`, `zh`, `ja`. The source language is
-taken from the transcript row (currently always `zh`).
+taken from the transcript row, which `asr.DetectLanguage` guessed from the text
+and the user can overrule in the Transcript tab. When it is `und` (nothing to
+judge by), the translation asks for `auto`: MyMemory is sent
+`langpair=Autodetect|tgt`, and the LLM prompt says "from the source language".
+
+## As a job
+
+`StartTranslate` records a `jobs.KindTranslate` job and returns its ID; the
+window shows its spinner and **Cancel** until it ends, then reads the stored
+translation with `Get`. Cancelling drops the batch without writing a row.
+`Translate(ctx, ...)` remains the synchronous entry point for the same work.
 
 ## Export formats
 

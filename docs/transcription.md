@@ -54,16 +54,39 @@ to transcripts and segments through foreign keys.
 Re-running transcription replaces the previous transcript for that media inside
 a single transaction, so a partial failure never leaves a half-written result.
 
+## Language
+
+`transcript.language` is what translation takes as its source, so it is
+`DetectLanguage(segments)`, not a constant: it counts the scripts the recognizer
+produced — kana means Japanese, hangul Korean, Han Chinese (unless Latin
+outnumbers it), and Latin letters English — and answers `und` when there is
+nothing to judge by. The limits are real: an English word inside Chinese does
+not change the answer, but French, Spanish and English are all Latin letters and
+all say `en`.
+
+That guess is therefore an answer the user can overrule: the Transcript tab has
+a **Spoken language** select (Detected / English / Chinese / Japanese) writing
+through `asr.SetLanguage`, which is what the next translation reads. Switching
+it does not retranslate what is already stored; translate again for that.
+
 ## Status transitions
 
 `media.transcript_status`: `none → pending → done | error`.
 
-`Transcribe` sets `pending` synchronously, then does the work on a background
-goroutine with a 30-minute context timeout. The page reacts to
-`library:changed` (spinner while `pending`) and `transcript:ready` (reload).
+`Transcribe` marks the media `pending`, records a job (`jobs.KindTranscribe`)
+and returns its ID at once; the work runs under the job's context, which
+carries a 30-minute limit and can be cancelled. Progress is reported at the
+stages that exist — extraction done, then recognition done — so the window's
+bar is coarse and honest rather than invented.
+
+An import runs the same work through `TranscribeNow`, inside its own
+`jobs.KindImport` job, so one progress bar and one Cancel cover the whole import
+chain. See [UI](ui.md#library-sidebar).
 
 Errors mark the row `error` and surface the real reason (missing binary, missing
-model, FFmpeg failure, sherpa failure). Nothing is fabricated.
+model, FFmpeg failure, sherpa failure) in the tab that offered the button.
+Cancelling marks it back to `none`: nothing was produced, so nothing failed.
+Nothing is fabricated.
 
 ## Search and export
 
@@ -79,6 +102,11 @@ negative values clamped to zero.
 
 - `TestGroupTokens` — pause split and punctuation split produce exactly two
   segments with correct boundaries.
+- `TestDetectLanguage` — Chinese, Japanese, Korean, English, a Chinese line with
+  an English word, and nothing to judge by.
+- `TestTranscriptLanguageIsDetectedAndCanBeSet` — a saved transcript says what
+  its text is written in, and `SetLanguage` overrules it (and refuses a media
+  file with no transcript).
 - `TestFormatSRT/VTT/TXT` — timestamp text and header.
 - `TestTranscriptSaveAndGet` — write, read back, `transcript_status = done`,
   substring search.
@@ -116,4 +144,5 @@ carries each live subtitle.
 
 - Streaming decoding itself (true incremental state instead of chunks), which
   needs the sherpa-onnx C API through cgo or a PCM-pipe-capable binary.
-- Language detection: `saveTranscript` still writes `'zh'` (ROADMAP).
+- Real language identification (sherpa-onnx LID): the language is guessed from
+  the script the transcript is written in, and the user can overrule it.

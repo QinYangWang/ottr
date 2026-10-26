@@ -43,6 +43,26 @@ returns prose instead of JSON, the raw text is kept as `overview` rather than
 discarded — the user still sees something true to the transcript, and the
 Markdown export still works.
 
+## Long recordings: parts, then a rollup
+
+One prompt cannot hold an hour of speech. Before sending, the transcript is cut
+into groups of `[MM:SS] text` lines whose text stays under `maxChunkChars`
+(6000 characters), by `chunkSegments`.
+
+- One group: the request is the one described above.
+- More than one: every group is summarized on its own with the same system
+  prompt, told which part of how many it is. Those are the *map* requests, and
+they carry 80% of the job's progress.
+- The parts' overviews, key points, action items and chapter titles — not the
+  transcript — are then sent in one *rollup* request, which answers with the
+  overview, key points and action items of the whole recording.
+- Chapters and highlights are not re-asked for: they are merged from the parts
+  in `start_ms` order (at most 40 chapters, 20 highlights), so every timestamp
+  is one the audio really has. If the rollup forgets the overview or the key
+  points, the parts' own are joined instead.
+
+A failure in any part fails the summary: no half-written summary is stored.
+
 ## Storage
 
 `summary` is one row per media (`UNIQUE(media_id)`):
@@ -80,7 +100,7 @@ Empty sections are omitted entirely.
 Summary tab:
 
 - transcript missing → "Transcript Required" with a button to the Transcript tab
-- `summary_status = pending` → spinner
+- a summarization job running → spinner, a progress bar, and **Cancel**
 - no summary → "Generate"
 - summary present → Overview / Key Points / Action Items / Chapters / Highlights,
   with chapters and highlights clickable to jump the player
@@ -88,11 +108,12 @@ Summary tab:
 - **Export** writes `contentMarkdown` to a `.md` file chosen in a native dialog
 - **⚙ Config** edits base URL / API key / model inline
 
-## Timeouts
+## Timeouts and cancellation
 
-90 s per request, single shot — the entire transcript goes into one prompt. Very
-long transcripts can exceed model context limits; chunked map-reduce
-summarization is not implemented (ROADMAP).
+90 s per request. Summarization is a job (`jobs.KindSummarize`), so the whole
+run is bounded by the job's 30-minute context, its progress is visible, and
+**Cancel** stops it: the parts already summarized are dropped, nothing is
+stored, and `summary_status` returns to what it was instead of `error`.
 
 ## Testing
 
@@ -100,6 +121,13 @@ summarization is not implemented (ROADMAP).
 - `TestGenerateSummaryWithServer` — local `httptest` server asserts the request
   carries `Authorization: Bearer`, returns structured JSON, and that all five
   fields plus Markdown are populated correctly.
+- `TestChunkSegmentsFitsTheLimit` — every chunk stays under the limit, no line is
+  lost, and a single oversized line is still summarized.
+- `TestGenerateSummarySplitsLongTranscript` — a transcript over the limit makes
+  one request per part plus one rollup; the rollup is given the parts and not
+  the transcript, chapters come back in time order, and progress ends at 1.
+- `TestStartGenerateIsCancellable` — cancelling the job ends the request it is
+  waiting on and leaves the media without an error status.
 - `TestGenerateSummaryRequiresAPIKey` — fails with the documented message.
 - `TestSettingsPersist` — settings round-trip.
 - `TestSummaryLifecycle` — end-to-end: media + transcript → `Generate` →

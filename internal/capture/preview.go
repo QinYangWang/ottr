@@ -81,6 +81,13 @@ func (h *previewHub) publish(f []byte) {
 	h.frame = f
 }
 
+// latest returns the newest frame, or nil before the first one.
+func (h *previewHub) latest() []byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.frame
+}
+
 func (h *previewHub) Close() {
 	h.mu.Lock()
 	h.closed = true

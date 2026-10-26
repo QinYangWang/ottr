@@ -21,13 +21,15 @@ import (
 	"github.com/egoist/mygo"
 
 	"ottr/internal/library"
+	"ottr/internal/tools"
 )
 
 // Source is a recordable screen, display or window.
 type Source struct {
-	ID   string `json:"id"`   // screen | display:N | window:<title>
-	Kind string `json:"kind"` // screen | display | window
-	Name string `json:"name"`
+	ID     string `json:"id"`   // screen | display:N | window:<title>
+	Kind   string `json:"kind"` // screen | display | window
+	Name   string `json:"name"`
+	Detail string `json:"detail,omitempty"` // size, when the platform knows it
 }
 
 // Config selects what to record.
@@ -48,9 +50,10 @@ type State struct {
 // StateChanged is broadcast when recording starts, stops or fails.
 var StateChanged = mygo.NewEvent[State]("recording:state")
 
-// Transcriber runs speech recognition on a media record.
+// Transcriber starts speech recognition on a media record and returns the
+// job that runs it.
 type Transcriber interface {
-	Transcribe(mediaID int64) error
+	Transcribe(mediaID int64) (int64, error)
 }
 
 // Recorder records one session at a time. It is bound to the frontend as
@@ -158,11 +161,11 @@ func (r *Recorder) Start(cfg Config) error {
 	for i, a := range audio {
 		specs[i] = audioSpec{rate: a.rate, channels: a.channels, pipe: a.pipe}
 	}
-	ffmpeg, err := exec.LookPath("ffmpeg")
+	ffmpeg, err := tools.FFmpeg()
 	if err != nil {
 		preview.Close()
 		stopAudio(audio)
-		return errors.New("ffmpeg not found: install FFmpeg and make sure ffmpeg is on PATH")
+		return err
 	}
 	cmd := exec.Command(ffmpeg, buildArgs(video, specs, preview.addr(), file)...)
 	hideWindow(cmd)

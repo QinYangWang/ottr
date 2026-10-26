@@ -14,6 +14,7 @@ import (
 	"github.com/egoist/mygo"
 
 	"ottr/internal/asr"
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 )
 
@@ -26,13 +27,15 @@ type Service struct {
 	db       *sql.DB
 	lib      *library.Service
 	asr      *asr.Service
+	jobs     *jobs.Service
 	settings Settings
 }
 
-func NewService(lib *library.Service, asrSvc *asr.Service) *Service {
+func NewService(lib *library.Service, asrSvc *asr.Service, js *jobs.Service) *Service {
 	return &Service{
-		lib: lib,
-		asr: asrSvc,
+		lib:  lib,
+		asr:  asrSvc,
+		jobs: js,
 		settings: Settings{
 			Provider: "mymemory",
 		},
@@ -60,7 +63,6 @@ func (s *Service) loadSettingsLocked() {
 	if s.db == nil {
 		return
 	}
-	s.db.Exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`)
 	var provider, baseURL, apiKey, model string
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'trans_provider'`).Scan(&provider)
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'trans_base_url'`).Scan(&baseURL)
@@ -149,6 +151,15 @@ func (s *Service) Get(mediaID int64, targetLang string) (Translation, error) {
 	return tr, rows.Err()
 }
 
+// StartTranslate translates the transcript in the background and returns the
+// job that runs it. The translation is readable with Get when it ends.
+func (s *Service) StartTranslate(mediaID int64, targetLang string) (int64, error) {
+	return s.jobs.Run(mediaID, jobs.KindTranslate, func(ctx context.Context, _ func(float64)) error {
+		_, err := s.Translate(ctx, mediaID, targetLang)
+		return err
+	})
+}
+
 // Translate translates the transcript of the media into targetLang.
 func (s *Service) Translate(ctx context.Context, mediaID int64, targetLang string) (Translation, error) {
 	targetLang = strings.ToLower(strings.TrimSpace(targetLang))
@@ -181,8 +192,8 @@ func (s *Service) Translate(ctx context.Context, mediaID int64, targetLang strin
 	}
 
 	srcLang := orig.Language
-	if srcLang == "" {
-		srcLang = "zh"
+	if srcLang == "" || srcLang == asr.DefaultLanguage {
+		srcLang = "auto"
 	}
 
 	translatedTexts, err := translator.Translate(ctx, texts, srcLang, targetLang)

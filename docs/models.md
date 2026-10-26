@@ -50,14 +50,27 @@ A directory missing any file is skipped with the reason recorded, so the final
 error explains what was wrong with the last candidate rather than just "not
 found".
 
-## Listing
-
 `ListModels` returns `[]Info{ID, Name, Kind, Path, SizeBytes, Installed, Error}`
 for every subdirectory, marking `Installed` only when validation passes and
 carrying the validation error otherwise.
 
-> The UI does not surface this yet — there is no Settings/Models screen. See
-> ROADMAP.
+## Choosing a model
+
+The user chooses in the **Settings** page, Transcription tab (the sliders icon
+beside `Ottr`), which lists every directory with its size or the reason it
+cannot be used, says which model transcription uses now, and shows where the
+sherpa-onnx binary was found (or why it was not). `Open folder` opens the models directory and `Re-check` looks
+again after a model is installed by hand.
+
+`Manager.Select(dir)` writes `settings.asr_model_dir` and `Open(db)` reads it
+back, so the choice survives a restart. `FindASRModel` then returns that model
+and nothing else: if it was deleted or broken, transcription fails naming the
+directory instead of quietly using a different model. With no choice made, the
+first valid directory is used, as before.
+
+GPU selection is still absent: sherpa-onnx is invoked with `--provider=cpu`, and
+no build with CUDA providers is shipped.
+
 
 ## Licensing and distribution notes
 
@@ -72,5 +85,12 @@ carrying the validation error otherwise.
   from `FindASRModel`.
 - `TestManagerDetectsModel` — a directory with the four required files is
   detected as installed, and the reported size equals the sum of file sizes.
+- `TestSelectedModelIsUsedAndRemembered` — a chosen model is what
+  `FindASRModel` returns, another `Manager` reads the same choice from the
+  settings table, and a chosen model that lost a file reports that instead of
+  falling back.
+- `TestModelsPageChoosesAModel` — the page lists models, shows why a folder is
+  unusable and that the binary is missing, and `Use` changes which model is in
+  use.
 - `TestTranscribeRealModel` — uses the genuinely installed model to run
   recognition.
