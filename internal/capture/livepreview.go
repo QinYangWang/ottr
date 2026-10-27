@@ -59,9 +59,10 @@ func (p *Previewer) start(sourceID string) {
 		return
 	}
 
-	// The same preview output a recording writes, at a size that keeps the
-	// stream small: five frames a second, 480 pixels wide.
-	args := append(video, "-map", "0:v", "-vf", "fps=5,scale=480:-2",
+	// Match the recording preview's resolution. The home preview leaves the
+	// captured pointer out, so it cannot appear as a second, flickering cursor.
+	args := append([]string{"-draw_mouse", "0"}, video...)
+	args = append(args, "-map", "0:v", "-vf", previewFilter,
 		"-f", "mpjpeg", "tcp://"+hub.addr())
 	cmd := exec.Command(ffmpeg, args...)
 	hideWindow(cmd)

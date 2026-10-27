@@ -17,8 +17,7 @@ import (
 	"ottr/internal/library"
 )
 
-// sidebar holds the recording form and the library, with the way to the
-// settings at the bottom. It is the whole window until something is opened.
+// sidebar holds the recording form, with Library and Settings at the bottom.
 func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
 	side := ui.Column(c).FillHeight().Background(t.Surface)
 	if a.wide {
@@ -27,16 +26,14 @@ func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
 		side.Grow(1)
 	}
 	side.Children(func() {
-		// The cards and the picture are what scroll in a short window; the
-		// audio and the button that starts a recording stay in reach, and the
-		// library keeps the rest of the column.
-		ui.Scroll(c).Shrink(0).MaxHeight(formHeight).Children(func() {
+		// The cards and picture scroll in a short window; the recording
+		// controls and window buttons stay in reach.
+		ui.Scroll(c).MaxHeight(formHeight).Children(func() {
 			a.recordForm(c, t)
 		})
 		a.audioBar(c, t)
 		a.startBar(c, t)
-		ui.Divider(c)
-		a.libraryPane(c, t)
+		ui.Spacer(c)
 		ui.Divider(c)
 		a.sidebarFooter(c, t)
 	})
@@ -44,7 +41,7 @@ func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
 
 // formHeight bounds the scrolling part of the recording form — the cards and
 // the picture — which leaves the library its room in a short window.
-const formHeight = 400
+const formHeight = 480
 
 // recordForm chooses what to record: the sources as the cards of a grid, and the
 // picture of what is chosen.
@@ -66,16 +63,14 @@ func (a *App) recordForm(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// audioBar chooses what sound goes into the recording, under the form: the two
-// sounds side by side, so that they take a row rather than two.
+// audioBar chooses the speaker and microphone a recording takes.
 func (a *App) audioBar(c *ui.Context, t *ui.Theme) {
 	if a.recording || len(a.sources) == 0 {
 		return
 	}
 	ui.Column(c).Padding(t.Space(2), t.Space(4), 0, t.Space(4)).Gap(t.Space(2)).Children(func() {
-		a.caption(c, t, "Choose your audio")
-		a.audioRow(c, t, &a.sysAudio, iconSpeaker, "System audio", "What plays on this computer")
-		a.audioRow(c, t, &a.micAudio, iconMic, "Microphone", "Your voice")
+		a.audioRow(c, t, &a.speaker, a.speakers, iconSpeaker, "System audio")
+		a.audioRow(c, t, &a.microphone, a.microphones, iconMic, "Microphone")
 	})
 }
 
@@ -98,31 +93,73 @@ func (a *App) startBar(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// sidebarFooter holds the way to the settings, at the bottom of the window
-// where a toolbar's last item would be.
+// sidebarFooter opens the secondary windows and toggles the global theme.
 func (a *App) sidebarFooter(c *ui.Context, t *ui.Theme) {
-	row := ui.ButtonBase(c).Label("Settings").Padding(t.Space(2.5), t.Space(4)).
-		Cursor(ui.CursorPointer).TextColor(t.TextMuted)
-	row.Children(func() {
-		// A row of its own, so that the items sit at the left rather than in
-		// the middle of the button.
-		ui.Row(c).Grow(1).AlignItems(ui.Center).Gap(t.Space(2.5)).Children(func() {
-			ui.Icon(c, iconSliders).FontSize(t.FontSize + 3)
-			ui.Text(c, "Settings").FontSize(t.FontSize - 1)
-		})
+	ui.Row(c).Padding(t.Space(2), t.Space(3)).Gap(t.Space(1)).Justify(ui.End).Children(func() {
+		dark := a.themeSource() == "dark" || a.themeSource() == "system" && t.Dark
+		if dark {
+			a.iconButton(c, t, iconSun, "Light theme", func() { a.setTheme("light") })
+		} else {
+			a.iconButton(c, t, iconMoon, "Dark theme", func() { a.setTheme("dark") })
+		}
+		a.iconButton(c, t, iconLibrary, "Library", a.openLibrary)
+		a.iconButton(c, t, iconSliders, "Settings", a.openSettings)
 	})
-	if row.Hovered() {
-		row.Background(t.SurfaceHover)
-	}
-	if row.Clicked() {
-		a.page = "settings"
-		a.openPane()
-	}
 }
 
-// sourcePreviewHeight is the height of the picture of the source: 16:9 of the
-// library's column.
-const sourcePreviewHeight = 96
+// openLibrary opens the media list and its details independently of the main
+// recording form. Recording also lands here.
+func (a *App) openLibrary() {
+	if a.libraryWin != nil && !a.libraryWin.IsDestroyed() {
+		a.libraryWin.Focus()
+		return
+	}
+	a.reload()
+	a.libraryWin = mygo.NewWindow(mygo.WindowOptions{
+		Title: "Ottr Library", Width: WideWidth, Height: WideHeight,
+		MinWidth: 900, MinHeight: 600, Parent: a.win,
+		TitleBarStyle: mygo.TitleBarHidden, TitleBarHeight: titleBarHeight,
+		BackgroundColor: themeBackground(), Content: ui.View(a.libraryView),
+	})
+	a.libraryWin.OnClosed(func() { a.libraryWin = nil })
+}
+
+// libraryView puts recordings on the left and the selected recording, or the
+// live recording, on the right.
+func (a *App) libraryView(c *ui.Context) {
+	t := c.Theme()
+	a.drain()
+	a.mirror(c)
+	a.poll(c)
+	ui.Column(c).Fill().Children(func() {
+		a.windowTitleBar(c, t, "Ottr")
+		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+			ui.Column(c).Width(sidebarWidth).Shrink(0).FillHeight().Background(t.Surface).
+				BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
+				a.libraryPane(c, t)
+			})
+			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+				switch {
+				case a.recording:
+					a.recorderPage(c, t)
+				default:
+					if m, ok := a.current(); ok {
+						a.sessionPage(c, t, m)
+					} else {
+						a.emptyPage(c, t)
+					}
+				}
+			})
+		})
+	})
+	if a.err != "" {
+		a.banner(c, t)
+	}
+	a.dialogs(c, t)
+}
+
+// sourcePreviewHeight gives the source room enough to read its contents.
+const sourcePreviewHeight = 192
 
 // sourcePreview shows the source before it is recorded — the frames the
 // previewer draws — or what keeps them away.
@@ -179,21 +216,54 @@ func (a *App) iconButton(c *ui.Context, t *ui.Theme, icon *ui.SVG, label string,
 	}
 }
 
-// audioRow is one sound to record, and the switch that takes it in or leaves
-// it out. The tooltip says what the sound is: the row keeps the name whole.
-func (a *App) audioRow(c *ui.Context, t *ui.Theme, on *bool, icon *ui.SVG, label, detail string) {
-	row := ui.Row(c).Gap(t.Space(2.5)).Padding(t.Space(1.5), t.Space(2.5)).
-		Radius(t.Radius).BorderWidth(1).BorderColor(t.Border).AlignItems(ui.Center).
-		Tooltip(detail)
-	row.Children(func() {
-		picture := ui.Icon(c, icon).FontSize(t.FontSize + 2)
-		if *on {
-			picture.TextColor(t.Text)
-		} else {
+// loadAudioDevices selects the default speaker and keeps the microphone off.
+// shortcut: endpoints load at startup; add WASAPI notifications for hot-plug refresh.
+func (a *App) loadAudioDevices() {
+	go func() {
+		speakers, microphones, err := a.Rec.AudioDevices()
+		a.update(func() {
+			a.speakers, a.microphones = speakers, microphones
+			if len(speakers) > 0 {
+				a.speaker = speakers[0]
+			}
+			if err != nil {
+				a.setError(err)
+			}
+		})
+	}()
+}
+
+// audioRow is a full-width device dropdown for one kind of sound.
+func (a *App) audioRow(c *ui.Context, t *ui.Theme, selected *capture.AudioDevice, devices []capture.AudioDevice, icon *ui.SVG, label string) {
+	sel := ui.SelectBase(c, selected)
+	sel.Trigger.Label(label+" device").Tooltip(label).Grow(1).MinWidth(0).Padding(t.Space(2), t.Space(2.5)).
+		Radius(t.Radius).Border(1, t.Border).Background(t.Surface).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
+		picture := ui.Icon(c, icon).FontSize(t.FontSize + 2).Shrink(0)
+		if selected.ID == "" {
 			picture.TextColor(t.TextMuted)
 		}
-		ui.Text(c, label).FontSize(t.FontSize - 2).Grow(1).MinWidth(0).SingleLine()
-		ui.Switch(c, on).Label(label).Changed()
+		ui.Text(c, label).FontSize(t.FontSize - 3).Shrink(0)
+		name := selected.Name
+		if selected.ID == "" {
+			name = "Off"
+		}
+		ui.Text(c, name).FontSize(t.FontSize - 3).TextColor(t.TextMuted).
+			SingleLine().Grow(1).MinWidth(0).TextAlign(ui.End)
+		ui.Text(c, "▾").TextColor(t.TextMuted).Shrink(0)
+	})
+	sel.Popup(func(panel ui.Element) {
+		panel.Padding(t.Space(1)).Radius(t.Radius+2).Background(t.Background).
+			Border(1, t.Border).Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.18))
+		options := append([]capture.AudioDevice{{Name: "Off"}}, devices...)
+		for _, device := range options {
+			item := sel.Item(device).Padding(t.Space(1.5), t.Space(2.5)).Radius(t.Radius)
+			if item.Highlighted() {
+				item.Background(t.Accent).TextColor(t.AccentText)
+			} else if device == *selected {
+				item.Background(t.Surface)
+			}
+			item.Children(func() { ui.Text(c, device.Name).FontSize(t.FontSize - 2).SingleLine() })
+		}
 	})
 }
 
@@ -201,7 +271,6 @@ func (a *App) audioRow(c *ui.Context, t *ui.Theme, on *bool, icon *ui.SVG, label
 // display choose themselves, and Window opens the picker.
 type sourceCard struct {
 	label   string
-	detail  string
 	icon    *ui.SVG
 	id      string // the source a click chooses
 	pick    string // the kind a click opens the picker for, instead
@@ -251,10 +320,6 @@ func (a *App) sourceCard(c *ui.Context, t *ui.Theme, card sourceCard) {
 			}
 			ui.Text(c, card.label).FontSize(t.FontSize - 2).Bold().
 				SingleLine().TextAlign(ui.Center)
-			if card.detail != "" {
-				ui.Text(c, card.detail).FontSize(t.FontSize - 4).TextColor(t.TextMuted).
-					SingleLine().TextAlign(ui.Center)
-			}
 		})
 	})
 	if card.blocked == "" && !card.chosen && btn.Hovered() {
@@ -323,7 +388,7 @@ func (a *App) orphanNotice(c *ui.Context, t *ui.Theme) {
 		if n == 1 {
 			said = "1 recording file is not in the library."
 		}
-		ui.Text(c, said).FontSize(t.FontSize-2).TextColor(t.TextMuted)
+		ui.Text(c, said).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		ui.Row(c).Gap(t.Space(2)).Children(func() {
 			if ui.Button(c, "Add back").Tooltip("Add these files to the library again").Clicked() {
 				a.addOrphans()
@@ -371,24 +436,19 @@ func (a *App) mediaRow(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 	if row.Clicked() {
 		a.selectMedia(id)
-		a.page = ""
-		a.openPane()
 	}
 	row.ContextMenu(func(mn *ui.Menu) {
 		if mn.Item("Transcript").Chosen() {
 			a.selectMedia(id)
-			a.page, a.tab = "", 0
-			a.openPane()
+			a.tab = 0
 		}
 		if mn.Item("Translate").Chosen() {
 			a.selectMedia(id)
-			a.page, a.tab = "", 1
-			a.openPane()
+			a.tab = 1
 		}
 		if mn.Item("Summary").Chosen() {
 			a.selectMedia(id)
-			a.page, a.tab = "", 2
-			a.openPane()
+			a.tab = 2
 		}
 		mn.Separator()
 		if mn.Item("Show the file").Chosen() {
@@ -430,12 +490,12 @@ func (a *App) sourceCardsOf(sources []capture.Source) []sourceCard {
 		switch s.Kind {
 		case "screen":
 			cards = append(cards, sourceCard{
-				label: "Full screen", detail: s.Detail, icon: iconScreen,
+				label: "Full screen", icon: iconScreen,
 				id: s.ID, chosen: a.sourceID == s.ID,
 			})
 		case "display":
 			cards = append(cards, sourceCard{
-				label: s.Name, detail: s.Detail, icon: iconScreen,
+				label: s.Name, icon: iconScreen,
 				id: s.ID, chosen: a.sourceID == s.ID,
 			})
 		case "window":
@@ -443,19 +503,18 @@ func (a *App) sourceCardsOf(sources []capture.Source) []sourceCard {
 		}
 	}
 	if windows > 0 {
-		card := sourceCard{label: "Window", detail: "Choose a window", icon: iconWindow, pick: "window"}
+		card := sourceCard{label: "Window", icon: iconWindow, pick: "window"}
 		if strings.HasPrefix(a.sourceID, "window:") {
-			card.label, card.detail, card.chosen = a.sourceName(), "Change", true
+			card.label, card.chosen = a.sourceName(), true
 		}
 		cards = append(cards, card)
 	} else if len(sources) > 0 {
-		// No visible window to record: say so where the card would be.
-		cards = append(cards, sourceCard{label: "Window", detail: "No windows", icon: iconWindow, blocked: "No visible window can be recorded right now"})
+		cards = append(cards, sourceCard{label: "Window", icon: iconWindow, blocked: "No visible window can be recorded right now"})
 	}
 	cards = append(cards,
-		sourceCard{label: "Area", detail: "Not yet", icon: iconArea,
+		sourceCard{label: "Area", icon: iconArea,
 			blocked: "Recording part of the screen is not implemented yet"},
-		sourceCard{label: "Camera only", detail: "Not yet", icon: iconCamera,
+		sourceCard{label: "Camera only", icon: iconCamera,
 			blocked: "Recording a camera is not implemented yet"},
 	)
 	return cards
@@ -546,11 +605,14 @@ func (a *App) startRecording() {
 		return
 	}
 	a.busy = true
-	a.openPane() // the picture and the live transcript need the room
+	a.openLibrary() // the live recording and its transcript land here
 	if a.Preview != nil {
 		a.Preview.Stop() // the recording draws its own preview
 	}
-	cfg := capture.Config{SourceID: a.sourceID, SystemAudio: a.sysAudio, Mic: a.micAudio}
+	cfg := capture.Config{
+		SourceID: a.sourceID, SystemAudio: a.speaker.ID != "", Mic: a.microphone.ID != "",
+		SpeakerID: a.speaker.ID, MicrophoneID: a.microphone.ID,
+	}
 	go func() {
 		err := a.Rec.Start(cfg)
 		a.update(func() {

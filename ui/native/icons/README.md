@@ -16,6 +16,10 @@ licensed under the ISC License in [LICENSE](LICENSE).
 | `sliders-horizontal.svg` | sliders-horizontal | settings |
 | `arrow-left.svg` | arrow-left | back |
 | `check.svg` | check | the source chosen |
+| `languages.svg` | languages | translation settings |
+| `file-text.svg` | file-text | summary settings |
+| `library.svg` | library | opening Library |
+| `sun.svg` / `moon.svg` | sun / moon | switching light and dark themes |
 
 `icons.go` embeds them and parses each once with `ui.MustParseSVG`; `ui.Icon`
 paints the shapes in the color of the text around them, so the SVGs' own

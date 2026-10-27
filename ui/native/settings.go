@@ -12,38 +12,107 @@ import (
 	"ottr/internal/tools"
 )
 
-// settingsPage holds what the app can be told: how it looks, which model
-// recognizes speech on this computer, and which provider translates and
-// summarizes.
-func (a *App) settingsPage(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Padding(t.Space(4), t.Space(5)).Gap(t.Space(2)).AlignItems(ui.Center).
-			Background(t.Surface).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-				ui.Text(c, "Settings").FontSize(t.FontSize + 4).Bold()
-				ui.Text(c, "Speech recognition runs here; translation and summaries use a remote model.").
-					FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-			})
-			if ui.Button(c, "Close").Clicked() {
-				a.closePane()
-			}
-		})
-		ui.Row(c).Padding(t.Space(3.5), t.Space(5), 0, t.Space(5)).Children(func() {
-			ui.Tabs(c, &a.settingsTab, "Appearance", "Transcription", "Translation", "Summary")
-		})
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Padding(t.Space(4), t.Space(5)).Gap(t.Space(3)).Children(func() {
-				switch a.settingsTab {
-				case 1:
-					a.transcriptionSettings(c, t)
-				case 2:
-					a.translationSettings(c, t)
-				case 3:
-					a.summarySettings(c, t)
-				default:
-					a.appearanceSettings(c, t)
+const (
+	settingsWidth  = 920
+	settingsHeight = 660
+)
+
+// openSettings gives Settings its own native window, leaving the main window
+// exactly as it was.
+func (a *App) openSettings() {
+	if a.settingsWin != nil && !a.settingsWin.IsDestroyed() {
+		a.settingsWin.Focus()
+		return
+	}
+	a.settingsWin = mygo.NewWindow(mygo.WindowOptions{
+		Title: "Ottr Settings", Width: settingsWidth, Height: settingsHeight,
+		MinWidth: 800, MinHeight: 480, Parent: a.win,
+		TitleBarStyle: mygo.TitleBarHidden, TitleBarHeight: titleBarHeight,
+		BackgroundColor: themeBackground(), Content: ui.View(a.settingsView),
+	})
+	a.settingsWin.OnClosed(func() { a.settingsWin = nil })
+}
+
+func themeBackground() string {
+	if mygo.Theme.IsDark() {
+		return "#101014"
+	}
+	return "#f6f6f8"
+}
+
+// settingsView draws sections on the left and the chosen one on the right.
+func (a *App) settingsView(c *ui.Context) {
+	t := c.Theme()
+	a.drain()
+	ui.Column(c).Fill().Background(t.Background).Children(func() {
+		a.windowTitleBar(c, t, "Ottr")
+		ui.Row(c).Grow(1).MinHeight(0).Children(func() {
+			ui.Column(c).Width(190).Shrink(0).FillHeight().Padding(t.Space(3)).Gap(t.Space(1)).
+				Background(t.Surface).BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
+				ui.Text(c, "Settings").FontSize(t.FontSize+2).Bold().
+					Padding(t.Space(1), t.Space(2), t.Space(3), t.Space(2))
+				for i, item := range []struct {
+					label string
+					icon  *ui.SVG
+				}{
+					{"Appearance", iconSliders},
+					{"Transcription", iconMic},
+					{"Translation", iconLanguages},
+					{"Summary", iconSummary},
+				} {
+					a.settingsNav(c, t, i, item.label, item.icon)
 				}
 			})
+			ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
+				ui.Row(c).Padding(t.Space(4), t.Space(5), t.Space(2), t.Space(5)).Children(func() {
+					ui.Text(c, []string{"Appearance", "Transcription", "Translation", "Summary"}[a.settingsTab]).
+						FontSize(t.FontSize + 5).Bold()
+				})
+				a.settingsPage(c, t)
+			})
+		})
+	})
+	if a.err != "" {
+		a.banner(c, t)
+	}
+}
+
+func (a *App) settingsNav(c *ui.Context, t *ui.Theme, tab int, label string, icon *ui.SVG) {
+	nav := ui.ButtonBase(c).Label(label).FillWidth().Padding(t.Space(2.5), t.Space(3)).
+		Radius(t.Radius).Cursor(ui.CursorPointer)
+	if a.settingsTab == tab {
+		nav.Background(t.SurfaceHover)
+	} else {
+		nav.TextColor(t.TextMuted)
+	}
+	nav.Children(func() {
+		ui.Row(c).Grow(1).Gap(t.Space(2.5)).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, icon).FontSize(t.FontSize + 3)
+			ui.Text(c, label).FontSize(t.FontSize - 1)
+		})
+	})
+	if a.settingsTab != tab && nav.Hovered() {
+		nav.Background(t.SurfaceHover)
+	}
+	if nav.Clicked() {
+		a.settingsTab = tab
+	}
+}
+
+// settingsPage is the scrollable half chosen on the window's left.
+func (a *App) settingsPage(c *ui.Context, t *ui.Theme) {
+	ui.Scroll(c).Grow(1).Children(func() {
+		ui.Column(c).Padding(t.Space(2), t.Space(5), t.Space(5), t.Space(5)).Gap(t.Space(3)).Children(func() {
+			switch a.settingsTab {
+			case 1:
+				a.transcriptionSettings(c, t)
+			case 2:
+				a.translationSettings(c, t)
+			case 3:
+				a.summarySettings(c, t)
+			default:
+				a.appearanceSettings(c, t)
+			}
 		})
 	})
 }
@@ -52,7 +121,6 @@ func (a *App) settingsPage(c *ui.Context, t *ui.Theme) {
 
 // appearanceSettings picks the look: the desktop's, or a fixed one.
 func (a *App) appearanceSettings(c *ui.Context, t *ui.Theme) {
-	ui.Text(c, "Appearance").Bold()
 	ui.Text(c, "Match the desktop, or pick a fixed look.").
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 	ui.Row(c).Gap(t.Space(3)).Children(func() {
@@ -132,18 +200,18 @@ func (a *App) setTheme(source string) {
 	a.theme = source
 	if a.win != nil {
 		mygo.Theme.SetSource(mygo.ThemeSource(source))
-		background := "#101014"
-		if !mygo.Theme.IsDark() {
-			background = "#f6f6f8"
+		a.win.SetBackgroundColor(themeBackground())
+	}
+	for _, win := range []*mygo.Window{a.libraryWin, a.settingsWin} {
+		if win != nil {
+			win.SetBackgroundColor(themeBackground())
 		}
-		a.win.SetBackgroundColor(background)
 	}
 	if a.Prefs != nil {
 		prefs := a.Prefs
 		go prefs.Set(settings.Theme, source)
 	}
 }
-
 
 // settingRow is one setting: what it is, what it does, and its control on the
 // right.

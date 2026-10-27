@@ -20,6 +20,9 @@ func TestBuildArgsNoAudio(t *testing.T) {
 	if !slices.Contains(joined, "tcp://127.0.0.1:9") {
 		t.Error("no preview output")
 	}
+	if !slices.Contains(args, "fps=5,scale=960:-2") {
+		t.Error("preview is not high resolution")
+	}
 }
 
 func TestBuildArgsOneAudio(t *testing.T) {

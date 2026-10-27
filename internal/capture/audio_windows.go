@@ -29,10 +29,10 @@ var pipeSeq atomic.Int64
 
 const audclntBufferflagsSilent = 0x2
 
-// startAudioStream opens the default render (loopback) or capture endpoint
-// and starts streaming its mix format PCM. The stream is live once nil is
-// returned; ffmpeg connects to the pipe when its process starts.
-func startAudioStream(loopback bool, sink *liveFeed) (*audioStream, error) {
+// startAudioStream opens the selected render (loopback) or capture endpoint,
+// or the default when deviceID is empty, and starts streaming its mix format
+// PCM. The stream is live once nil is returned; ffmpeg connects next.
+func startAudioStream(loopback bool, deviceID string, sink *liveFeed) (*audioStream, error) {
 	name := fmt.Sprintf(`\\.\pipe\ottr-audio-%d-%d`, os.Getpid(), pipeSeq.Add(1))
 	ln, err := winio.ListenPipe(name, nil)
 	if err != nil {
@@ -65,9 +65,9 @@ func startAudioStream(loopback bool, sink *liveFeed) (*audioStream, error) {
 		if !as.loopback {
 			flow = wca.ECapture
 		}
-		var mmd *wca.IMMDevice
-		if err := de.GetDefaultAudioEndpoint(flow, wca.EConsole, &mmd); err != nil {
-			ready <- fmt.Errorf("no default audio endpoint: %w", err)
+		mmd, err := openAudioDevice(de, flow, deviceID)
+		if err != nil {
+			ready <- err
 			return
 		}
 		defer mmd.Release()

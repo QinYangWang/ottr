@@ -56,8 +56,8 @@ carrying the validation error otherwise.
 
 ## Choosing a model
 
-The user chooses in the **Settings** page, Transcription tab (the sliders icon
-beside `Ottr`), which lists every directory with its size or the reason it
+The user chooses in the **Settings** window, Transcription section (the sliders
+icon at the bottom of the sidebar), which lists every directory with its size or the reason it
 cannot be used, says which model transcription uses now, and shows where the
 sherpa-onnx binary was found (or why it was not). `Open folder` opens the models directory and `Re-check` looks
 again after a model is installed by hand.

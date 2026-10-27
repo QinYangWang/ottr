@@ -78,8 +78,8 @@ func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
 		if ui.Button(c, "Delete…").Clicked() {
 			a.delID, a.confirmDel = m.ID, true
 		}
-		if ui.Button(c, "Close").Tooltip("Back to the recording form").Clicked() {
-			a.closePane()
+		if ui.Button(c, "Close").Tooltip("Close media details").Clicked() {
+			a.forget()
 		}
 	})
 }

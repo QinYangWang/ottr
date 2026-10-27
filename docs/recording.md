@@ -59,10 +59,12 @@ a known limitation, see ROADMAP.
 
 `capture.Previewer` runs the same FFmpeg `resolveSource` resolves for a
 recording, but writes an `mpjpeg` stream over TCP — `-map 0:v -vf
-fps=5,scale=480:-2`, the arguments of the recording's own preview output — into
+fps=5,scale=960:-2`, the arguments of the recording's own preview output — into
 a `previewHub`, which keeps only the newest frame. The window decodes it into a
-bitmap five times a second and draws it in the sidebar, and the page that shows
-a recording in progress keeps drawing the recorder's own preview the same way.
+bitmap five times a second and draws it in the main window; Library's recording
+page keeps drawing the recorder's own preview the same way. The home preview
+is 192 DIPs high and disables gdigrab's captured pointer, avoiding a second
+mouse image over the desktop's own pointer.
 
 Starting a recording stops the previewer — the recording draws its own frames —
 and stopping it starts the previewer again. Switching sources restarts it; a
@@ -95,11 +97,16 @@ banner and the settings row show whole.
 
 ## Audio
 
-`startAudioStream(loopback bool)` opens the default render (loopback) or capture
-(microphone) endpoint in shared mode:
+`Recorder.AudioDevices()` enumerates active render and capture endpoints,
+putting each default first. Two full-row dropdowns choose a speaker and
+microphone by endpoint ID, or `Off`; choosing one does not change the system
+default. Enumeration runs off the UI thread, and an unreadable endpoint is
+skipped rather than hiding the working devices.
+`startAudioStream(loopback, deviceID, sink)` opens that endpoint in shared mode:
 
 1. `CoInitializeEx` on a locked OS thread.
-2. `GetDefaultAudioEndpoint(ERender|ECapture, EConsole)`.
+2. Find the selected endpoint with `EnumAudioEndpoints`, or call
+   `GetDefaultAudioEndpoint(ERender|ECapture, EConsole)` when no ID is given.
 3. `IAudioClient.Initialize` in `AUDCLNT_SHAREMODE_SHARED`, with
    `AUDCLNT_STREAMFLAGS_LOOPBACK` for system audio.
 4. `GetMixFormat` determines the exact sample rate and channel count that FFmpeg

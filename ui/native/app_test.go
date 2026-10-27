@@ -72,7 +72,7 @@ func newTestApp(t *testing.T) (*App, int64) {
 // chosen, which its tabs switch away from and back to.
 func TestWindowShowsTranscript(t *testing.T) {
 	a, _ := newTestApp(t)
-	tt := ui.NewTester(a.view, 1100, 720)
+	tt := ui.NewTester(a.libraryView, 1100, 720)
 	// The library lists the file, and the transcript tab shows its lines.
 	if !tt.HasText("standup") {
 		t.Fatalf("the library does not list the recording: %q", tt.Texts())
@@ -106,7 +106,7 @@ func TestWindowShowsTranscript(t *testing.T) {
 // when nothing does.
 func TestSearchFilters(t *testing.T) {
 	a, _ := newTestApp(t)
-	tt := ui.NewTester(a.view, 1100, 720)
+	tt := ui.NewTester(a.libraryView, 1100, 720)
 	a.query = "nothing-like-this"
 	a.reload()
 	tt.Frame()
@@ -124,7 +124,7 @@ func TestSearchFilters(t *testing.T) {
 // Deleting a record leaves the library empty, and the window says so.
 func TestDeleteMedia(t *testing.T) {
 	a, id := newTestApp(t)
-	tt := ui.NewTester(a.view, 1100, 720)
+	tt := ui.NewTester(a.libraryView, 1100, 720)
 	a.removeMedia(id, false)
 	for i := 0; i < 20 && len(a.media) > 0; i++ {
 		time.Sleep(10 * time.Millisecond)
@@ -163,7 +163,7 @@ func TestCancelStopsTheSummaryJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tt := ui.NewTester(a.view, 1100, 720)
+	tt := ui.NewTester(a.libraryView, 1100, 720)
 	if err := tt.Click("Summary"); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestOrphanNoticeAndDelete(t *testing.T) {
 	}
 	a.reload()
 
-	tt := ui.NewTester(a.view, 1100, 720)
+	tt := ui.NewTester(a.libraryView, 1100, 720)
 	tt.Frame()
 	if !tt.HasText("1 recording file is not in the library.") {
 		t.Fatalf("the window says %q", tt.Texts())
@@ -316,10 +316,7 @@ func TestSettingsChooseAModel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tt := ui.NewTester(a.view, 1100, 720)
-	if err := tt.Click("Settings"); err != nil {
-		t.Fatal(err)
-	}
+	tt := ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
 	tt.Frame()
 	if err := tt.Click("Transcription"); err != nil {
 		t.Fatal(err)
@@ -361,15 +358,6 @@ func TestSettingsChooseAModel(t *testing.T) {
 	if a.modelInUse != filepath.Join(base, "zzz-model") {
 		t.Errorf("transcription still uses %q", a.modelInUse)
 	}
-
-	// Closing the page gives the window back to the recording form.
-	if err := tt.Click("Close"); err != nil {
-		t.Fatalf("the page does not close: %v", err)
-	}
-	tt.Frame()
-	if a.wide || a.page != "" {
-		t.Errorf("closing left the page open on %q", a.page)
-	}
 }
 
 // What can be recorded is laid out as cards in the sidebar, and windows, which
@@ -382,17 +370,33 @@ func TestSourceCardsAndPicker(t *testing.T) {
 		{ID: "window:Beta", Kind: "window", Name: "Beta", Detail: "800x600"},
 	}
 	a.pickSource()
+	a.speakers = []capture.AudioDevice{{ID: "speaker-1", Name: "Speakers 1"}, {ID: "speaker-2", Name: "Speakers 2"}}
+	a.speaker = a.speakers[0]
+	a.microphones = []capture.AudioDevice{{ID: "mic-1", Name: "Microphone 1"}}
 	if a.sourceID != "screen" {
 		t.Fatalf("the whole screen is not chosen by default: %q", a.sourceID)
 	}
 
 	tt := ui.NewTester(a.view, 1100, 720)
 	tt.Frame()
-	if !tt.HasText("Choose a capture source") || !tt.HasText("Choose your audio") {
+	if !tt.HasText("Choose a capture source") || !tt.HasText("System audio") {
 		t.Fatalf("the sidebar says %q", tt.Texts())
 	}
 	if !tt.HasText("Full screen") || !tt.HasText("Window") || !tt.HasText("Microphone") {
 		t.Fatalf("the cards are not there: %q", tt.Texts())
+	}
+	if tt.HasText("Choose a window") || tt.HasText("Not yet") {
+		t.Errorf("source cards still have detail lines: %q", tt.Texts())
+	}
+	if err := tt.Click("System audio device"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Speakers 2"); err != nil {
+		t.Fatal(err)
+	}
+	if a.speaker.ID != "speaker-2" {
+		t.Errorf("the dropdown chose %q", a.speaker.ID)
 	}
 
 	// The Window card stands for all windows and opens the picker.
@@ -452,9 +456,25 @@ func TestTitleBarKeepsClearOfTheWindowControls(t *testing.T) {
 	}
 }
 
-// The window is the recording form alone until something is opened, and grows
-// when it is.
-func TestCompactWindowOpensThePageBesideIt(t *testing.T) {
+func TestSecondaryWindowsUseImmersiveTitleBars(t *testing.T) {
+	a, _ := newTestApp(t)
+	for name, view := range map[string]func(*ui.Context){"Library": a.libraryView, "Settings": a.settingsView} {
+		tt := ui.NewTester(view, WideWidth, WideHeight)
+		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
+		tt.Frame()
+		title, ok := tt.Find("Ottr")
+		if !ok || title.Y+title.H > titleBarHeight {
+			t.Errorf("%s has no immersive title: %+v", name, title)
+		}
+		if title.X+title.W > WideWidth-138 {
+			t.Errorf("%s title runs under the window controls", name)
+		}
+	}
+}
+
+// The main window keeps the recording form; media and details live in the
+// separate Library view rather than expanding beside it.
+func TestMainWindowKeepsLibrarySeparate(t *testing.T) {
 	a, _ := newTestApp(t)
 	a.wide = false
 	a.sources = []capture.Source{{ID: "screen", Kind: "screen", Name: "Full screen"}}
@@ -462,52 +482,48 @@ func TestCompactWindowOpensThePageBesideIt(t *testing.T) {
 
 	tt := ui.NewTester(a.view, CompactWidth, CompactHeight)
 	tt.Frame()
-	if !tt.HasText("Choose a capture source") {
-		t.Fatalf("the form is not there: %q", tt.Texts())
+	if !tt.HasText("Choose a capture source") || !tt.HasText("Library") || !tt.HasText("Settings") {
+		t.Fatalf("the main window says %q", tt.Texts())
 	}
-	if tt.HasText("Transcript") || tt.HasText("No transcript yet") {
-		t.Errorf("a page is open beside the form: %q", tt.Texts())
+	if tt.HasText("standup") || tt.HasText("Transcript") {
+		t.Errorf("the library is still in the main window: %q", tt.Texts())
 	}
-	// The import button is an icon alone: its label is what names it.
-	if _, ok := tt.Find("Import"); !ok {
-		t.Errorf("the library has no import button: %q", tt.Texts())
-	}
-
-	// A click on a recording opens it, which is what the window grows for.
-	if err := tt.Click("standup"); err != nil {
+	if err := tt.Click("Dark theme"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.wide {
-		t.Fatal("choosing a recording did not open its page")
-	}
-	tt.SetSize(WideWidth, WideHeight) // what the window does for the page
 	tt.Frame()
-	for i := 0; i < 20 && !tt.HasText("Transcript"); i++ {
+	if a.theme != "dark" {
+		t.Errorf("the footer theme button kept %q", a.theme)
+	}
+	if _, ok := tt.Find("Light theme"); !ok {
+		t.Error("the theme button did not switch its icon")
+	}
+
+	lt := ui.NewTester(a.libraryView, WideWidth, WideHeight)
+	lt.Frame()
+	for i := 0; i < 20 && !lt.HasText("Transcript"); i++ {
 		time.Sleep(5 * time.Millisecond)
-		tt.Frame()
+		lt.Frame()
 	}
-	if !tt.HasText("Transcript") {
-		t.Fatalf("the page did not open: %q", tt.Texts())
+	if !lt.HasText("standup") || !lt.HasText("Transcript") {
+		t.Fatalf("Library does not show media and details: %q", lt.Texts())
 	}
-
-	// Closing it gives the room back.
-	if err := tt.Click("Close"); err != nil {
+	if _, ok := lt.Find("Import"); !ok {
+		t.Errorf("Library has no import button: %q", lt.Texts())
+	}
+	if err := lt.Click("Close"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Frame()
-	if a.wide || a.page != "" {
-		t.Errorf("closing left the page open on %q", a.page)
+	lt.Frame()
+	if !lt.HasText("Nothing chosen") || a.wide {
+		t.Errorf("closing details changed the main window or left details open")
 	}
 }
 
 // The look can be fixed to light or dark, or left to the desktop.
 func TestAppearanceChangesTheLook(t *testing.T) {
 	a, _ := newTestApp(t)
-	tt := ui.NewTester(a.view, WideWidth, WideHeight)
-
-	if err := tt.Click("Settings"); err != nil {
-		t.Fatal(err)
-	}
+	tt := ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
 	tt.Frame()
 	for _, look := range []string{"System", "Light", "Dark"} {
 		if !tt.HasText(look) {

@@ -54,26 +54,24 @@ reads the newest job of the media shown each frame while something runs
 event stream. `jobs.Changed` (`job:progress`) describes the same work for the
 roadmapped web views.
 
-## Layout of the window
+## Layout of the windows
 
-One window, one page at a time, with the library always on the left:
+The main window configures recording; Library and Settings are separate native
+windows with the same hidden, app-drawn title bar:
 
 | Part | Shows |
 |---|---|
-| Title bar | the app's name and the elapsed time while recording, in the strip the window controls sit in |
-| Sidebar | the sources as cards, the preview of the source, the audio switches, the search field, the library list, and Settings at the bottom |
-| Library row | name, when it was made, how long it runs, what has been made of it; a right-click menu of the tabs and Delete |
-| Recording page | the preview frame, the provisional live transcript, and Delete/Stop |
-| Session page | name and details, and the Transcript, Translate and Summary tabs |
-| Sources page | the windows to record, after a search |
-| Settings page | which model transcribes, and which provider translates and summarizes |
+| Main window | source cards, the preview, full-row speaker/microphone dropdowns, Start recording, and theme/Library/Settings icon buttons |
+| Library sidebar | search, import, and media rows with a right-click menu of the tabs and Delete |
+| Library recording page | the preview frame, provisional live transcript, and Delete/Stop |
+| Library session page | name and details, and the Transcript, Translate and Summary tabs |
+| Sources page | the windows to record, after a search, beside the main recording form |
+| Settings window | which model transcribes, and which provider translates and summarizes |
 
-The window is the sidebar alone (420 × 800) until a page is opened, which grows
-it to 1180 × 800 (`App.openPane`, `App.closePane`); closing a page gives the
-room back.
-
-Recording lives in the sidebar rather than on a page of its own, so a finished
-recording lands in the list it was started from, right above the form.
+The main window is 420 × 800 and grows only for the source picker
+(`App.openPane`, `App.closePane`). Library is 1180 × 800 and Settings is
+920 × 660. Starting a recording opens or focuses Library, whose right side
+shows the live capture and then the finished recording.
 
 ## Events (Go → app)
 

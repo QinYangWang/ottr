@@ -12,6 +12,6 @@ type audioStream struct {
 	stop     func()
 }
 
-func startAudioStream(loopback bool, sink *liveFeed) (*audioStream, error) {
+func startAudioStream(loopback bool, deviceID string, sink *liveFeed) (*audioStream, error) {
 	return nil, errors.New("audio capture is not implemented on this platform yet (Phase 6)")
 }

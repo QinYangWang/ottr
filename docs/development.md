@@ -114,5 +114,5 @@ the full run takes ~25 s.
    until the job's result shows.
 5. To look at a page while working on it, run
    `OTTR_PREVIEW=<folder> go test ./ui/native -run TestPreview`: it writes PNGs
-   of the sidebar, the session, the sources page and the settings page into
+   of the main form, Library, the sources page and the settings window into
    that folder. See `ui/native/preview_test.go`.

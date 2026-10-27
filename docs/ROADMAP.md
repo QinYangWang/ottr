@@ -89,8 +89,9 @@ What it still does not do:
 
 ## 4b. Area and camera capture — `open`
 
-Two cards of the source grid say "Not yet": `Area`, which would record part of
-the screen, and `Camera only`, which would record a camera with no screen.
+Two disabled cards of the source grid explain the gap in their tooltips:
+`Area`, which would record part of the screen, and `Camera only`, which would
+record a camera with no screen.
 
 `gdigrab` already takes `-offset_x`, `-offset_y` and `-video_size`, so an area
 is a rectangle and a selection gesture; a camera is an FFmpeg `dshow` input and

@@ -112,8 +112,9 @@ func TestPreview(t *testing.T) {
 		{ID: "window:设置", Kind: "window", Name: "设置", Detail: "980x700"},
 	}
 	a.pickSource()
-	a.sysAudio = true
-	a.micAudio = true
+	a.speakers = []capture.AudioDevice{{ID: "speakers", Name: "Speakers (Realtek Audio)"}}
+	a.microphones = []capture.AudioDevice{{ID: "microphone", Name: "Microphone (USB Audio)"}}
+	a.speaker, a.microphone = a.speakers[0], a.microphones[0]
 	a.reload()
 	a.selectMedia(id)
 	a.trLang = "en"
@@ -148,13 +149,14 @@ func TestPreview(t *testing.T) {
 	shot("11-preview-error")
 	a.previewErr = ""
 
+	mainTT := tt
 	a.wide = true
-	tt.SetSize(WideWidth, WideHeight)
+	tt = ui.NewTester(a.libraryView, WideWidth, WideHeight)
 	a.preview = ui.NewBitmap(deskPicture())
 	a.previewW, a.previewH = 640, 360
 	shot("01-session")
 
-	a.page = "settings"
+	tt = ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
 	a.settingsTab = 0
 	shot("02-settings-appearance")
 	a.settingsTab = 1
@@ -162,6 +164,7 @@ func TestPreview(t *testing.T) {
 	a.settingsTab = 2
 	a.loadedTrans = true
 	shot("04-settings-translation")
+	tt = mainTT
 	a.page = "sources"
 	a.pickKind, a.pickQuery = "window", ""
 	shot("05-sources")
@@ -171,7 +174,7 @@ func TestPreview(t *testing.T) {
 
 	// A window chosen, the microphone off, and the window narrower.
 	a.chooseSource("window:π - ottr")
-	a.micAudio = false
+	a.microphone = capture.AudioDevice{}
 	a.tab = 0
 	tt.SetSize(900, 620)
 	shot("07-narrow-window")
@@ -181,7 +184,7 @@ func TestPreview(t *testing.T) {
 	shot("08-dark")
 
 	tt.SetDark(false)
-	a.page = "settings"
+	tt = ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
 	a.settingsTab = 3
 	a.loadedSum = true
 	shot("09-settings-summary")
@@ -226,7 +229,7 @@ func TestPreviewRecording(t *testing.T) {
 	a.pickSource()
 	a.forget() // nothing chosen: the empty page
 
-	tt := ui.NewTester(a.view, 1180, 760)
+	tt := ui.NewTester(a.libraryView, 1180, 760)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	shot := func(name string) {
 		for i := 0; i < 6; i++ {

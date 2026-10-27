@@ -32,11 +32,19 @@ type Source struct {
 	Detail string `json:"detail,omitempty"` // size, when the platform knows it
 }
 
+// AudioDevice is an active speaker or microphone endpoint.
+type AudioDevice struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // Config selects what to record.
 type Config struct {
-	SourceID    string `json:"sourceId"`
-	SystemAudio bool   `json:"systemAudio"`
-	Mic         bool   `json:"mic"`
+	SourceID     string `json:"sourceId"`
+	SystemAudio  bool   `json:"systemAudio"`
+	Mic          bool   `json:"mic"`
+	SpeakerID    string `json:"speakerId,omitempty"`
+	MicrophoneID string `json:"microphoneId,omitempty"`
 }
 
 // State is the recording status, broadcast on StateChanged.
@@ -100,6 +108,11 @@ func (r *Recorder) Sources() ([]Source, error) {
 	return listSources()
 }
 
+// AudioDevices lists active speakers and microphones, default device first.
+func (r *Recorder) AudioDevices() (speakers, microphones []AudioDevice, err error) {
+	return audioDevices()
+}
+
 // State returns the current recording status.
 func (r *Recorder) State() State {
 	r.mu.Lock()
@@ -129,7 +142,7 @@ func (r *Recorder) Start(cfg Config) error {
 	sink := newLiveFeed(r.Live)
 	var audio []*audioStream
 	if cfg.SystemAudio {
-		as, err := startAudioStream(true, sink)
+		as, err := startAudioStream(true, cfg.SpeakerID, sink)
 		if err != nil {
 			stopAudio(audio)
 			return fmt.Errorf("system audio: %w", err)
@@ -137,7 +150,7 @@ func (r *Recorder) Start(cfg Config) error {
 		audio = append(audio, as)
 	}
 	if cfg.Mic {
-		as, err := startAudioStream(false, sink)
+		as, err := startAudioStream(false, cfg.MicrophoneID, sink)
 		if err != nil {
 			stopAudio(audio)
 			return fmt.Errorf("microphone: %w", err)

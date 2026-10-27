@@ -2,6 +2,8 @@ package capture
 
 import "strconv"
 
+const previewFilter = "fps=5,scale=960:-2"
+
 // audioSpec describes one PCM stream fed to ffmpeg over a pipe.
 type audioSpec struct {
 	rate     int
@@ -38,7 +40,7 @@ func buildArgs(video []string, audios []audioSpec, previewAddr, out string) []st
 	args = append(args, out)
 	if previewAddr != "" {
 		args = append(args,
-			"-map", "0:v", "-vf", "fps=5,scale=480:-2",
+			"-map", "0:v", "-vf", previewFilter,
 			"-f", "mpjpeg", "tcp://"+previewAddr)
 	}
 	return args

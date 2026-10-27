@@ -1,9 +1,9 @@
 # UI
 
-A single native window, drawn by MyGo's `ui` package: no HTML, no JavaScript,
-no webview and no frontend build step. The view is a Go function of the app's
-state (`ui/native.App.view`), rebuilt by MyGo after input and whenever the app
-asks for a frame.
+Native windows drawn by MyGo's `ui` package: no HTML, no JavaScript, no
+webview and no frontend build step. Each view is a Go function of the app's
+state (`ui/native.App.view` and `App.settingsView`), rebuilt by MyGo after
+input and whenever the app asks for a frame.
 
 ## Design constraints
 
@@ -11,17 +11,16 @@ asks for a frame.
 - The theme's spacing unit sizes everything, so controls stay in step.
 - Short English labels, and a caption above each group of controls, as a
   settings window has them.
-- A choice is a tile or a switch, not a bare dropdown: what can be recorded is
-  drawn as cards with an icon, a name and the size the platform reports, and a
-  sound is a row with a switch on its right.
+- Capture sources are cards with an icon and name; speakers and microphones
+  are dropdowns, including `Off`. Binary preferences use switches.
 - Icons are Lucide's ([lucide.dev](https://lucide.dev), ISC), embedded as SVG
   files under [ui/native/icons](../ui/native/icons) and drawn through `ui.Icon`
   in the color of the text around them: no icon font, no PNG. A button whose
   meaning is clear shows the icon alone and carries its name in its label and
   tooltip — the import button of the library header.
-- No controls without behavior. Anything unfinished renders an explicit reason
-  rather than a dead button: `Area` and `Camera only` are cards that say
-  "Not yet" and why in their tooltip.
+- No controls without behavior. Anything unfinished explains why rather than
+  acting as a dead button: the disabled `Area` and `Camera only` cards carry
+  the reason in their tooltips.
 - The window opens as the recording form alone, and grows when something is
   opened beside it.
 - No timeline/editor UI.
@@ -33,54 +32,36 @@ high) and keeps its controls — minimize, maximize, close — in that strip, at
 the top-right. The view draws the bar itself, so the app starts at the very top
 of the window.
 
-It opens at `CompactWidth` × `CompactHeight` (420 × 800) with the recording
-form alone, and grows to `WideWidth` × `WideHeight` (1180 × 800) when a
-recording, a source or the settings is opened beside it (`App.openPane`), and
-shrinks back when the page is closed (`App.closePane`).
+The main window opens at `CompactWidth` × `CompactHeight` (420 × 800) with
+the recording form, and grows only when the source picker opens beside it
+(`App.openPane`). Library (1180 × 800) and Settings (920 × 660) are separate
+native windows and do not resize or cover the main one.
 
 ```
-Ottr   ● 3:09 ──────────────────────────────────────  [– □ ×]
-──────────────────────┬──────────────────────────────────────
-Choose a capture source         │ Recorded screen 2026-10-24
-┌──────────┐┌──────────┐        │        [Play] [Show file] [Delete…] [Close]
-│   Full   ││ Display 1│        │ Transcript  Translate  Summary
-│  screen  ││ 1920x1080│        │ [Search]        SRT VTT TXT  Again
-└──────────┘└──────────┘        │ Spoken language [English ▾]
-┌──────────┐┌──────────┐        │ 0:00  Alright, let's start with …
-│ Display 2││  Window  │        │ 0:04  We ship the editor on …
-└──────────┘└──────────┘        │ 0:08  The one thing blocking us …
-┌──────────┐┌──────────┐        │ 0:12  I'll take that, and pair …
-│   Area   ││  Camera  │        │
-│  Not yet ││  Not yet │        │
-└──────────┘└──────────┘        │
-┌──────────────────────┐        │
-│     the picture      │        │
-└──────────────────────┘        │
-Choose your audio               │
-🔈 System audio          (on)   │
-🎤 Microphone          (off)   │
-[      Start recording      ]   │
-────────────────────────────────┤
-Library               [Import…] │
-[Search]                        │
-Translate + summarize    (off)  │
-Recorded screen 2026-10-24 3:00 │
-Bug triage               17:00  │
-────────────────────────────────┤
-⚙ Settings                      │
+Main: Ottr                         Library: Ottr
+Choose a capture source            ────────────────┬─────────────────────────
+┌──────────┐┌──────────┐          Library [Import] │ Recorded screen 2026-10-24
+│Full screen││ Display 1│         [Search]         │ Transcript Translate Summary
+└──────────┘└──────────┘          Recorded screen │ 0:00  Alright, let's start…
+┌──────────┐┌──────────┐          Bug triage      │ 0:04  We ship the editor…
+│ Display 2││  Window  │                           │
+└──────────┘└──────────┘                           │
+[🔈 System audio      Speakers ▾]
+[🎤 Microphone               Off ▾]
+[        Start recording        ]
+                         [Theme] [Library] [Settings]  (icons)
 ```
 
-The library is always on the left, so recording and the recordings it makes
-share one place. The form's upper part — the cards and the picture — scrolls in
-a short window; the audio, `Start recording` and the library stay in reach.
+The main form's upper part — the cards and picture — scrolls in a short
+window; audio, `Start recording`, Library and Settings stay in reach. Starting
+a recording opens or focuses Library.
 
 ## Title bar
 
 `ui/native.titleBar` draws the strip the window controls sit in, so nothing sits
 above the recording form:
 
-- `Ottr`, bold, over the library's column in a wide window and across the bar
-  when it is the form alone — it drags the window, as a title bar does
+- `Ottr`, bold, in every window — it drags the window, as a title bar does
   (`.DragWindow()`), including a double click that maximizes.
 - A red dot and the elapsed time while a recording runs, so the window says what
   it is doing on every page.
@@ -92,27 +73,27 @@ room they take at the left (macOS traffic lights) and right (Windows and Linux
 buttons), so that the name and the button keep clear of them. An error banner
 hangs below the bar rather than over it.
 
-## Library (sidebar)
+## Main window and Library
 
 - The sources are cards, two to a row and all the same height: `Full screen`
   and one `Display N` per monitor choose themselves, and `Window` — one card
   for every window, since there are too many for cards — shows the window
   chosen and opens the picker when clicked. The chosen card carries the accent
   border and its icon in the accent color.
-- `Area` and `Camera only` stand where Cap puts them, greyed out with "Not
-  yet": recording part of the screen and recording a camera are not implemented
-  (see ROADMAP), and the card's tooltip says so.
-- Under the cards, the `preview`: what the source looks like right now, so that
-  what will be recorded is visible before it is. Before the first frame it says
-  which source it is and its size, or why there is no picture.
+- `Area` and `Camera only` are disabled: recording part of the screen and
+  recording a camera are not implemented (see ROADMAP), and each card's
+  tooltip says so.
+- Under the cards, a 192-DIP-high, 960-pixel-wide preview shows the source
+  before recording. Before the first frame it says which source it is and its
+  size, or why there is no picture.
 - `Start recording` uses the source chosen above it. System audio and the
-  microphone are rows with a switch that takes each in or leaves it out, the
-  tooltip saying what the sound is. The button is disabled while a start or
-  stop is in flight, and a spinner says what is happening.
-- While recording, the form gives way to the elapsed time; `Delete…` and
-  `Stop and transcribe` are in the page header. Choosing another file is off
-  until it stops, but the library list is still there.
-- `Search` filters through `Library.List(search)` as it is typed, and Escape
+  microphone are dropdowns of active WASAPI endpoints, with the default
+  speaker selected and the microphone initially `Off`; `Off` leaves that
+  sound out. The button is disabled while a start or stop is in flight, and
+  a spinner says what is happening.
+- Starting a recording opens Library, whose right side shows the elapsed time,
+  live picture and transcript, with `Delete…` and `Stop and transcribe` above.
+- In Library, `Search` filters through `Library.List(search)` as it is typed, and Escape
   clears it. An empty library says so, and so does a search with no hits.
 - A row shows the name, when it was made, how long it runs, and what has been
   made of it (`recorded`, `transcribed`, `summary`), with a spinner while a
@@ -130,8 +111,9 @@ hangs below the bar rather than over it.
   record holds — left there by a removal that kept the file — with `Add back`
   (re-add them as recordings) and `Delete files…`, which asks in a modal that
   names the count and cannot be undone.
-- At the bottom of the column, `⚙ Settings` opens the settings page, pinned
-  there so that it is in reach however the list scrolls.
+- At the bottom-right of the main window, borderless icon buttons toggle the
+  global light/dark theme and open or focus Library and Settings. Their names
+  are exposed as labels and tooltips rather than visible text.
 
 ## Sources page
 
@@ -139,18 +121,20 @@ Choosing a window happens on a page of its own, because the desktop has as
 many open as it has. `Back` returns, the search field narrows the list by
 title, and each row shows the window's icon, its title and the size Windows
 reports for it (`1560x992`), with a check on the one chosen. A click chooses it
-and returns to the library.
+and returns to the recording form.
 
 The list is read again when the page opens — `Recorder.Sources()` — so a window
 opened since the app started can be recorded. A window that reports no sane
 rectangle (minimized, or in another session) simply carries no size.
 
-## Settings page
+## Settings window
 
-`⚙ Settings` at the bottom of the library opens a page with one tab per thing
-that can be configured:
+`Settings` at the bottom of the main window opens a separate 920 × 660 native
+window, or focuses it if it is already open. Its left sidebar has one entry
+per thing that can be configured; the chosen section fills the scrollable
+area on the right:
 
-| Tab | Holds |
+| Section | Holds |
 |---|---|
 | Appearance | three cards — `System`, `Light`, `Dark`, each drawn as a miniature window in that look — that pick the appearance at once and remember it (`settings.ui_theme`) |
 | Transcription | the models found, with size or the reason a folder is unusable, `In use` beside the one transcription uses and `Use` on the others; `Open folder`, `Re-check`, and where the sherpa-onnx binary was found; then `FFmpeg and ffprobe` with the path they were found at, or why not, and `Choose…` to point at `ffmpeg.exe` when Ottr cannot find it itself |
@@ -160,10 +144,13 @@ that can be configured:
 Each row is drawn as a settings window draws them: the name and what it does
 on the left, the control on the right. `Save` stores a section through
 `translate.SaveSettings` / `summary.SaveSettings`; the model choice is stored
-by `models.Manager.Select` as soon as it is clicked. `Close` gives the window
-back to the recording form. See [models.md](models.md).
+by `models.Manager.Select` as soon as it is clicked. The native window's close
+button closes Settings alone; the main window keeps its size and page. See
+[models.md](models.md).
 
 ## Recording page
+
+Shown on the right of Library while recording.
 
 - The latest preview frame from `Recorder.Preview()`, decoded into a bitmap
   that is updated in place as frames come.
@@ -179,7 +166,7 @@ back to the recording form. See [models.md](models.md).
 
 The header shows the name, the source, the duration, the creation time and the
 resolution, with `Play` (the system's player), `Show file`, `Delete…` and
-`Close`, which gives the window back to the recording form.
+`Close`, which closes the details and leaves the media list open.
 
 ### Transcript
 

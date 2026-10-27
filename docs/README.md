@@ -20,7 +20,7 @@ and a local video knowledge base.
 | [summary.md](summary.md) | Remote AI summarization, structured output, Markdown |
 | [storage.md](storage.md) | SQLite schema, migrations, cascade behavior |
 | [models.md](models.md) | ASR model discovery and validation |
-| [ui.md](ui.md) | The window: library, recording and session pages |
+| [ui.md](ui.md) | The recording, Library and Settings windows |
 | [development.md](development.md) | Running, testing, environment requirements |
 | [ROADMAP.md](ROADMAP.md) | What is not implemented yet |
 

@@ -39,4 +39,11 @@ var (
 	iconCamera = loadIcon("video")
 	// import: adding a file to the library.
 	iconImport = loadIcon("import")
+	// library and sun/moon: the footer windows and theme toggle.
+	iconLibrary = loadIcon("library")
+	iconSun     = loadIcon("sun")
+	iconMoon    = loadIcon("moon")
+	// languages and file-text: the Settings window's last two sections.
+	iconLanguages = loadIcon("languages")
+	iconSummary   = loadIcon("file-text")
 )

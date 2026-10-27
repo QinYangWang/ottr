@@ -1,7 +1,5 @@
-// Package native is Ottr's window: the library of recordings and imported
-// files on the left, and beside it what the app makes of the one chosen —
-// its transcript, its translation and its summary — or the recording in
-// progress, live. It is drawn by MyGo's own toolkit: no web page, no HTML.
+// Package native draws Ottr's recording, Library and Settings windows with
+// MyGo's own toolkit: no web page, no HTML.
 package native
 
 import (
@@ -34,10 +32,11 @@ type App struct {
 	Preview *capture.Previewer // the picture of the source, before recording
 	Prefs   *settings.Service  // what the window itself remembers
 
-	win *mygo.Window
+	win         *mygo.Window
+	libraryWin  *mygo.Window
+	settingsWin *mygo.Window
 
-	// wide is whether the window shows the page beside the library. It starts
-	// narrow, with the recording form alone, and opens with what was chosen.
+	// wide is whether the main window shows the source picker beside the form.
 	wide  bool
 	theme string // system | light | dark
 
@@ -49,13 +48,15 @@ type App struct {
 	err   string
 
 	// The recording pane.
-	sources    []capture.Source
-	sourceID   string
-	source     string // the label of sourceID
-	sysAudio   bool
-	micAudio   bool
-	busy       bool
-	previewErr string
+	sources     []capture.Source
+	sourceID    string
+	source      string // the label of sourceID
+	speakers    []capture.AudioDevice
+	microphones []capture.AudioDevice
+	speaker     capture.AudioDevice // zero ID records no system audio
+	microphone  capture.AudioDevice // zero ID records no microphone
+	busy        bool
+	previewErr  string
 
 	// What importing does beyond probing: transcription always, translation
 	// into trLang and a summary only when asked for.
@@ -90,26 +91,25 @@ type App struct {
 	job jobs.Job
 
 	// The page beside the library: "" is the session of the media shown,
-	// "sources" the picker for a kind of source, "settings" what can be
-	// configured.
+	// "sources" the picker for a kind of source.
 	page string
 
 	// The source picker.
 	pickKind  string
 	pickQuery string
 
-	// The Settings page and what it shows.
-	settingsTab int
-	ffmpeg      string // the program found, or ""
-	ffmpegNote  string // where it is, or why it is not
-	modelList   []models.Info
-	modelInUse  string
-	modelBin    string
-	modelBinErr string
+	// The Settings window and what it shows.
+	settingsTab  int
+	ffmpeg       string // the program found, or ""
+	ffmpegNote   string // where it is, or why it is not
+	modelList    []models.Info
+	modelInUse   string
+	modelBin     string
+	modelBinErr  string
 	modelLoaded  bool
 	modelLoading bool
 
-	// Provider settings, read when the Settings page opens them.
+	// Provider settings, read when the Settings window opens them.
 	transCfg    translate.Settings
 	loadedTrans bool
 	sumCfg      summary.Settings
@@ -119,7 +119,7 @@ type App struct {
 	delID      int64
 
 	// orphans are files in the recordings folder that no record holds.
-	orphans       []string
+	orphans        []string
 	confirmOrphans bool
 
 	// queued functions run on the next frame, for work done elsewhere: the
@@ -141,13 +141,13 @@ func View(a *App) *ui.Content { return ui.View(a.view) }
 func (a *App) Begin(win *mygo.Window) {
 	a.win = win
 	a.trLang = "en"
-	a.sysAudio = true
 	if a.Prefs != nil {
 		if source := a.Prefs.Get(settings.Theme); source != "" {
 			a.theme = source
 		}
 	}
 	a.reload()
+	a.loadAudioDevices()
 	if srcs, err := a.Rec.Sources(); err != nil {
 		a.setError(err)
 	} else {
@@ -176,7 +176,7 @@ const (
 	WideHeight    = 800
 )
 
-// openPane shows the page beside the library, growing the window for it.
+// openPane shows the source picker beside the recording form.
 func (a *App) openPane() {
 	if a.wide {
 		return
@@ -185,7 +185,7 @@ func (a *App) openPane() {
 	a.resize()
 }
 
-// closePane gives that room back: the window returns to the recording form.
+// closePane returns the main window to the recording form alone.
 func (a *App) closePane() {
 	if !a.wide {
 		return
@@ -224,31 +224,16 @@ func (a *App) view(c *ui.Context) {
 		a.titleBar(c, t)
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			a.sidebar(c, t)
-			if !a.wide {
-				return // the recording form alone, until something is opened
-			}
-			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-				switch {
-				case a.recording:
-					a.recorderPage(c, t)
-				case a.page == "sources":
+			if a.wide && a.page == "sources" {
+				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 					a.sourcesPage(c, t)
-				case a.page == "settings":
-					a.settingsPage(c, t)
-				default:
-					if m, ok := a.current(); ok {
-						a.sessionPage(c, t, m)
-					} else {
-						a.emptyPage(c, t)
-					}
-				}
-			})
+				})
+			}
 		})
 	})
 	if a.err != "" {
 		a.banner(c, t)
 	}
-	a.dialogs(c, t)
 }
 
 // titleBar is the window's own title bar, in the strip the window controls
@@ -287,6 +272,18 @@ func (a *App) titleBar(c *ui.Context, t *ui.Theme) {
 	})
 }
 
+// windowTitleBar gives secondary windows the same immersive title strip.
+func (a *App) windowTitleBar(c *ui.Context, t *ui.Theme, title string) {
+	bar := c.TitleBar()
+	height := max(bar.Height, float32(titleBarHeight))
+	ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).
+		Padding(0, bar.Right+t.Space(2), 0, t.Space(4)+bar.Left).
+		Background(t.Surface).DragWindow().Children(func() {
+		ui.Text(c, title).FontSize(t.FontSize + 3).Bold()
+		a.recordingPill(c, t)
+	})
+}
+
 // recordingPill says a recording runs, and for how long.
 func (a *App) recordingPill(c *ui.Context, t *ui.Theme) {
 	if !a.recording {
@@ -304,7 +301,14 @@ func (a *App) recordingPill(c *ui.Context, t *ui.Theme) {
 // there is one, else on the next frame the view builds.
 func (a *App) update(fn func()) {
 	if a.win != nil {
-		a.win.Update(fn)
+		a.win.Update(func() {
+			fn()
+			for _, win := range []*mygo.Window{a.libraryWin, a.settingsWin} {
+				if win != nil && !win.IsDestroyed() {
+					win.Invalidate()
+				}
+			}
+		})
 		return
 	}
 	a.queueMu.Lock()
