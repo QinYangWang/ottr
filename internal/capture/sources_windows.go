@@ -9,7 +9,10 @@ import (
 	"unsafe"
 )
 
-var user32 = syscall.NewLazyDLL("user32.dll")
+var (
+	user32 = syscall.NewLazyDLL("user32.dll")
+	dwmapi = syscall.NewLazyDLL("dwmapi.dll")
+)
 
 type rect struct {
 	Left, Top, Right, Bottom int32
@@ -124,12 +127,16 @@ func resolveSource(id string) ([]string, error) {
 // pointer in or out. The preview leaves it out: it refreshes slowly, so a drawn
 // pointer would trail the real one.
 //
-// A screen or display is taken through Desktop Duplication (ddagrab) when it is
-// available: it reads what the compositor already drew instead of forcing a
-// fresh GDI copy, so it costs far less and does not disturb the desktop. Windows
-// cannot lend the desktop out while it is on a secure or disconnected desktop,
-// so anything that is not a plain screen is left to gdigrab, which still has the
-// only way to capture a single window.
+// Everything goes through Desktop Duplication (ddagrab) when the session allows
+// it: it reads what the compositor already drew instead of forcing a fresh GDI
+// copy. A window is a crop of the desktop at the window's rectangle, because
+// Desktop Duplication has no window mode.
+//
+// The fallback is gdigrab, which is only right for the desktop and a display:
+// its title= capture reads the window's own surface through GDI, and a window
+// drawn by the compositor — anything Electron, Chromium or a modern editor —
+// comes back a pure black rectangle. Such a window is reported as an error
+// rather than recorded blank.
 //
 // draw_mouse belongs to the input it describes — a gdigrab option, or a
 // ddagrab one inside the lavfi graph — so each path sets it itself.
@@ -169,7 +176,14 @@ func resolveSourceFPS(id string, fps int, mouse bool) ([]string, error) {
 		if title == "" {
 			return nil, fmt.Errorf("empty window title")
 		}
-		return append(base, "-i", "title="+title), nil
+		if ddaAvailable() {
+			x, y, w, h, err := windowFrameRect(title)
+			if err != nil {
+				return nil, err
+			}
+			return ddaArgs(0, x, y, w, h, fps, mouse), nil
+		}
+		return nil, fmt.Errorf("a single window needs Desktop Duplication, which Windows is not lending out right now")
 	}
 	return nil, fmt.Errorf("unknown source %q", id)
 }
@@ -193,4 +207,30 @@ func ddaArgs(output, x, y, w, h, fps int, mouse bool) []string {
 		"-thread_queue_size", "512",
 		"-f", "lavfi", "-i", grab + ",hwdownload,format=bgra",
 	}
+}
+
+// windowFrameRect returns the window's visible frame in the physical pixels
+// Desktop Duplication reports, which is not what GetWindowRect answers: that is
+// in DIPs, and at 200% scaling a 2882-pixel window reads back as 1441.
+// DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS) is what the compositor
+// itself considers the window, shadows aside.
+func windowFrameRect(title string) (x, y, w, h int, err error) {
+	hwnd, _, _ := user32.NewProc("FindWindowW").Call(0, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))))
+	if hwnd == 0 {
+		return 0, 0, 0, 0, fmt.Errorf("no window titled %q", title)
+	}
+	var r rect
+	hr, _, _ := dwmapi.NewProc("DwmGetWindowAttribute").Call(hwnd, 9, /* DWMWA_EXTENDED_FRAME_BOUNDS */
+		uintptr(unsafe.Pointer(&r)), unsafe.Sizeof(r))
+	if hr != 0 {
+		if ok, _, _ := user32.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&r))); ok == 0 {
+			return 0, 0, 0, 0, fmt.Errorf("no bounds for %q", title)
+		}
+	}
+	w, h = int(r.Right-r.Left), int(r.Bottom-r.Top)
+	if w <= 0 || h <= 0 {
+		return 0, 0, 0, 0, fmt.Errorf("window %q has no visible frame", title)
+	}
+	// yuv420p needs even dimensions, and the encoders reject odd ones.
+	return int(r.Left), int(r.Top), w &^ 1, h &^ 1, nil
 }

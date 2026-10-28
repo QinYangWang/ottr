@@ -27,8 +27,8 @@ requires, and keeps FFmpeg from needing a build with Windows audio demuxers.
 ## Pipeline
 
 ```
-gdigrab ──────────────┐
-                      ├─► ffmpeg ─► .mp4 (libx264 + aac)
+ddagrab (else       ──┐
+ gdigrab)             ├─► ffmpeg ─► .mp4 (h264_nvenc/qsv/amf, else libx264, + aac)
 WASAPI loopback ──pipe┘         └► mpjpeg over TCP ─► preview hub ─► window bitmap
 WASAPI microphone ─pipe┘
 WASAPI (any) ─────────┴─► liveFeed ─► asr live sink ─► live subtitles
@@ -42,14 +42,28 @@ WASAPI (any) ─────────┴─► liveFeed ─► asr live sink 
 |---|---|---|
 | `screen` | `screen` | `ddagrab` (Desktop Duplication), or `gdigrab -i desktop` where that is refused |
 | `display` | `display:N` | the same, offset and sized from `EnumDisplayMonitors` |
-| `window` | `window:<title>` | `gdigrab -i title=<title>`; duplication has no window mode |
+| `window` | `window:<title>` | a crop of the duplicated desktop at the window's frame, found through `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` |
 
 Desktop Duplication is preferred because it reads what the compositor already
 drew instead of forcing a fresh GDI copy. Windows refuses it while the session
 sits on a secure or disconnected desktop (a locked screen, fast user switching,
 a dropped remote session), so `ddaAvailable` probes it once per run with a
-single frame and falls back to `gdigrab` when the answer is no. `gdigrab` also
-remains the only way to capture a single window.
+single frame.
+
+Windows have no duplication mode, so a window is a crop of the desktop at the
+window's own rectangle. That rectangle comes from DWM, not `GetWindowRect`: the
+latter answers in DIPs — a 2882-pixel window read back as 1441 at 200% scaling —
+while the duplication frame is in physical pixels.
+
+`gdigrab`'s `title=` capture is **not** used for windows: it reads the window's
+own surface through GDI, and a window drawn by the compositor — anything
+Chromium, Electron or a modern editor — comes back a pure black rectangle.
+Measured on five open windows, four were entirely black through `title=` and
+all five were correct through duplication. A window is therefore reported as an
+error when duplication is unavailable, rather than recorded blank.
+
+Because a window is a crop of the desktop, anything on top of it is recorded
+too: a window that is covered is captured covered.
 
 Monitor rectangles come from `EnumDisplayMonitors`; window titles and sizes from
 `EnumWindows` and `GetWindowRect`, filtered to visible windows with a non-empty
@@ -58,9 +72,8 @@ more than one monitor exists. Both carry a `Detail` — the rectangle's size, as
 `1920x1080` — which the window dropdown shows; a window that reports no sane
 rectangle (minimized, or in another session) carries none.
 
-Window capture matches by title. If two windows share a title, or the title
-contains characters FFmpeg's `title=` parser mishandles, capture fails — this is
-a known limitation, see ROADMAP.
+Window capture matches by title. If two windows share a title the first one
+wins.
 
 ## Preview before recording
 
@@ -189,6 +202,16 @@ Files are written to `<userData>/recordings/Recording YYYY-MM-DD HH.MM.SS.mp4`
 with `libx264 -preset veryfast -crf 23 -pix_fmt yuv420p` and `aac 160k` when
 audio is present. `yuv420p` keeps the file playable everywhere, the system's
 own player included.
+
+### Encoder
+
+The encoder is probed once per run (`encoder_windows.go`): `h264_nvenc`,
+then `h264_qsv`, then `h264_amf`, each opened on a tiny test frame, and
+`libx264` when none opens. A build offering a hardware encoder is no promise it
+works — `h264_nvenc` fails without `nvcuda.dll`.
+
+Measured on a 4K desktop, 8 seconds of 30 fps capture: `libx264` used 14.08 CPU
+seconds, `h264_qsv` 9.38 — 33% less, and a slightly smaller file.
 
 The file is a **fragmented mp4** (`-g 30 -movflags
 +frag_keyframe+empty_moov+default_base_moof`): each keyframe's fragment is

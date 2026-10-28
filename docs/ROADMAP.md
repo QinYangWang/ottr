@@ -213,13 +213,17 @@ What it still does not do:
 
 `gdigrab` is GDI-based: it cannot capture hardware-accelerated/exclusive
 fullscreen content (some games, DRM surfaces), and its frame pacing is weaker
-than Desktop Duplication. `Windows.Graphics.Capture` (WGC) + DXGI Desktop
-Duplication is the stated target. This needs WinRT interop or a small native
-bridge; it is intentionally deferred because `gdigrab` gives a working, driver-free
-baseline today.
+than Desktop Duplication.
+
+Screen, display and window capture now go through FFmpeg's `ddagrab`, which is
+Desktop Duplication, and `gdigrab` remains only the fallback for a desktop or
+display when the session will not lend one out. What is still missing is
+talking to DXGI directly: `Windows.Graphics.Capture` would give per-window
+frames without cropping the desktop, so a covered window would record
+uncovered. That needs WinRT interop or a small native bridge.
 
 Related smaller gaps:
-- Window capture matches by title; duplicate titles or unusual characters fail.
+- A window is a crop of the desktop, so anything covering it is recorded too.
 - No 5-minute end-to-end recording has been manually verified (automated tests
   record ~5–11 s).
 

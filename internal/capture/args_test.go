@@ -44,6 +44,26 @@ func TestBuildArgsWritesAFragmentedFile(t *testing.T) {
 	}
 }
 
+// Whatever encoder was probed, the arguments carry its name and its rate
+// control, and the file still asks for a pixel format every decoder reads.
+func TestBuildArgsUseTheProbedEncoder(t *testing.T) {
+	enc := videoEncoder()
+	args := buildArgs([]string{"-f", "gdigrab", "-i", "desktop"}, nil, "", "out.mp4")
+	i := slices.Index(args, "-c:v")
+	if i < 0 || i+1 >= len(args) {
+		t.Fatalf("no video codec: %v", args)
+	}
+	if args[i+1] != enc.name {
+		t.Errorf("codec %q, probed %q", args[i+1], enc.name)
+	}
+	if !slices.Contains(args, "yuv420p") {
+		t.Error("no pixel format")
+	}
+	if len(enc.opts) > 0 && !slices.Contains(args, enc.opts[0]) {
+		t.Errorf("encoder options %v missing: %v", enc.opts, args)
+	}
+}
+
 func TestBuildArgsOneAudio(t *testing.T) {
 	args := buildArgs([]string{"-f", "gdigrab", "-i", "desktop"},
 		[]audioSpec{{rate: 48000, channels: 2, pipe: `\\.\pipe\p0`}}, "", "out.mp4")

@@ -33,7 +33,10 @@ func buildArgs(video []string, audios []audioSpec, previewAddr, out string) []st
 			"[1:a]aresample=48000:first_pts=0[a1];[2:a]aresample=48000:first_pts=0[a2];[a1][a2]amix=inputs=2:normalize=0[a]",
 			"-map", "0:v", "-map", "[a]")
 	}
-	args = append(args, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p")
+	enc := videoEncoder()
+	args = append(args, "-c:v", enc.name)
+	args = append(args, enc.opts...)
+	args = append(args, "-pix_fmt", "yuv420p")
 	if len(audios) > 0 {
 		args = append(args, "-c:a", "aac", "-b:a", "160k")
 	}
