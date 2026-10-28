@@ -46,7 +46,6 @@ func newTestApp(t *testing.T) (*App, int64) {
 		Lib: lib,
 		Rec: &capture.Recorder{Lib: lib, Dir: t.TempDir()},
 		ASR: asrSvc, Trans: trSvc, Sum: sumSvc, Jobs: js, MM: mm,
-		wide: true,
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := db.Exec(`INSERT INTO media (name, source, path, duration_ms, has_audio, has_video, created_at, transcript_status)
@@ -399,40 +398,25 @@ func TestSourceCardsAndPicker(t *testing.T) {
 		t.Errorf("the dropdown chose %q", a.speaker.ID)
 	}
 
-	// The Window card stands for all windows and opens the picker.
+	// A window is chosen in the dropdown under the cards.
 	if err := tt.Click("Window"); err != nil {
 		t.Fatal(err)
 	}
-	if a.page != "sources" {
-		t.Fatalf("the Window card went to page %q", a.page)
-	}
-
-	// The picker lists them, the search narrows them, and a click chooses one.
-	a.page, a.pickKind, a.pickQuery = "sources", "window", ""
-	a.sources = []capture.Source{
-		{ID: "window:Alpha — Editor", Kind: "window", Name: "Alpha — Editor", Detail: "1560x992"},
-		{ID: "window:Beta", Kind: "window", Name: "Beta", Detail: "800x600"},
-	}
 	tt.Frame()
-	if !tt.HasText("Alpha — Editor") || !tt.HasText("1560x992") {
+	if !tt.HasText("Alpha — Editor") || !tt.HasText("Beta") {
 		t.Fatalf("the windows are not listed: %q", tt.Texts())
-	}
-	a.pickQuery = "beta"
-	tt.Frame()
-	if tt.HasText("Alpha — Editor") || !tt.HasText("Beta") {
-		t.Fatalf("the search did not narrow the list: %q", tt.Texts())
 	}
 	if err := tt.Click("Beta"); err != nil {
 		t.Fatal(err)
 	}
-	if a.sourceID != "window:Beta" || a.page != "" {
-		t.Errorf("choosing Beta left source %q on page %q", a.sourceID, a.page)
+	if a.sourceID != "window:Beta" {
+		t.Errorf("the dropdown chose source %q", a.sourceID)
 	}
 
-	// Back on the sidebar, the card says what is recorded.
+	// Back on the form, the dropdown says what is recorded.
 	tt.Frame()
 	if !tt.HasText("Beta") {
-		t.Errorf("the card does not say what is chosen: %q", tt.Texts())
+		t.Errorf("the dropdown does not say what is chosen: %q", tt.Texts())
 	}
 }
 
@@ -476,7 +460,6 @@ func TestSecondaryWindowsUseImmersiveTitleBars(t *testing.T) {
 // separate Library view rather than expanding beside it.
 func TestMainWindowKeepsLibrarySeparate(t *testing.T) {
 	a, _ := newTestApp(t)
-	a.wide = false
 	a.sources = []capture.Source{{ID: "screen", Kind: "screen", Name: "Full screen"}}
 	a.pickSource()
 
@@ -515,7 +498,7 @@ func TestMainWindowKeepsLibrarySeparate(t *testing.T) {
 		t.Fatal(err)
 	}
 	lt.Frame()
-	if !lt.HasText("Nothing chosen") || a.wide {
+	if !lt.HasText("Nothing chosen") {
 		t.Errorf("closing details changed the main window or left details open")
 	}
 }

@@ -36,8 +36,6 @@ type App struct {
 	libraryWin  *mygo.Window
 	settingsWin *mygo.Window
 
-	// wide is whether the main window shows the source picker beside the form.
-	wide  bool
 	theme string // system | light | dark
 
 	// The library.
@@ -64,15 +62,14 @@ type App struct {
 	discard     bool
 
 	// The recording in progress, mirrored from the recorder each frame.
-	recording  bool
-	startedAt  time.Time
-	liveText   string
-	late       []liveLine
-	preview    *ui.Bitmap
-	previewW   int
-	previewH   int
-	previewSeq uint64 // the previewer frame decoded last
-	previewAt  time.Time
+	recording bool
+	startedAt time.Time
+	liveText  string
+	late      []liveLine
+	preview   *ui.Bitmap
+	previewW  int
+	previewH  int
+	previewAt time.Time
 
 	// The session shown, and its three tabs.
 	transcript   asr.Transcript
@@ -91,13 +88,9 @@ type App struct {
 	// has come, and what became of it.
 	job jobs.Job
 
-	// The page beside the library: "" is the session of the media shown,
-	// "sources" the picker for a kind of source.
+	// The page shown in the main window is only ever the recording form now:
+	// media lives in the Library window and sources are chosen in the form.
 	page string
-
-	// The source picker.
-	pickKind  string
-	pickQuery string
 
 	// The Settings window and what it shows.
 	settingsTab  int
@@ -168,8 +161,8 @@ func (a *App) showPreview() {
 	a.Preview.Show(a.sourceID)
 }
 
-// The room the window takes: the recording form alone, and beside it the page
-// of what was chosen.
+// The room the window takes. The main window keeps the recording form alone:
+// media and settings have windows of their own.
 const (
 	CompactWidth  = 420
 	CompactHeight = 800
@@ -177,30 +170,8 @@ const (
 	WideHeight    = 800
 )
 
-// openPane shows the source picker beside the recording form.
-func (a *App) openPane() {
-	if a.wide {
-		return
-	}
-	a.wide = true
-	a.resize()
-}
-
-// closePane returns the main window to the recording form alone.
-func (a *App) closePane() {
-	if !a.wide {
-		return
-	}
-	a.wide, a.page = false, ""
-	a.resize()
-}
-
 func (a *App) resize() {
 	if a.win == nil {
-		return
-	}
-	if a.wide {
-		a.win.SetSize(WideWidth, WideHeight)
 		return
 	}
 	a.win.SetSize(CompactWidth, CompactHeight)
@@ -225,11 +196,6 @@ func (a *App) view(c *ui.Context) {
 		a.titleBar(c, t)
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			a.sidebar(c, t)
-			if a.wide && a.page == "sources" {
-				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-					a.sourcesPage(c, t)
-				})
-			}
 		})
 	})
 	if a.err != "" {
@@ -238,38 +204,21 @@ func (a *App) view(c *ui.Context) {
 }
 
 // titleBar is the window's own title bar, in the strip the window controls
-// sit in: the app's name and what it is doing over the library's column, and
-// drag room everywhere else. The controls themselves are the system's, at the
-// far right, so the bar keeps their room free (ui.TitleBar).
+// sit in: the app's name and what it is doing, and drag room everywhere else.
+// The controls themselves are the system's, at the far right, so the bar keeps
+// their room free (ui.TitleBar).
 func (a *App) titleBar(c *ui.Context, t *ui.Theme) {
 	bar := c.TitleBar()
 	height := max(bar.Height, float32(titleBarHeight))
 
-	if !a.wide {
-		// The form alone: the whole bar drags the window, its right end left
-		// clear for the controls.
-		row := ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).
-			Padding(0, bar.Right+t.Space(2), 0, t.Space(4)+bar.Left).
-			Background(t.Surface).DragWindow()
-		row.Children(func() {
-			ui.Text(c, "Ottr").FontSize(t.FontSize + 3).Bold()
-			a.recordingPill(c, t)
-		})
-		return
-	}
-
-	// Beside a page: the name sits over the library's column, and the rest is
-	// drag room up to the controls.
-	ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).
-		Padding(0, bar.Right, 0, 0).Background(t.Surface).Children(func() {
-		name := ui.Row(c).Grow(1).MinWidth(0).FillHeight().AlignItems(ui.Center).
-			Gap(t.Space(2.5)).Padding(0, t.Space(2), 0, t.Space(4)+bar.Left).DragWindow()
-		name.Width(sidebarWidth - bar.Left).Shrink(0)
-		name.Children(func() {
-			ui.Text(c, "Ottr").FontSize(t.FontSize + 3).Bold()
-			a.recordingPill(c, t)
-		})
-		ui.Row(c).Grow(1).FillHeight().DragWindow() // drag room beside the controls
+	// The whole bar drags the window, its right end left clear for the
+	// controls.
+	row := ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).
+		Padding(0, bar.Right+t.Space(2), 0, t.Space(4)+bar.Left).
+		Background(t.Surface).DragWindow()
+	row.Children(func() {
+		ui.Text(c, "Ottr").FontSize(t.FontSize + 3).Bold()
+		a.recordingPill(c, t)
 	})
 }
 
@@ -297,10 +246,6 @@ func (a *App) recordingPill(c *ui.Context, t *ui.Theme) {
 			FontSize(t.FontSize - 1).TextColor(t.TextMuted).FontFeatures("tnum")
 	})
 }
-
-// previewRefresh is how often the idle preview takes a new still frame. It is
-// slow on purpose: the desktop is grabbed for each one.
-const previewRefresh = 3 * time.Second
 
 // update runs fn in a frame, from any goroutine: through the window when
 // there is one, else on the next frame the view builds.
@@ -351,23 +296,16 @@ func (a *App) mirror(c *ui.Context) {
 		a.recording, a.startedAt, a.late, a.preview = true, st.StartedAt, nil, nil
 	}
 	if !a.recording {
-		// The source is shown as a still picture, so that what will be
-		// recorded is visible before it is. Continuous grabbing keeps the
-		// desktop compositor busy enough to make the pointer stutter, so the
-		// previewer takes one frame at a time, refreshed every few seconds.
+		// The source is live, so that what will be recorded is visible before
+		// it is. The previewer captures a handful of frames a second itself,
+		// and draws no pointer of its own.
 		if a.Preview != nil {
 			a.previewErr = ""
 			if err := a.Preview.Err(); err != nil {
 				a.previewErr = err.Error()
 			}
 			a.grabPreview()
-			switch {
-			case a.Preview.Pending():
-				c.After(200 * time.Millisecond) // the still is on its way
-			case a.preview != nil && time.Since(a.previewAt) > previewRefresh:
-				a.showPreview()
-				c.After(200 * time.Millisecond)
-			}
+			c.After(200 * time.Millisecond)
 		}
 		return
 	}

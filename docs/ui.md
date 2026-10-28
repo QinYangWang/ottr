@@ -33,8 +33,7 @@ the top-right. The view draws the bar itself, so the app starts at the very top
 of the window.
 
 The main window opens at `CompactWidth` × `CompactHeight` (420 × 800) with
-the recording form, and grows only when the source picker opens beside it
-(`App.openPane`). Library (1180 × 800) and Settings (920 × 660) are separate
+the recording form. Library (1180 × 800) and Settings (920 × 660) are separate
 native windows and do not resize or cover the main one.
 
 ```
@@ -76,17 +75,18 @@ hangs below the bar rather than over it.
 ## Main window and Library
 
 - The sources are cards, two to a row and all the same height: `Full screen`
-  and one `Display N` per monitor choose themselves, and `Window` — one card
-  for every window, since there are too many for cards — shows the window
-  chosen and opens the picker when clicked. The chosen card carries the accent
-  border and its icon in the accent color.
+  and one `Display N` per monitor choose themselves. The chosen card carries
+  the accent border and its icon in the accent color.
+- Under the cards, a `Window` dropdown lists the open windows so one can be
+  recorded without leaving the form. The list is read again each time it opens,
+  since windows come and go. The dropdown shows the window chosen, or the
+  first one when none is yet.
 - `Area` and `Camera only` are disabled: recording part of the screen and
   recording a camera are not implemented (see ROADMAP), and each card's
   tooltip says so.
-- Under the cards, a 192-DIP-high, 960-pixel-wide preview shows the source
-  before recording. It is a still frame, refreshed every three seconds: grabbing
-  the desktop continuously made the system pointer stutter. Before the first
-  frame it says which source it is and its size, or why there is no picture.
+- Under them, a 192-DIP-high, 960-pixel-wide preview shows the source before
+  recording, refreshing five times a second. Before the first frame it says
+  which source it is and its size, or why there is no picture.
 - `Start recording` uses the source chosen above it. System audio and the
   microphone are dropdowns of active WASAPI endpoints, with the default
   speaker selected and the microphone initially `Off`; `Off` leaves that
@@ -115,18 +115,6 @@ hangs below the bar rather than over it.
 - At the bottom-right of the main window, borderless icon buttons toggle the
   global light/dark theme and open or focus Library and Settings. Their names
   are exposed as labels and tooltips rather than visible text.
-
-## Sources page
-
-Choosing a window happens on a page of its own, because the desktop has as
-many open as it has. `Back` returns, the search field narrows the list by
-title, and each row shows the window's icon, its title and the size Windows
-reports for it (`1560x992`), with a check on the one chosen. A click chooses it
-and returns to the recording form.
-
-The list is read again when the page opens — `Recorder.Sources()` — so a window
-opened since the app started can be recorded. A window that reports no sane
-rectangle (minimized, or in another session) simply carries no size.
 
 ## Settings window
 

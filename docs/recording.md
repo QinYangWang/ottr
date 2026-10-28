@@ -40,16 +40,23 @@ WASAPI (any) ─────────┴─► liveFeed ─► asr live sink 
 
 | Kind | ID format | How it is captured |
 |---|---|---|
-| `screen` | `screen` | `gdigrab -i desktop` (whole virtual desktop) |
-| `display` | `display:N` | `gdigrab` with `-offset_x/-offset_y/-video_size` from `EnumDisplayMonitors` |
-| `window` | `window:<title>` | `gdigrab -i title=<title>` |
+| `screen` | `screen` | `ddagrab` (Desktop Duplication), or `gdigrab -i desktop` where that is refused |
+| `display` | `display:N` | the same, offset and sized from `EnumDisplayMonitors` |
+| `window` | `window:<title>` | `gdigrab -i title=<title>`; duplication has no window mode |
+
+Desktop Duplication is preferred because it reads what the compositor already
+drew instead of forcing a fresh GDI copy. Windows refuses it while the session
+sits on a secure or disconnected desktop (a locked screen, fast user switching,
+a dropped remote session), so `ddaAvailable` probes it once per run with a
+single frame and falls back to `gdigrab` when the answer is no. `gdigrab` also
+remains the only way to capture a single window.
 
 Monitor rectangles come from `EnumDisplayMonitors`; window titles and sizes from
 `EnumWindows` and `GetWindowRect`, filtered to visible windows with a non-empty
 title, excluding the Ottr process itself. Display sources are only offered when
 more than one monitor exists. Both carry a `Detail` — the rectangle's size, as
-`1920x1080` — which the Sources page shows under the name; a window that reports
-no sane rectangle (minimized, or in another session) carries none.
+`1920x1080` — which the window dropdown shows; a window that reports no sane
+rectangle (minimized, or in another session) carries none.
 
 Window capture matches by title. If two windows share a title, or the title
 contains characters FFmpeg's `title=` parser mishandles, capture fails — this is
@@ -57,25 +64,21 @@ a known limitation, see ROADMAP.
 
 ## Preview before recording
 
-`capture.Previewer` takes a **single still frame** with the same FFmpeg
-`resolveSource` resolves for a recording: `-draw_mouse 0`, one frame, `-vf
-fps=5,scale=960:-2` into a JPEG. The window decodes each new still once and
-draws it in the main window, taking a fresh one every three seconds.
+`capture.Previewer` runs the same input `resolveSourceFPS` resolves for a
+recording, at `previewFPS` (5) instead of 30, and writes an `mpjpeg` stream over
+TCP into a `previewHub` that keeps only the newest frame. The window decodes it
+into a bitmap and draws it in the main window. Asking the source for five frames
+a second rather than grabbing thirty and dropping most of them is what keeps the
+cost down: 36% of a core instead of 112%.
 
-It is a snapshot rather than the `mpjpeg` stream a recording writes because
-continuous grabbing starves the desktop compositor: at 30 frames a second it
-held a core and at five frames a second the pointer still visibly stuttered.
-With snapshots no FFmpeg runs while the preview is idle, and the window asks
-for frames only while one is on its way.
+The preview passes `-draw_mouse 0` — the desktop's own pointer already sits over
+the picture, and a second one lags behind it as it moves.
 
-The frame leaves the captured pointer out — the desktop's own pointer already
-sits over the picture, and a second one lags behind it as it moves.
-
-Library's recording page still shows the recorder's own `mpjpeg` preview at five
-frames a second, which only runs while a recording does.
+Library's recording page shows the recorder's own `mpjpeg` preview the same way,
+which only runs while a recording does.
 
 Starting a recording stops the previewer — the recording draws its own frames —
-and stopping it takes a fresh still. Switching sources takes a new one.
+and stopping it starts the previewer again. Switching sources restarts it.
 
 When FFmpeg stops on its own — bad arguments, a window that closed, no FFmpeg at
 all — the panel shows the first line of what FFmpeg said, with `Try again` to

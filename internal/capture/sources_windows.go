@@ -114,17 +114,26 @@ func listSources() ([]Source, error) {
 	return sources, nil
 }
 
-// resolveSource turns a Source.ID into ffmpeg gdigrab input arguments.
+// resolveSource turns a Source.ID into ffmpeg capture arguments.
 func resolveSource(id string) ([]string, error) {
 	return resolveSourceFPS(id, 30)
 }
 
-// resolveSourceFPS is resolveSource at another capture rate: a preview does not
-// need the 30 frames a second a recording keeps.
+// resolveSourceFPS is resolveSource at another capture rate.
+//
+// A screen or display is taken through Desktop Duplication (ddagrab) when it is
+// available: it reads what the compositor already drew instead of forcing a
+// fresh GDI copy, so it costs far less and does not disturb the desktop. Windows
+// cannot lend the desktop out while it is on a secure or disconnected desktop,
+// so anything that is not a plain screen is left to gdigrab, which still has the
+// only way to capture a single window.
 func resolveSourceFPS(id string, fps int) ([]string, error) {
 	base := []string{"-thread_queue_size", "512", "-f", "gdigrab", "-framerate", fmt.Sprint(fps)}
 	switch {
 	case id == "screen":
+		if ddaAvailable() {
+			return ddaArgs(0, 0, 0, 0, 0, fps), nil
+		}
 		return append(base, "-i", "desktop"), nil
 	case strings.HasPrefix(id, "display:"):
 		var n int
@@ -137,6 +146,10 @@ func resolveSourceFPS(id string, fps int) ([]string, error) {
 		}
 		if n < 0 || n >= len(rects) {
 			return nil, fmt.Errorf("display %d no longer exists", n+1)
+		}
+		if ddaAvailable() {
+			r := rects[n]
+			return ddaArgs(n, int(r.Left), int(r.Top), int(r.Right-r.Left), int(r.Bottom-r.Top), fps), nil
 		}
 		r := rects[n]
 		return append(base,
@@ -151,4 +164,18 @@ func resolveSourceFPS(id string, fps int) ([]string, error) {
 		return append(base, "-i", "title="+title), nil
 	}
 	return nil, fmt.Errorf("unknown source %q", id)
+}
+
+// ddaArgs takes a display out of the Desktop Duplication API. The frames come
+// back on the GPU, so hwdownload brings them to memory for the encoders that
+// read them.
+func ddaArgs(output, x, y, w, h, fps int) []string {
+	grab := fmt.Sprintf("ddagrab=output_idx=%d:framerate=%d:draw_mouse=0", output, fps)
+	if w > 0 && h > 0 {
+		grab += fmt.Sprintf(":offset_x=%d:offset_y=%d:video_size=%dx%d", x, y, w, h)
+	}
+	return []string{
+		"-thread_queue_size", "512",
+		"-f", "lavfi", "-i", grab + ",hwdownload,format=bgra",
+	}
 }

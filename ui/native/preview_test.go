@@ -139,7 +139,6 @@ func TestPreview(t *testing.T) {
 	}
 
 	// The window as it opens: the recording form alone, drawing the desk.
-	a.wide = false
 	tt.SetSize(CompactWidth, CompactHeight)
 	a.preview = ui.NewBitmap(deskPicture())
 	a.previewW, a.previewH = 640, 360
@@ -150,7 +149,6 @@ func TestPreview(t *testing.T) {
 	a.previewErr = ""
 
 	mainTT := tt
-	a.wide = true
 	tt = ui.NewTester(a.libraryView, WideWidth, WideHeight)
 	a.preview = ui.NewBitmap(deskPicture())
 	a.previewW, a.previewH = 640, 360
@@ -165,10 +163,6 @@ func TestPreview(t *testing.T) {
 	a.loadedTrans = true
 	shot("04-settings-translation")
 	tt = mainTT
-	a.page = "sources"
-	a.pickKind, a.pickQuery = "window", ""
-	shot("05-sources")
-	a.page, a.pickQuery = "", ""
 	a.tab = 0
 	shot("06-sidebar")
 

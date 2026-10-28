@@ -61,15 +61,13 @@ windows with the same hidden, app-drawn title bar:
 
 | Part | Shows |
 |---|---|
-| Main window | source cards, the preview, full-row speaker/microphone dropdowns, Start recording, and theme/Library/Settings icon buttons |
+| Main window | source cards, a window dropdown, the preview, full-row speaker/microphone dropdowns, Start recording, and theme/Library/Settings icon buttons |
 | Library sidebar | search, import, and media rows with a right-click menu of the tabs and Delete |
 | Library recording page | the preview frame, provisional live transcript, and Delete/Stop |
 | Library session page | name and details, and the Transcript, Translate and Summary tabs |
-| Sources page | the windows to record, after a search, beside the main recording form |
 | Settings window | which model transcribes, and which provider translates and summarizes |
 
-The main window is 420 × 800 and grows only for the source picker
-(`App.openPane`, `App.closePane`). Library is 1180 × 800 and Settings is
+The main window is always 420 × 800. Library is 1180 × 800 and Settings is
 920 × 660. Starting a recording opens or focuses Library, whose right side
 shows the live capture and then the finished recording.
 

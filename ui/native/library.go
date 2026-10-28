@@ -17,14 +17,10 @@ import (
 	"ottr/internal/library"
 )
 
-// sidebar holds the recording form, with Library and Settings at the bottom.
+// sidebar is the recording form, with Library and Settings at the bottom. It is
+// the whole main window.
 func (a *App) sidebar(c *ui.Context, t *ui.Theme) {
-	side := ui.Column(c).FillHeight().Background(t.Surface)
-	if a.wide {
-		side.Width(sidebarWidth).Shrink(0).BorderWidth(0, 0, 0, 1).BorderColor(t.Border)
-	} else {
-		side.Grow(1)
-	}
+	side := ui.Column(c).FillHeight().Grow(1).Background(t.Surface)
 	side.Children(func() {
 		// The cards and picture scroll in a short window; the recording
 		// controls and window buttons stay in reach.
@@ -59,6 +55,7 @@ func (a *App) recordForm(c *ui.Context, t *ui.Theme) {
 		}
 		a.caption(c, t, "Choose a capture source")
 		a.sourceCards(c, t)
+		a.windowSelect(c, t)
 		a.sourcePreview(c, t)
 	})
 }
@@ -268,12 +265,11 @@ func (a *App) audioRow(c *ui.Context, t *ui.Theme, selected *capture.AudioDevice
 }
 
 // sourceCard is one tile of the capture-source grid: the screen and each
-// display choose themselves, and Window opens the picker.
+// display choose themselves, and a window is chosen below them.
 type sourceCard struct {
 	label   string
 	icon    *ui.SVG
 	id      string // the source a click chooses
-	pick    string // the kind a click opens the picker for, instead
 	chosen  bool
 	blocked string // why this source cannot be recorded yet
 }
@@ -326,12 +322,61 @@ func (a *App) sourceCard(c *ui.Context, t *ui.Theme, card sourceCard) {
 		btn.Background(t.SurfaceHover)
 	}
 	if card.blocked == "" && btn.Clicked() {
-		if card.pick != "" {
-			a.openPicker(card.pick)
-		} else {
-			a.chooseSource(card.id)
+		a.chooseSource(card.id)
+	}
+}
+
+// windowSelect chooses one of the open windows. Windows come and go, so the
+// list is read again each time the dropdown opens.
+func (a *App) windowSelect(c *ui.Context, t *ui.Theme) {
+	windows := a.sourcesOfKind("window")
+	if len(windows) == 0 {
+		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Padding(t.Space(2), t.Space(2.5)).
+			Radius(t.Radius).BorderWidth(1).BorderColor(t.Border).Children(func() {
+			ui.Icon(c, iconWindow).FontSize(t.FontSize + 2).TextColor(t.TextMuted)
+			ui.Text(c, "No visible window to record").FontSize(t.FontSize - 3).
+				TextColor(t.TextMuted).SingleLine()
+		})
+		return
+	}
+	chosen := a.windowSource()
+	sel := ui.SelectBase(c, &chosen)
+	sel.Trigger.Label("Window").Tooltip("Record one window").Grow(1).MinWidth(0).
+		Padding(t.Space(2), t.Space(2.5)).Radius(t.Radius).Border(1, t.Border).
+		Background(t.Surface).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
+		ui.Icon(c, iconWindow).FontSize(t.FontSize + 2).Shrink(0).TextColor(t.TextMuted)
+		ui.Text(c, "Window").FontSize(t.FontSize - 3).Shrink(0)
+		ui.Text(c, chosen.Name).FontSize(t.FontSize - 3).TextColor(t.TextMuted).
+			SingleLine().Grow(1).MinWidth(0).TextAlign(ui.End)
+		ui.Text(c, "▾").TextColor(t.TextMuted).Shrink(0)
+	})
+	sel.Popup(func(panel ui.Element) {
+		panel.Padding(t.Space(1)).Radius(t.Radius+2).Background(t.Background).
+			Border(1, t.Border).Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.18))
+		for _, window := range windows {
+			item := sel.Item(window).Padding(t.Space(1.5), t.Space(2.5)).Radius(t.Radius)
+			if item.Highlighted() {
+				item.Background(t.Accent).TextColor(t.AccentText)
+			} else if window.ID == chosen.ID {
+				item.Background(t.Surface)
+			}
+			item.Children(func() { ui.Text(c, window.Name).FontSize(t.FontSize - 2).SingleLine() })
+		}
+	})
+	if sel.Trigger.Changed() {
+		a.chooseSource(chosen.ID)
+	}
+}
+
+// windowSource is the window chosen, or the first one where none is yet.
+func (a *App) windowSource() capture.Source {
+	windows := a.sourcesOfKind("window")
+	for _, w := range windows {
+		if w.ID == a.sourceID {
+			return w
 		}
 	}
+	return windows[0]
 }
 
 // libraryPane searches the library and lists it, in the room the form leaves.
@@ -482,10 +527,10 @@ func mediaMeta(m library.Media) string {
 }
 
 // sourceCardsOf is the grid over the sources: the screen, each display, and
-// one card that stands for every window and opens the picker.
+// the two kinds that are not implemented yet. A single window is chosen in the
+// dropdown under the grid instead.
 func (a *App) sourceCardsOf(sources []capture.Source) []sourceCard {
 	var cards []sourceCard
-	windows := 0
 	for _, s := range sources {
 		switch s.Kind {
 		case "screen":
@@ -498,18 +543,7 @@ func (a *App) sourceCardsOf(sources []capture.Source) []sourceCard {
 				label: s.Name, icon: iconScreen,
 				id: s.ID, chosen: a.sourceID == s.ID,
 			})
-		case "window":
-			windows++
 		}
-	}
-	if windows > 0 {
-		card := sourceCard{label: "Window", icon: iconWindow, pick: "window"}
-		if strings.HasPrefix(a.sourceID, "window:") {
-			card.label, card.chosen = a.sourceName(), true
-		}
-		cards = append(cards, card)
-	} else if len(sources) > 0 {
-		cards = append(cards, sourceCard{label: "Window", icon: iconWindow, blocked: "No visible window can be recorded right now"})
 	}
 	cards = append(cards,
 		sourceCard{label: "Area", icon: iconArea,
@@ -557,22 +591,6 @@ func (a *App) chooseSource(id string) {
 	a.sourceID = id
 	a.source = a.sourceName()
 	a.showPreview()
-}
-
-// openPicker reads what can be recorded now — windows come and go — and
-// shows it, so that a window opened since the app started can be chosen.
-func (a *App) openPicker(kind string) {
-	a.page, a.pickKind, a.pickQuery = "sources", kind, ""
-	a.openPane()
-	sources, err := a.Rec.Sources()
-	if err != nil {
-		a.setError(err)
-		return
-	}
-	a.sources = sources
-	if a.sourceID == "" || !a.hasSource(a.sourceID) {
-		a.pickSource()
-	}
 }
 
 func (a *App) hasSource(id string) bool {
@@ -735,21 +753,16 @@ func (a *App) removeMedia(id int64, withFile bool) {
 	}()
 }
 
-// grabPreview decodes what a recording in progress or the previewer wrote into
-// the bitmap: a recording's frames at most five times a second, and the
-// previewer's still picture once each.
+// grabPreview decodes the latest frame of what is being recorded, or of what
+// will be, into the bitmap — at most five times a second: the frame is a JPEG.
 func (a *App) grabPreview() {
+	if time.Since(a.previewAt) < 200*time.Millisecond {
+		return
+	}
 	var frame []byte
 	if a.recording {
-		if time.Since(a.previewAt) < 200*time.Millisecond {
-			return
-		}
 		frame = a.Rec.Preview()
 	} else if a.Preview != nil {
-		if a.previewSeq == a.Preview.Seq() {
-			return // nothing new was grabbed
-		}
-		a.previewSeq = a.Preview.Seq()
 		frame = a.Preview.Frame()
 	}
 	if len(frame) == 0 {
