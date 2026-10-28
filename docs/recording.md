@@ -57,18 +57,25 @@ a known limitation, see ROADMAP.
 
 ## Preview before recording
 
-`capture.Previewer` runs the same FFmpeg `resolveSource` resolves for a
-recording, but writes an `mpjpeg` stream over TCP — `-map 0:v -vf
-fps=5,scale=960:-2`, the arguments of the recording's own preview output — into
-a `previewHub`, which keeps only the newest frame. The window decodes it into a
-bitmap five times a second and draws it in the main window; Library's recording
-page keeps drawing the recorder's own preview the same way. The home preview
-is 192 DIPs high and disables gdigrab's captured pointer, avoiding a second
-mouse image over the desktop's own pointer.
+`capture.Previewer` takes a **single still frame** with the same FFmpeg
+`resolveSource` resolves for a recording: `-draw_mouse 0`, one frame, `-vf
+fps=5,scale=960:-2` into a JPEG. The window decodes each new still once and
+draws it in the main window, taking a fresh one every three seconds.
+
+It is a snapshot rather than the `mpjpeg` stream a recording writes because
+continuous grabbing starves the desktop compositor: at 30 frames a second it
+held a core and at five frames a second the pointer still visibly stuttered.
+With snapshots no FFmpeg runs while the preview is idle, and the window asks
+for frames only while one is on its way.
+
+The frame leaves the captured pointer out — the desktop's own pointer already
+sits over the picture, and a second one lags behind it as it moves.
+
+Library's recording page still shows the recorder's own `mpjpeg` preview at five
+frames a second, which only runs while a recording does.
 
 Starting a recording stops the previewer — the recording draws its own frames —
-and stopping it starts the previewer again. Switching sources restarts it; a
-newer switch wins if two arrive while FFmpeg starts.
+and stopping it takes a fresh still. Switching sources takes a new one.
 
 When FFmpeg stops on its own — bad arguments, a window that closed, no FFmpeg at
 all — the panel shows the first line of what FFmpeg said, with `Try again` to

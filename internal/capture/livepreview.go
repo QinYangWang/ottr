@@ -4,22 +4,25 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"ottr/internal/tools"
 )
 
-// Previewer shows a source before it is recorded: a short-lived FFmpeg that
-// grabs the same input a recording would and writes an MJPEG stream over TCP,
-// read the way the recording's own preview is. It is one process at a time and
-// stops when the recording starts, which draws its own.
+// Previewer shows a source before it is recorded: one still frame, grabbed the
+// way a recording grabs video. It is a snapshot rather than a stream because
+// grabbing the desktop continuously — even at five frames a second — holds the
+// desktop compositor busy enough to make the system pointer stutter.
 type Previewer struct {
 	mu     sync.Mutex
 	cmd    *exec.Cmd
-	hub    *previewHub
+	frame  []byte
+	seq    uint64 // counts the frames grabbed, so a caller decodes each once
 	source string
 	err    error
 }
@@ -27,22 +30,20 @@ type Previewer struct {
 // NewPreviewer creates a previewer. Nothing runs until Show.
 func NewPreviewer() *Previewer { return &Previewer{} }
 
-// Show draws the source given from now on, in the background: the caller gets
-// the picture from Frame once FFmpeg has one, a moment later.
+// Show draws the source given from now on: the caller gets the picture from
+// Frame once FFmpeg has written it, a moment later.
 func (p *Previewer) Show(sourceID string) {
 	p.mu.Lock()
-	if p.source == sourceID && p.cmd != nil && p.err == nil {
-		p.mu.Unlock()
-		return
+	if p.cmd != nil && p.cmd.Process != nil {
+		p.cmd.Process.Kill() // the newer picture wins
+		p.cmd = nil
 	}
-	p.stopLocked()
 	p.source = sourceID
 	p.mu.Unlock()
-
-	p.start(sourceID)
+	p.capture(sourceID)
 }
 
-func (p *Previewer) start(sourceID string) {
+func (p *Previewer) capture(sourceID string) {
 	video, err := resolveSource(sourceID)
 	if err != nil {
 		p.fail(err)
@@ -53,52 +54,41 @@ func (p *Previewer) start(sourceID string) {
 		p.fail(err)
 		return
 	}
-	hub, err := newPreviewHub()
-	if err != nil {
-		p.fail(err)
-		return
-	}
+	out := filepath.Join(os.TempDir(), fmt.Sprintf("ottr-preview-%d.jpg", time.Now().UnixNano()))
+	defer os.Remove(out)
 
-	// Match the recording preview's resolution. The home preview leaves the
-	// captured pointer out, so it cannot appear as a second, flickering cursor.
-	args := append([]string{"-draw_mouse", "0"}, video...)
-	args = append(args, "-map", "0:v", "-vf", previewFilter,
-		"-f", "mpjpeg", "tcp://"+hub.addr())
+	// No captured pointer: the desktop's own pointer already sits over this
+	// picture, and a second one would flicker as it lags behind.
+	args := append([]string{"-hide_banner", "-loglevel", "error", "-draw_mouse", "0"}, video...)
+	args = append(args, "-frames:v", "1", "-vf", previewFilter, "-f", "image2", "-y", out)
 	cmd := exec.Command(ffmpeg, args...)
 	hideWindow(cmd)
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
-	cmd.Stdout = io.Discard
 	if err := cmd.Start(); err != nil {
-		hub.Close()
 		p.fail(fmt.Errorf("start ffmpeg: %w", err))
 		return
 	}
 
 	p.mu.Lock()
-	// A newer Show may have won while this one started: keep only the newest.
-	if p.source != sourceID {
-		p.mu.Unlock()
-		cmd.Process.Kill()
-		cmd.Wait()
-		hub.Close()
-		return
-	}
-	p.cmd, p.hub, p.err = cmd, hub, nil
+	p.cmd = cmd
 	p.mu.Unlock()
 
 	go func() {
 		waitErr := cmd.Wait()
+		frame, readErr := os.ReadFile(out)
 		p.mu.Lock()
-		if p.cmd == cmd {
-			// It ended on its own — bad arguments, or the source went away.
-			// Nothing runs now, so the next Show starts again, and what FFmpeg
-			// said is the error the window shows.
-			p.cmd, p.hub, p.source = nil, nil, ""
-			p.err = previewError(waitErr, stderr.String())
+		defer p.mu.Unlock()
+		if p.cmd != cmd {
+			return // a newer Show replaced this one
 		}
-		p.mu.Unlock()
-		hub.Close()
+		p.cmd = nil
+		if waitErr != nil || readErr != nil || len(frame) == 0 {
+			p.err = previewError(errors.Join(waitErr, readErr), stderr.String())
+			return
+		}
+		p.frame, p.err = frame, nil
+		p.seq++
 	}()
 }
 
@@ -112,28 +102,40 @@ func previewError(waitErr error, stderr string) error {
 	case said != "":
 		return errors.New("ffmpeg: " + said)
 	case waitErr != nil:
-		return fmt.Errorf("ffmpeg stopped: %w", waitErr)
+		return fmt.Errorf("capture stopped: %w", waitErr)
 	default:
-		return errors.New("the preview stopped")
+		return errors.New("the capture wrote no picture")
 	}
 }
 
 func (p *Previewer) fail(err error) {
 	p.mu.Lock()
 	p.err = err
-	p.cmd, p.hub = nil, nil
+	p.cmd = nil
 	p.mu.Unlock()
 }
 
-// Frame returns the latest JPEG frame, or nil before the first one.
+// Frame returns the latest frame, or nil before the first one.
 func (p *Previewer) Frame() []byte {
 	p.mu.Lock()
-	hub := p.hub
-	p.mu.Unlock()
-	if hub == nil {
-		return nil
-	}
-	return hub.latest()
+	defer p.mu.Unlock()
+	return p.frame
+}
+
+// Seq counts the frames grabbed so far: a caller that shows the frame decodes
+// it once, when the count changes.
+func (p *Previewer) Seq() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.seq
+}
+
+// Pending reports whether a still frame is being grabbed: the window asks for
+// frames until it lands, and then stops.
+func (p *Previewer) Pending() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.cmd != nil
 }
 
 // Err reports why no picture comes, when it is not simply "not yet".
@@ -147,15 +149,9 @@ func (p *Previewer) Err() error {
 func (p *Previewer) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.stopLocked()
-}
-
-func (p *Previewer) stopLocked() {
 	if p.cmd != nil && p.cmd.Process != nil {
 		p.cmd.Process.Kill()
 	}
-	if p.hub != nil {
-		p.hub.Close()
-	}
-	p.cmd, p.hub, p.source, p.err = nil, nil, "", nil
+	p.cmd, p.frame, p.source, p.err = nil, nil, "", nil
+	p.seq++
 }

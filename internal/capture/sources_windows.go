@@ -116,7 +116,13 @@ func listSources() ([]Source, error) {
 
 // resolveSource turns a Source.ID into ffmpeg gdigrab input arguments.
 func resolveSource(id string) ([]string, error) {
-	base := []string{"-thread_queue_size", "512", "-f", "gdigrab", "-framerate", "30"}
+	return resolveSourceFPS(id, 30)
+}
+
+// resolveSourceFPS is resolveSource at another capture rate: a preview does not
+// need the 30 frames a second a recording keeps.
+func resolveSourceFPS(id string, fps int) ([]string, error) {
+	base := []string{"-thread_queue_size", "512", "-f", "gdigrab", "-framerate", fmt.Sprint(fps)}
 	switch {
 	case id == "screen":
 		return append(base, "-i", "desktop"), nil

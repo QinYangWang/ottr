@@ -735,18 +735,21 @@ func (a *App) removeMedia(id int64, withFile bool) {
 	}()
 }
 
-// grabPreview decodes the latest frame of what is being recorded, or of what
-// will be, into the bitmap — at most five times a second: an MJPEG frame is a
-// JPEG. It is the big picture of a recording in progress, and the small one of
-// the source chosen.
+// grabPreview decodes what a recording in progress or the previewer wrote into
+// the bitmap: a recording's frames at most five times a second, and the
+// previewer's still picture once each.
 func (a *App) grabPreview() {
-	if time.Since(a.previewAt) < 200*time.Millisecond {
-		return
-	}
 	var frame []byte
 	if a.recording {
+		if time.Since(a.previewAt) < 200*time.Millisecond {
+			return
+		}
 		frame = a.Rec.Preview()
 	} else if a.Preview != nil {
+		if a.previewSeq == a.Preview.Seq() {
+			return // nothing new was grabbed
+		}
+		a.previewSeq = a.Preview.Seq()
 		frame = a.Preview.Frame()
 	}
 	if len(frame) == 0 {

@@ -84,8 +84,9 @@ hangs below the bar rather than over it.
   recording a camera are not implemented (see ROADMAP), and each card's
   tooltip says so.
 - Under the cards, a 192-DIP-high, 960-pixel-wide preview shows the source
-  before recording. Before the first frame it says which source it is and its
-  size, or why there is no picture.
+  before recording. It is a still frame, refreshed every three seconds: grabbing
+  the desktop continuously made the system pointer stutter. Before the first
+  frame it says which source it is and its size, or why there is no picture.
 - `Start recording` uses the source chosen above it. System audio and the
   microphone are dropdowns of active WASAPI endpoints, with the default
   speaker selected and the microphone initially `Off`; `Off` leaves that

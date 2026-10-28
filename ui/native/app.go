@@ -64,14 +64,15 @@ type App struct {
 	discard     bool
 
 	// The recording in progress, mirrored from the recorder each frame.
-	recording bool
-	startedAt time.Time
-	liveText  string
-	late      []liveLine
-	preview   *ui.Bitmap
-	previewW  int
-	previewH  int
-	previewAt time.Time
+	recording  bool
+	startedAt  time.Time
+	liveText   string
+	late       []liveLine
+	preview    *ui.Bitmap
+	previewW   int
+	previewH   int
+	previewSeq uint64 // the previewer frame decoded last
+	previewAt  time.Time
 
 	// The session shown, and its three tabs.
 	transcript   asr.Transcript
@@ -297,6 +298,10 @@ func (a *App) recordingPill(c *ui.Context, t *ui.Theme) {
 	})
 }
 
+// previewRefresh is how often the idle preview takes a new still frame. It is
+// slow on purpose: the desktop is grabbed for each one.
+const previewRefresh = 3 * time.Second
+
 // update runs fn in a frame, from any goroutine: through the window when
 // there is one, else on the next frame the view builds.
 func (a *App) update(fn func()) {
@@ -346,15 +351,23 @@ func (a *App) mirror(c *ui.Context) {
 		a.recording, a.startedAt, a.late, a.preview = true, st.StartedAt, nil, nil
 	}
 	if !a.recording {
-		// The source is still shown, so that what will be recorded is visible
-		// before it is: five frames a second are plenty.
+		// The source is shown as a still picture, so that what will be
+		// recorded is visible before it is. Continuous grabbing keeps the
+		// desktop compositor busy enough to make the pointer stutter, so the
+		// previewer takes one frame at a time, refreshed every few seconds.
 		if a.Preview != nil {
 			a.previewErr = ""
 			if err := a.Preview.Err(); err != nil {
 				a.previewErr = err.Error()
 			}
 			a.grabPreview()
-			c.After(200 * time.Millisecond)
+			switch {
+			case a.Preview.Pending():
+				c.After(200 * time.Millisecond) // the still is on its way
+			case a.preview != nil && time.Since(a.previewAt) > previewRefresh:
+				a.showPreview()
+				c.After(200 * time.Millisecond)
+			}
 		}
 		return
 	}
