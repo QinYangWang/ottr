@@ -47,10 +47,9 @@ func (p *Previewer) Show(sourceID string) {
 }
 
 func (p *Previewer) start(sourceID string) {
-	// The preview shows a handful of frames a second. Asking the source itself
-	// for that rate is what keeps the cost down: grabbing 30 and dropping most
-	// of them spent three times the CPU for the same picture.
-	video, err := resolveSourceFPS(sourceID, previewFPS)
+	// The pointer is left to the desktop's own: this picture refreshes five
+	// times a second, so a drawn one would trail the real pointer.
+	video, err := resolveSourceFPS(sourceID, previewFPS, false)
 	if err != nil {
 		p.fail(err)
 		return
@@ -66,9 +65,7 @@ func (p *Previewer) start(sourceID string) {
 		return
 	}
 
-	// No captured pointer of its own: the desktop's pointer already sits over
-	// the picture, and a second one would lag behind it.
-	args := append([]string{"-hide_banner", "-loglevel", "error", "-draw_mouse", "0"}, video...)
+	args := append([]string{"-hide_banner", "-loglevel", "error"}, video...)
 	args = append(args, "-an", "-map", "0:v", "-vf", previewFilter,
 		"-f", "mpjpeg", "tcp://"+hub.addr())
 	cmd := exec.Command(ffmpeg, args...)

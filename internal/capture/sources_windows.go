@@ -114,12 +114,15 @@ func listSources() ([]Source, error) {
 	return sources, nil
 }
 
-// resolveSource turns a Source.ID into ffmpeg capture arguments.
+// resolveSource turns a Source.ID into ffmpeg capture arguments, with the
+// captured pointer drawn in: a recording shows where the mouse went.
 func resolveSource(id string) ([]string, error) {
-	return resolveSourceFPS(id, 30)
+	return resolveSourceFPS(id, 30, true)
 }
 
-// resolveSourceFPS is resolveSource at another capture rate.
+// resolveSourceFPS is resolveSource at another capture rate, and with the
+// pointer in or out. The preview leaves it out: it refreshes slowly, so a drawn
+// pointer would trail the real one.
 //
 // A screen or display is taken through Desktop Duplication (ddagrab) when it is
 // available: it reads what the compositor already drew instead of forcing a
@@ -127,12 +130,18 @@ func resolveSource(id string) ([]string, error) {
 // cannot lend the desktop out while it is on a secure or disconnected desktop,
 // so anything that is not a plain screen is left to gdigrab, which still has the
 // only way to capture a single window.
-func resolveSourceFPS(id string, fps int) ([]string, error) {
-	base := []string{"-thread_queue_size", "512", "-f", "gdigrab", "-framerate", fmt.Sprint(fps)}
+//
+// draw_mouse belongs to the input it describes — a gdigrab option, or a
+// ddagrab one inside the lavfi graph — so each path sets it itself.
+func resolveSourceFPS(id string, fps int, mouse bool) ([]string, error) {
+	base := []string{
+		"-thread_queue_size", "512", "-f", "gdigrab", "-framerate", fmt.Sprint(fps),
+		"-draw_mouse", boolArg(mouse),
+	}
 	switch {
 	case id == "screen":
 		if ddaAvailable() {
-			return ddaArgs(0, 0, 0, 0, 0, fps), nil
+			return ddaArgs(0, 0, 0, 0, 0, fps, mouse), nil
 		}
 		return append(base, "-i", "desktop"), nil
 	case strings.HasPrefix(id, "display:"):
@@ -147,11 +156,10 @@ func resolveSourceFPS(id string, fps int) ([]string, error) {
 		if n < 0 || n >= len(rects) {
 			return nil, fmt.Errorf("display %d no longer exists", n+1)
 		}
-		if ddaAvailable() {
-			r := rects[n]
-			return ddaArgs(n, int(r.Left), int(r.Top), int(r.Right-r.Left), int(r.Bottom-r.Top), fps), nil
-		}
 		r := rects[n]
+		if ddaAvailable() {
+			return ddaArgs(n, int(r.Left), int(r.Top), int(r.Right-r.Left), int(r.Bottom-r.Top), fps, mouse), nil
+		}
 		return append(base,
 			"-offset_x", fmt.Sprint(r.Left), "-offset_y", fmt.Sprint(r.Top),
 			"-video_size", fmt.Sprintf("%dx%d", r.Right-r.Left, r.Bottom-r.Top),
@@ -166,11 +174,18 @@ func resolveSourceFPS(id string, fps int) ([]string, error) {
 	return nil, fmt.Errorf("unknown source %q", id)
 }
 
+func boolArg(v bool) string {
+	if v {
+		return "1"
+	}
+	return "0"
+}
+
 // ddaArgs takes a display out of the Desktop Duplication API. The frames come
 // back on the GPU, so hwdownload brings them to memory for the encoders that
 // read them.
-func ddaArgs(output, x, y, w, h, fps int) []string {
-	grab := fmt.Sprintf("ddagrab=output_idx=%d:framerate=%d:draw_mouse=0", output, fps)
+func ddaArgs(output, x, y, w, h, fps int, mouse bool) []string {
+	grab := fmt.Sprintf("ddagrab=output_idx=%d:framerate=%d:draw_mouse=%s", output, fps, boolArg(mouse))
 	if w > 0 && h > 0 {
 		grab += fmt.Sprintf(":offset_x=%d:offset_y=%d:video_size=%dx%d", x, y, w, h)
 	}
