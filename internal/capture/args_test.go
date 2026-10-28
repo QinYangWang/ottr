@@ -25,6 +25,25 @@ func TestBuildArgsNoAudio(t *testing.T) {
 	}
 }
 
+// A recording is written as fragmented mp4, so that one which never stops
+// cleanly is still playable: a plain mp4 of a killed recording holds nothing.
+func TestBuildArgsWritesAFragmentedFile(t *testing.T) {
+	args := buildArgs([]string{"-f", "gdigrab", "-i", "desktop"}, nil, "", "out.mp4")
+	flags := ""
+	if i := slices.Index(args, "-movflags"); i >= 0 && i+1 < len(args) {
+		flags = args[i+1]
+	}
+	for _, want := range []string{"frag_keyframe", "empty_moov", "default_base_moof"} {
+		if !strings.Contains(flags, want) {
+			t.Errorf("movflags %q lacks %s", flags, want)
+		}
+	}
+	// Fragments are cut at keyframes, so the encoder has to emit them.
+	if i := slices.Index(args, "-g"); i < 0 || args[i+1] == "" {
+		t.Errorf("no keyframe interval: %v", args)
+	}
+}
+
 func TestBuildArgsOneAudio(t *testing.T) {
 	args := buildArgs([]string{"-f", "gdigrab", "-i", "desktop"},
 		[]audioSpec{{rate: 48000, channels: 2, pipe: `\\.\pipe\p0`}}, "", "out.mp4")

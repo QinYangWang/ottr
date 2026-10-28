@@ -33,10 +33,15 @@ func buildArgs(video []string, audios []audioSpec, previewAddr, out string) []st
 			"[1:a]aresample=48000:first_pts=0[a1];[2:a]aresample=48000:first_pts=0[a2];[a1][a2]amix=inputs=2:normalize=0[a]",
 			"-map", "0:v", "-map", "[a]")
 	}
-	args = append(args, "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p")
+	args = append(args, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p")
 	if len(audios) > 0 {
 		args = append(args, "-c:a", "aac", "-b:a", "160k")
 	}
+	// Fragmented mp4 writes each keyframe's fragment as it finishes instead of
+	// holding the index until the end: a recording that dies without stopping
+	// cleanly — a killed process, a lost power — is still playable up to its
+	// last keyframe. A plain mp4 of the same recording holds nothing readable.
+	args = append(args, "-g", "30", "-movflags", "+frag_keyframe+empty_moov+default_base_moof")
 	args = append(args, out)
 	if previewAddr != "" {
 		args = append(args,

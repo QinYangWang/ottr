@@ -186,9 +186,20 @@ gets live text from one of them.
 ## Output
 
 Files are written to `<userData>/recordings/Recording YYYY-MM-DD HH.MM.SS.mp4`
-with `libx264 -preset veryfast -pix_fmt yuv420p` and `aac 160k` when audio is
-present. `yuv420p` keeps the file playable everywhere, the system's own player
-included.
+with `libx264 -preset veryfast -crf 23 -pix_fmt yuv420p` and `aac 160k` when
+audio is present. `yuv420p` keeps the file playable everywhere, the system's
+own player included.
+
+The file is a **fragmented mp4** (`-g 30 -movflags
++frag_keyframe+empty_moov+default_base_moof`): each keyframe's fragment is
+written as it finishes rather than holding the index until the end. A recording
+that dies without stopping cleanly — a killed process, a lost power — is still
+playable up to its last keyframe. Measured on a killed 8-second recording: the
+fragmented file played 5.77 seconds, while the plain mp4 of the same recording
+was unreadable and remuxing recovered nothing.
+
+The fragmentation changes nothing for the rest of the pipeline: ffprobe reads
+the duration and streams, and `asr.ExtractWav` extracts the audio as before.
 
 ## Testing
 
