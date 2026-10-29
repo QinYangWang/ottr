@@ -150,11 +150,23 @@ func TestPreview(t *testing.T) {
 
 	mainTT := tt
 	tt = ui.NewTester(a.libraryView, WideWidth, WideHeight)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	a.preview = ui.NewBitmap(deskPicture())
 	a.previewW, a.previewH = 640, 360
+
+	// The grid, then one media's page in place of it.
+	a.closeDetail()
+	shot("12-library-grid")
+	a.openDetail(id)
 	shot("01-session")
 
+	// The recording form in place of the grid.
+	a.chooseRecording()
+	shot("13-library-new-recording")
+	a.stopChoosing()
+
 	tt = ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	a.settingsTab = 0
 	shot("02-settings-appearance")
 	a.settingsTab = 1
@@ -177,8 +189,27 @@ func TestPreview(t *testing.T) {
 	tt.SetDark(true)
 	shot("08-dark")
 
+	// The media's page in the dark look.
+	a.openDetail(id)
+	lt := ui.NewTester(a.libraryView, WideWidth, WideHeight)
+	lt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
+	lt.SetDark(true)
+	for i := 0; i < 12; i++ {
+		lt.Advance(80 * time.Millisecond)
+		lt.Frame()
+	}
+	f, err := os.Create(filepath.Join(dir, "14-session-dark.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, lt.Image()); err != nil {
+		t.Fatal(err)
+	}
+
 	tt.SetDark(false)
 	tt = ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	a.settingsTab = 3
 	a.loadedSum = true
 	shot("09-settings-summary")

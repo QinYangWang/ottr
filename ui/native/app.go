@@ -29,9 +29,9 @@ type App struct {
 	Sum     *summary.Service
 	Jobs    *jobs.Service
 	MM      *models.Manager
-	Preview *capture.Previewer  // the picture of the source, before recording
+	Preview *capture.Previewer   // the picture of the source, before recording
 	Shot    *capture.Snapshotter // a PNG of the source, one at a time
-	Prefs   *settings.Service   // what the window itself remembers
+	Prefs   *settings.Service    // what the window itself remembers
 
 	win         *mygo.Window
 	libraryWin  *mygo.Window
@@ -45,6 +45,9 @@ type App struct {
 	sel   int64
 	tab   int
 	err   string
+	// newRecording shows the recording form inside the Library window, in place
+	// of the grid, until a source is chosen and the form is left.
+	newRecording bool
 
 	// The recording pane.
 	sources     []capture.Source
@@ -126,8 +129,8 @@ type App struct {
 // liveLine is one line of live text the recording pane shows: a finalized
 // utterance, or the one still being spoken.
 type liveLine struct {
-	at        int64  // ms into the recording where the line starts
-	utterance int64  // which utterance it belongs to
+	at        int64 // ms into the recording where the line starts
+	utterance int64 // which utterance it belongs to
 	text      string
 	final     bool
 }
@@ -192,11 +195,11 @@ const titleBarHeight = 46
 const sidebarWidth = 320
 
 func (a *App) view(c *ui.Context) {
-	t := c.Theme()
+	t := a.applyTheme(c)
 	a.drain()
 	a.mirror(c)
 	a.poll(c)
-	ui.Column(c).Fill().Children(func() {
+	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		a.titleBar(c, t)
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			a.sidebar(c, t)
@@ -226,16 +229,55 @@ func (a *App) titleBar(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// windowTitleBar gives secondary windows the same immersive title strip.
-func (a *App) windowTitleBar(c *ui.Context, t *ui.Theme, title string) {
+// windowTitleBar gives secondary windows the same immersive title strip, and
+// carries the controls of the page shown at its right, when it has any.
+func (a *App) windowTitleBar(c *ui.Context, t *ui.Theme, title string, tools func()) {
 	bar := c.TitleBar()
 	height := max(bar.Height, float32(titleBarHeight))
 	ui.Row(c).Height(height).Shrink(0).AlignItems(ui.Center).
 		Padding(0, bar.Right+t.Space(2), 0, t.Space(4)+bar.Left).
 		Background(t.Surface).DragWindow().Children(func() {
-		ui.Text(c, title).FontSize(t.FontSize + 3).Bold()
+		ui.Text(c, title).FontSize(t.FontSize + 2).Bold().Shrink(0)
 		a.recordingPill(c, t)
+		if tools != nil {
+			ui.Spacer(c)
+			tools()
+		}
 	})
+}
+
+// titleBarActions are Library's own controls in its title strip: the tools of
+// the grid. An inner page carries its own way back instead, next to its title.
+func (a *App) titleBarActions(c *ui.Context, t *ui.Theme) {
+	if a.recording || a.detail() || a.newRecording {
+		return
+	}
+	a.libraryTools(c, t)
+}
+
+// backButton is the way out of an inner page: an arrow alone when label is
+// empty, else the arrow and the page it goes to.
+func (a *App) backButton(c *ui.Context, t *ui.Theme, label string) bool {
+	name := "Back"
+	if label != "" {
+		name = "Back to " + label
+	}
+	btn := ui.ButtonBase(c).Label("Back").Tooltip(name).
+		Padding(t.Space(1.5)).Radius(t.Radius).TextColor(t.TextMuted)
+	if btn.Hovered() {
+		btn.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	btn.Children(func() {
+		if label == "" {
+			ui.Icon(c, iconBack).FontSize(t.FontSize + 2)
+			return
+		}
+		ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, iconBack).FontSize(t.FontSize + 1)
+			ui.Text(c, label).FontSize(t.FontSize - 1)
+		})
+	})
+	return btn.Clicked()
 }
 
 // recordingPill says a recording runs, and for how long.
@@ -475,11 +517,9 @@ func (a *App) reload() {
 			a.orphans = orphans
 		}
 	}
-	if _, ok := a.current(); !ok {
+	if _, ok := a.current(); !ok && a.sel != 0 {
+		// The media shown is gone: back to the grid.
 		a.forget()
-	}
-	if a.sel == 0 && len(items) > 0 {
-		a.selectMedia(items[0].ID)
 	}
 	if m, ok := a.current(); ok {
 		if m.TranscriptStatus == "done" && a.trLoaded && len(a.segs) == 0 {
@@ -491,14 +531,38 @@ func (a *App) reload() {
 	}
 }
 
+// selectMedia shows one media's page; the same one again keeps it as it is.
 func (a *App) selectMedia(id int64) {
 	if a.sel == id {
-		a.page = ""
 		return
 	}
 	a.forget()
 	a.sel = id
-	a.page = ""
+	a.newRecording = false
+}
+
+// closeDetail goes back to the grid, and drops what was loaded for the media.
+func (a *App) closeDetail() {
+	a.forget()
+}
+
+// openDetail shows one media's page in the Library window, in place of the
+// grid.
+func (a *App) openDetail(id int64) {
+	a.selectMedia(id)
+	a.newRecording = false
+}
+
+// chooseRecording shows the recording form in place of the grid, the way the
+// prototype opens New recording.
+func (a *App) chooseRecording() {
+	a.closeDetail()
+	a.newRecording = true
+}
+
+// stopChoosing leaves the recording form for the grid.
+func (a *App) stopChoosing() {
+	a.newRecording = false
 }
 
 // forget drops what was loaded for the media shown.
@@ -601,19 +665,6 @@ func (a *App) banner(c *ui.Context, t *ui.Theme) {
 				a.err = ""
 			}
 		})
-	})
-}
-
-func (a *App) emptyPage(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Fill().Center().Gap(t.Space(2)).Children(func() {
-		ui.Text(c, "Nothing chosen").FontSize(t.FontSize + 4).Bold()
-		ui.Text(c, "Record the screen, import a file, or choose one on the left.").
-			TextColor(t.TextMuted)
-		if len(a.sources) > 0 && !a.recording {
-			if ui.PrimaryButton(c, "Start recording").Clicked() {
-				a.startRecording()
-			}
-		}
 	})
 }
 

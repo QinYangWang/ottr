@@ -13,6 +13,10 @@ licensed under the ISC License in [LICENSE](LICENSE).
 | `mic.svg` | mic | the microphone |
 | `volume-2.svg` | volume-2 | system audio |
 | `import.svg` | import | adding a file to the library |
+| `folder.svg` | folder | showing a media file's folder |
+| `trash-2.svg` | trash-2 | deleting a media |
+| `download.svg` | download | a tab's export menu |
+| `play.svg` | play | the player, and a recording's thumbnail |
 | `sliders-horizontal.svg` | sliders-horizontal | settings |
 | `arrow-left.svg` | arrow-left | back |
 | `check.svg` | check | the source chosen |

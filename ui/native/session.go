@@ -2,7 +2,6 @@ package native
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -48,52 +47,182 @@ func langLabel(code string) string {
 	return langName(code)
 }
 
-// sessionPage is what the app made of the media chosen: its transcript, its
-// translation, and its summary, beside the media itself.
+// sessionPage is one media's page: the still of the file and what it is on the
+// left, its tabs on the right — the same page the prototype opens in place of
+// the grid.
 func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Column(c).Fill().Children(func() {
-		a.sessionHead(c, t, m)
-		a.tabs(c, t, m)
+	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+		ui.Scroll(c).Grow(1).MinWidth(0).Children(func() {
+			ui.Column(c).Padding(t.Space(4), t.Space(5), t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
+				a.sessionHead(c, t, m)
+				a.playerStage(c, t, m)
+				a.factStrip(c, t, m)
+			})
+		})
+		ui.Column(c).Width(sideWidth).Shrink(0).FillHeight().MinWidth(0).
+			Background(t.Surface).BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Children(func() {
+			a.tabs(c, t, m)
+		})
 	})
 }
 
+// sideWidth is the column the tabs take beside a media, as the prototype does.
+const sideWidth = 356
+
+// sessionHead names the media and holds the two things to do with its file: an
+// icon button that shows it in the file manager, and a Delete in the danger
+// tint. The name is all the text: the rest is in the fact strip.
 func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
-	detail := []string{m.Source, fmtDuration(m.DurationMs), m.CreatedAt.Local().Format("Jan 2 15:04")}
-	if m.Source == "screenshot" {
-		// A screenshot has no duration to say: its size is what it is.
-		detail = []string{m.Source, fmtSize(m.Size), m.CreatedAt.Local().Format("Jan 2 15:04")}
-	}
-	if m.Width > 0 {
-		detail = append(detail, fmt.Sprintf("%dx%d", m.Width, m.Height))
-	}
-	ui.Row(c).Padding(t.Space(4), t.Space(5)).Gap(t.Space(3)).AlignItems(ui.Center).
-		Background(t.Surface).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, m.Name).FontSize(t.FontSize + 4).Bold().SingleLine()
-			ui.Text(c, strings.Join(detail, "  ·  ")).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-		})
-		if ui.Button(c, "Play").Label("Play the media").Tooltip("Open the media in its player").
-			Clicked() {
-			mygo.Shell.OpenPath(m.Path)
+	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+		if a.backButton(c, t, "") {
+			a.closeDetail()
 		}
-		if ui.Button(c, "Show file").Clicked() {
+		ui.Text(c, m.Name).FontSize(t.FontSize + 3).Bold().Grow(1).MinWidth(0).SingleLine()
+		btn := ui.ButtonBase(c).Label("Show file").Tooltip("Show the file in its folder").
+			Padding(t.Space(1.5)).Radius(t.Radius).Border(1, t.Border).TextColor(t.TextMuted)
+		btn.Children(func() { ui.Icon(c, iconFolder).FontSize(t.FontSize + 2) })
+		if btn.Hovered() {
+			btn.Background(t.SurfaceHover).TextColor(t.Text)
+		}
+		if btn.Clicked() {
 			mygo.Shell.ShowItemInFolder(m.Path)
 		}
-		if ui.Button(c, "Delete…").Clicked() {
-			a.delID, a.confirmDel = m.ID, true
+		del := ui.ButtonBase(c).Label("Delete").Tooltip("Delete this media from the library").
+			Padding(t.Space(1.5), t.Space(2.5)).Radius(t.Radius).TextColor(t.Danger)
+		del.Children(func() {
+			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
+				ui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
+				ui.Text(c, "Delete").FontSize(t.FontSize - 1).Bold()
+			})
+		})
+		if del.Hovered() {
+			del.Background(t.Danger.Alpha(0.12))
 		}
-		if ui.Button(c, "Close").Tooltip("Close media details").Clicked() {
-			a.forget()
+		if del.Clicked() {
+			a.delID, a.confirmDel = m.ID, true
 		}
 	})
 }
 
-func (a *App) tabs(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-		ui.Row(c).Padding(t.Space(4), t.Space(5), 0, t.Space(5)).Children(func() {
-			ui.Tabs(c, &a.tab, "Transcript", "Translate", "Summary")
+// playerStage is the dark ground the media sits on, with its controls in a
+// strip below. There is no decoder in the window yet (see
+// docs/native-playback.md), so the picture is the badge of what the file is and
+// Play hands it to the system's player.
+func (a *App) playerStage(c *ui.Context, t *ui.Theme, m library.Media) {
+	ui.Column(c).FillWidth().Radius(t.Radius + 2).Clip().
+		BorderWidth(1).BorderColor(t.Border).Children(func() {
+		from, to := mediaBackdrop(t.Dark)
+		stage := ui.Column(c).FillWidth().AspectRatio(16.0/9.0).Gradient(from, to, 90).Center()
+		stage.Children(func() {
+			if m.HasVideo || m.Source == "screenshot" {
+				play := ui.ButtonBase(c).Label("Play").Tooltip("Open the media in your player").
+					Padding(t.Space(4)).Radius(t.Space(10)).Background(ui.RGBA(255, 255, 255, 0.12))
+				play.Children(func() {
+					icon := iconPlay
+					if m.Source == "screenshot" {
+						icon = iconScreen
+					}
+					ui.Icon(c, icon).FontSize(t.FontSize + 12).TextColor(onMedia())
+				})
+				if play.Hovered() {
+					play.Background(ui.RGBA(255, 255, 255, 0.2))
+				}
+				if play.Clicked() && m.Source != "screenshot" {
+					mygo.Shell.OpenPath(m.Path)
+				}
+				return
+			}
+			ui.Icon(c, iconMic).FontSize(t.FontSize + 14).TextColor(onMedia()).Opacity(0.7)
 		})
-		ui.Column(c).Grow(1).MinWidth(0).Padding(t.Space(4), t.Space(5)).Children(func() {
+		ui.Row(c).Padding(t.Space(2), t.Space(3)).Gap(t.Space(3)).AlignItems(ui.Center).
+			Background(playerBar(t)).Children(func() {
+			icon := iconPlay
+			if m.Source == "screenshot" {
+				icon = iconScreen
+			}
+			ui.Icon(c, icon).FontSize(t.FontSize + 1).TextColor(onMedia()).Opacity(0.9)
+			ui.Text(c, fmtDuration(m.DurationMs)+" / "+fmtDuration(m.DurationMs)).
+				FontSize(t.FontSize - 2).TextColor(onMedia()).Opacity(0.75).FontFeatures("tnum")
+			ui.Spacer(c)
+			note := "Opens in your player"
+			if m.Source == "screenshot" {
+				note = "Still image"
+			}
+			ui.Text(c, note).FontSize(t.FontSize - 3).TextColor(onMedia()).Opacity(0.6)
+		})
+	})
+}
+
+// factStrip is the four facts of a media, in one row divided by hairlines.
+func (a *App) factStrip(c *ui.Context, t *ui.Theme, m library.Media) {
+	facts := [][2]string{
+		{"Source", mediaSourceLabel(m)},
+		{"Duration", durationOrDash(m)},
+		{"Created", m.CreatedAt.Local().Format("Jan 2, 15:04")},
+		{"Status", mediaStatus(m)},
+	}
+	ui.Row(c).FillWidth().Radius(t.Radius).Border(1, t.Border).Clip().
+		AlignItems(ui.Stretch).Children(func() {
+		for i, fact := range facts {
+			if i > 0 {
+				ui.Column(c).Width(1).Shrink(0).Background(t.Border)
+			}
+			ui.Column(c).Grow(1).MinWidth(0).Padding(t.Space(2.5), t.Space(3.5)).Gap(t.Space(1)).Children(func() {
+				ui.Text(c, strings.ToUpper(fact[0])).FontSize(t.FontSize - 4).Bold().
+					TextColor(t.TextMuted).SingleLine()
+				ui.Text(c, fact[1]).FontSize(t.FontSize - 1).Bold().SingleLine()
+			})
+		}
+	})
+}
+
+func mediaSourceLabel(m library.Media) string {
+	switch m.Source {
+	case "screenshot":
+		return "Screenshot"
+	case "import":
+		return "Imported"
+	default:
+		return "Recorded"
+	}
+}
+
+func durationOrDash(m library.Media) string {
+	if m.DurationMs <= 0 {
+		return "—"
+	}
+	return fmtDuration(m.DurationMs)
+}
+
+// mediaStatus says what has been made of the media, in words.
+func mediaStatus(m library.Media) string {
+	var parts []string
+	switch m.TranscriptStatus {
+	case "done":
+		parts = append(parts, "Transcribed")
+	case "pending":
+		parts = append(parts, "Transcribing")
+	case "error":
+		parts = append(parts, "Transcription failed")
+	default:
+		parts = append(parts, "No transcript")
+	}
+	if m.SummaryStatus == "done" {
+		parts = append(parts, "Summarized")
+	}
+	return strings.Join(parts, " · ")
+}
+
+// tabs is the right pane of a media's page: its tabs across the top, the
+// export button beside them, and the chosen tab below.
+func (a *App) tabs(c *ui.Context, t *ui.Theme, m library.Media) {
+	ui.Column(c).Fill().Children(func() {
+		ui.Row(c).Padding(t.Space(4), t.Space(4), 0, t.Space(4)).Gap(t.Space(2)).
+			AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+			ui.Tabs(c, &a.tab, "Transcript", "Translate", "Summary").Grow(1)
+			a.exportButton(c, t, m)
+		})
+		ui.Column(c).Grow(1).MinHeight(0).Padding(t.Space(3), t.Space(4)).Children(func() {
 			switch a.tab {
 			case 1:
 				a.translateTab(c, t, m)
@@ -104,6 +233,69 @@ func (a *App) tabs(c *ui.Context, t *ui.Theme, m library.Media) {
 			}
 		})
 	})
+}
+
+// exportButton is the one way out of whatever the tabs made: the icon alone,
+// with its name in the label and tooltip.
+func (a *App) exportButton(c *ui.Context, t *ui.Theme, m library.Media) {
+	exports, label := a.exportsFor(m)
+	if len(exports) == 0 {
+		return
+	}
+	btn := ui.ButtonBase(c).Label(label).Tooltip(label).Padding(t.Space(1.5)).
+		Radius(t.Radius).TextColor(t.TextMuted).Border(1, t.Border)
+	btn.Children(func() { ui.Icon(c, iconDownload).FontSize(t.FontSize + 1) })
+	if btn.Hovered() {
+		btn.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	btn.Menu(func(mn *ui.Menu) {
+		for _, item := range exports {
+			if mn.Item(item.name).Chosen() {
+				item.run()
+			}
+		}
+	})
+}
+
+// exportItem is one entry of a tab's export menu.
+type exportItem struct {
+	name string
+	run  func()
+}
+
+// exportsFor lists what the tab shown can be exported as, and the menu's name.
+func (a *App) exportsFor(m library.Media) ([]exportItem, string) {
+	switch a.tab {
+	case 1:
+		if len(a.trans.Segments) == 0 {
+			return nil, ""
+		}
+		id := m.ID
+		return []exportItem{
+			{"Bilingual SRT", func() { a.exportTranslation(id, "bilingual_srt") }},
+			{"SRT", func() { a.exportTranslation(id, "srt") }},
+			{"WebVTT", func() { a.exportTranslation(id, "vtt") }},
+			{"Text", func() { a.exportTranslation(id, "txt") }},
+		}, "Export the translation"
+	case 2:
+		if a.sum.ContentMarkdown == "" {
+			return nil, ""
+		}
+		id := m.ID
+		return []exportItem{
+			{"Markdown", func() { a.exportSummary(id) }},
+		}, "Export the summary"
+	default:
+		if len(a.segs) == 0 {
+			return nil, ""
+		}
+		id := m.ID
+		return []exportItem{
+			{"SRT", func() { a.exportTranscript(id, "srt") }},
+			{"WebVTT", func() { a.exportTranscript(id, "vtt") }},
+			{"Text", func() { a.exportTranscript(id, "txt") }},
+		}, "Export the transcript"
+	}
 }
 
 // ------------------------------------------------------------- transcript
@@ -136,15 +328,6 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 			ui.SearchField(c, &a.segQuery).Label("Search the subtitles").Grow(1)
-			if ui.Button(c, "SRT").Label("Export as SRT").Clicked() {
-				a.exportTranscript(m.ID, "srt")
-			}
-			if ui.Button(c, "VTT").Label("Export as WebVTT").Clicked() {
-				a.exportTranscript(m.ID, "vtt")
-			}
-			if ui.Button(c, "TXT").Label("Export as text").Clicked() {
-				a.exportTranscript(m.ID, "txt")
-			}
 			if ui.Button(c, "Transcribe again").Clicked() {
 				a.startTranscribe(m.ID)
 			}
@@ -157,15 +340,15 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 					ui.Text(c, "Nothing matches that search.").TextColor(t.TextMuted)
 				}
 				for _, seg := range rows {
-					line := ui.Row(c.Key(seg.ID)).Gap(t.Space(3)).Padding(t.Space(2), t.Space(3)).
-						Radius(t.Radius)
+					line := ui.Row(c.Key(seg.ID)).Gap(t.Space(3)).Padding(t.Space(2), t.Space(2.5)).
+						Radius(t.Space(2))
 					if line.Hovered() {
 						line.Background(t.SurfaceHover)
 					}
 					line.Children(func() {
-						ui.Text(c, fmtDuration(seg.StartMs)).FontSize(t.FontSize - 2).
-							TextColor(t.TextMuted).FontFeatures("tnum").Width(56)
-						ui.Text(c, seg.Text).Grow(1).Selectable()
+						ui.Text(c, fmtDuration(seg.StartMs)).FontSize(t.FontSize - 3).
+							TextColor(t.TextMuted).FontFeatures("tnum").Width(44).Shrink(0)
+						ui.Text(c, seg.Text).Grow(1).MinWidth(0).Selectable()
 					})
 				}
 			})
@@ -252,8 +435,9 @@ func (a *App) translateTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	has := len(a.trans.Segments) > 0
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Translation").FontSize(t.FontSize - 3).TextColor(t.TextMuted).Shrink(0)
 			name := langName(a.trLang)
-			ui.Select(c, &name, langNames()).Label("Translate into").Width(160).Changed()
+			ui.Select(c, &name, langNames()).Label("Translate into").Width(150).Changed()
 			for _, l := range langs {
 				if l.name == name {
 					if l.code != a.trLang {
@@ -265,17 +449,8 @@ func (a *App) translateTab(c *ui.Context, t *ui.Theme, m library.Media) {
 			}
 			ui.Spacer(c)
 			if has {
-				if ui.Button(c, "SRT").Label("Export as SRT").Clicked() {
-					a.exportTranslation(m.ID, "srt")
-				}
-				if ui.Button(c, "Bilingual").Label("Export as bilingual SRT").Clicked() {
-					a.exportTranslation(m.ID, "bilingual_srt")
-				}
-				if ui.Button(c, "VTT").Label("Export as WebVTT").Clicked() {
-					a.exportTranslation(m.ID, "vtt")
-				}
-				if ui.Button(c, "TXT").Label("Export as text").Clicked() {
-					a.exportTranslation(m.ID, "txt")
+				if ui.Button(c, "Translate again").Clicked() {
+					a.startTranslate(m.ID)
 				}
 			}
 		})
@@ -364,15 +539,11 @@ func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	has := a.sum.ContentMarkdown != ""
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Model").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-			ui.Text(c, modelName(a.sum.Model, m.SummaryStatus)).FontSize(t.FontSize - 2).Grow(1)
+			ui.Text(c, modelName(a.sum.Model, m.SummaryStatus)).FontSize(t.FontSize - 2).
+				TextColor(t.TextMuted).Grow(1).SingleLine()
 			if has {
-				if ui.Button(c, "Copy").Clicked() {
-					c.Services().WriteClipboard(a.sum.ContentMarkdown)
-					c.Toast("Summary copied as Markdown")
-				}
-				if ui.Button(c, "Export…").Clicked() {
-					a.exportSummary(m.ID)
+				if ui.Button(c, "Generate again").Clicked() {
+					a.startSummary(m.ID)
 				}
 			}
 		})

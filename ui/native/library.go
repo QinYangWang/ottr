@@ -110,13 +110,20 @@ func (a *App) sidebarFooter(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// openLibrary opens the media list and its details independently of the main
-// recording form. Recording also lands here.
+// openLibrary opens the library window on the grid, whatever page it was left
+// on: the icon in the main window is the way to the library, not to the media
+// that happened to be open. Recording also lands here.
 func (a *App) openLibrary() {
 	if a.libraryWin != nil && !a.libraryWin.IsDestroyed() {
+		a.libraryWin.Update(func() {
+			a.newRecording = false
+			a.forget()
+		})
 		a.libraryWin.Focus()
 		return
 	}
+	a.newRecording = false
+	a.forget()
 	a.reload()
 	a.libraryWin = mygo.NewWindow(mygo.WindowOptions{
 		Title: "Ottr Library", Width: WideWidth, Height: WideHeight,
@@ -127,33 +134,27 @@ func (a *App) openLibrary() {
 	a.libraryWin.OnClosed(func() { a.libraryWin = nil })
 }
 
-// libraryView puts recordings on the left and the selected recording, or the
-// live recording, on the right.
+// libraryView shows the library as a page of cards, and one media's player and
+// transcript in place of the grid once a card is opened.
 func (a *App) libraryView(c *ui.Context) {
-	t := c.Theme()
 	a.drain()
 	a.mirror(c)
 	a.poll(c)
-	ui.Column(c).Fill().Children(func() {
-		a.windowTitleBar(c, t, "Ottr")
-		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			ui.Column(c).Width(sidebarWidth).Shrink(0).FillHeight().Background(t.Surface).
-				BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
-				a.libraryPane(c, t)
-			})
-			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-				switch {
-				case a.recording:
-					a.recorderPage(c, t)
-				default:
-					if m, ok := a.current(); ok {
-						a.sessionPage(c, t, m)
-					} else {
-						a.emptyPage(c, t)
-					}
-				}
-			})
-		})
+	t := a.applyTheme(c)
+	ui.Column(c).Fill().Background(t.Background).Children(func() {
+		a.windowTitleBar(c, t, "Ottr", func() { a.titleBarActions(c, t) })
+		switch {
+		case a.recording:
+			a.recorderPage(c, t)
+		case a.detail():
+			if m, ok := a.current(); ok {
+				a.sessionPage(c, t, m)
+			}
+		case a.newRecording:
+			a.recordPage(c, t)
+		default:
+			a.libraryGrid(c, t)
+		}
 	})
 	if a.err != "" {
 		a.banner(c, t)
@@ -161,39 +162,70 @@ func (a *App) libraryView(c *ui.Context) {
 	a.dialogs(c, t)
 }
 
-// sourcePreviewHeight gives the source room enough to read its contents.
-const sourcePreviewHeight = 192
+// recordPage is the recording form shown in place of the grid, the way the
+// prototype opens New recording: the source cards and the picture, the audio
+// dropdowns, and Start.
+func (a *App) recordPage(c *ui.Context, t *ui.Theme) {
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(t.Space(5), t.Space(5), t.Space(6), t.Space(5)).Children(func() {
+			ui.Column(c).MaxWidth(1000).Gap(t.Space(4)).Children(func() {
+				ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+					if a.backButton(c, t, "Library") {
+						a.stopChoosing()
+					}
+					ui.Text(c, "New recording").FontSize(t.FontSize + 4).Bold().Grow(1)
+				})
+				ui.Row(c).Gap(t.Space(6)).AlignItems(ui.Start).Children(func() {
+					ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+						a.sourcePreview(c, t)
+					})
+					ui.Column(c).Width(360).Shrink(0).Gap(t.Space(3)).Children(func() {
+						a.sourceCards(c, t)
+						a.windowSelect(c, t)
+						a.audioBar(c, t)
+						ui.Row(c).Children(func() {
+							ui.Spacer(c)
+							if ui.PrimaryButton(c, "Start recording").Disabled(a.busy).Clicked() {
+								a.startRecording()
+							}
+						})
+					})
+				})
+			})
+		})
+	})
+}
+
+// detail reports whether one media's page is shown instead of the grid.
+func (a *App) detail() bool { return a.sel != 0 && !a.newRecording }
 
 // sourcePreview shows the source before it is recorded — the frames the
 // previewer draws — or what keeps them away.
 func (a *App) sourcePreview(c *ui.Context, t *ui.Theme) {
-	height := float32(sourcePreviewHeight)
-	if a.previewErr != "" {
-		height = 168 // room for what the capture backend said
-	}
-	box := ui.Column(c).Height(height).Radius(t.Radius).
-		BorderWidth(1).BorderColor(t.Border).Background(t.Background).Clip()
+	from, to := mediaBackdrop(t.Dark)
+	box := ui.Column(c).FillWidth().AspectRatio(16.0/9.0).Radius(t.Radius+2).
+		Clip().Border(1, t.Border).Gradient(from, to, 90)
 	box.Children(func() {
 		if a.preview != nil {
 			ui.Image(c, a.preview).Fit(ui.Cover).Grow(1)
 			return
 		}
-		ui.Column(c).Grow(1).Center().Padding(t.Space(2)).Gap(t.Space(1)).Children(func() {
-			ui.Icon(c, iconScreen).FontSize(t.FontSize + 5).TextColor(t.TextMuted)
+		ui.Column(c).Grow(1).Center().Padding(t.Space(3)).Gap(t.Space(2)).Children(func() {
+			ui.Icon(c, iconScreen).FontSize(t.FontSize + 10).TextColor(onMedia()).Opacity(0.75)
 			label := a.sourceName()
 			if detail := a.sourceDetail(); detail != "" {
 				label += " · " + detail
 			}
-			ui.Text(c, label).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine()
+			ui.Text(c, label).FontSize(t.FontSize - 1).TextColor(onMedia()).SingleLine()
 			if a.previewErr == "" {
-				ui.Text(c, "Waiting for the first frame…").FontSize(t.FontSize - 3).
-					TextColor(t.TextMuted).SingleLine().TextAlign(ui.Center)
+				ui.Text(c, "Waiting for the first frame…").FontSize(t.FontSize - 2).
+					TextColor(onMedia()).Opacity(0.65).SingleLine().TextAlign(ui.Center)
 				return
 			}
 			// What the capture backend said, whole: it is the only clue
 			// there is.
-			ui.Text(c, a.previewErr).FontSize(t.FontSize - 3).TextColor(t.TextMuted).
-				MaxWidth(300).TextAlign(ui.Center).Selectable()
+			ui.Text(c, a.previewErr).FontSize(t.FontSize - 2).TextColor(onMedia()).
+				Opacity(0.75).MaxWidth(340).TextAlign(ui.Center).Selectable()
 			if ui.Button(c, "Try again").Clicked() {
 				a.showPreview()
 			}
@@ -386,48 +418,187 @@ func (a *App) windowSource() capture.Source {
 	return windows[0]
 }
 
-// libraryPane searches the library and lists it, in the room the form leaves.
-func (a *App) libraryPane(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Column(c).Padding(t.Space(4), t.Space(4), t.Space(2), t.Space(4)).Gap(t.Space(2)).Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
-				ui.Text(c, "Library").FontSize(t.FontSize - 1).Bold().TextColor(t.TextMuted).Grow(1)
-				// The one action of the header is a button with an icon alone:
-				// the name is in its label and tooltip.
-				imp := ui.ButtonBase(c).Label("Import").Tooltip("Add a media file to the library").
-					Disabled(a.recording).Padding(t.Space(1.5)).Radius(t.Radius).TextColor(t.TextMuted)
-				imp.Children(func() { ui.Icon(c, iconImport).FontSize(t.FontSize + 3) })
-				if imp.Hovered() && !a.recording {
-					imp.Background(t.SurfaceHover)
-				}
-				if imp.Clicked() && !a.recording {
-					a.importFiles()
-				}
-			})
-			if ui.SearchField(c, &a.query).Label("Search the library").Changed() {
-				a.reload()
-			}
-			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Translate + summarize imports").FontSize(t.FontSize - 3).
-					TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine()
-				ui.Switch(c, &a.importChain).Label("Translate and summarize imports").Changed()
-			})
-		})
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Padding(0, t.Space(2), t.Space(3), t.Space(2)).Gap(1).Children(func() {
-				if len(a.media) == 0 {
-					ui.Text(c, a.emptyList()).FontSize(t.FontSize-1).TextColor(t.TextMuted).
-						Padding(t.Space(2), t.Space(3))
-				}
-				for _, m := range a.media {
-					a.mediaRow(c, t, m)
-				}
-			})
-		})
-		if len(a.orphans) > 0 {
-			a.orphanNotice(c, t)
+// libraryTools are the header's controls: the search field, New recording and
+// the import button, which is an icon alone as its meaning is in its tooltip.
+func (a *App) libraryTools(c *ui.Context, t *ui.Theme) {
+	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Shrink(0).Children(func() {
+		if ui.SearchField(c, &a.query).Label("Search the library").Width(220).Changed() {
+			a.reload()
+		}
+		if ui.Button(c, "New recording").Label("New recording").
+			Tooltip("Record the screen, a display or a window").Clicked() {
+			a.chooseRecording()
+		}
+		imp := ui.ButtonBase(c).Label("Import").Tooltip("Add a media file to the library").
+			Disabled(a.recording).Padding(t.Space(1.5)).Radius(t.Radius).TextColor(t.TextMuted)
+		imp.Children(func() { ui.Icon(c, iconImport).FontSize(t.FontSize + 4) })
+		if imp.Hovered() && !a.recording {
+			imp.Background(t.SurfaceHover)
+		}
+		if imp.Clicked() && !a.recording {
+			a.importFiles()
 		}
 	})
+}
+
+// libraryGrid is the library as a page of cards, one per media, and what is
+// left to do with the files it does not hold.
+func (a *App) libraryGrid(c *ui.Context, t *ui.Theme) {
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(t.Space(5), t.Space(5), t.Space(6), t.Space(5)).Gap(t.Space(4)).Children(func() {
+			if len(a.media) == 0 {
+				a.emptyLibrary(c, t)
+			} else {
+				// Cards wrap into as many columns as the window holds, so the
+				// grid follows the width instead of a fixed count.
+				ui.Row(c).Wrap().GapX(t.Space(4)).GapY(t.Space(4)).AlignItems(ui.Start).Children(func() {
+					for _, m := range a.media {
+						a.mediaCard(c, t, m)
+					}
+				})
+			}
+			if len(a.orphans) > 0 {
+				a.orphanNotice(c, t)
+			}
+		})
+	})
+}
+
+// cardWidth is one column of the grid: four to a row at the Library's default
+// width, fewer as the window narrows.
+const cardWidth = 236
+
+// emptyLibrary says the library is empty, or that nothing matched, and offers
+// the one thing to do about it.
+func (a *App) emptyLibrary(c *ui.Context, t *ui.Theme) {
+	searching := strings.TrimSpace(a.query) != ""
+	ui.Column(c).FillWidth().Padding(t.Space(12), 0).Center().Gap(t.Space(2)).Children(func() {
+		ui.Icon(c, iconLibrary).FontSize(t.FontSize + 18).TextColor(t.TextMuted).Opacity(0.6)
+		title := "No recordings yet"
+		detail := "Record the screen, or import a media file to get started."
+		if searching {
+			title = fmt.Sprintf("No results for “%s”", strings.TrimSpace(a.query))
+			detail = "Try a different search."
+		}
+		ui.Text(c, title).FontSize(t.FontSize + 3).Bold()
+		ui.Text(c, detail).FontSize(t.FontSize - 1).TextColor(t.TextMuted).TextAlign(ui.Center)
+		if !searching {
+			if ui.Button(c, "Import media").Clicked() {
+				a.importFiles()
+			}
+		}
+	})
+}
+
+// mediaCard is one tile of the grid: the picture with the chips that say what
+// has been made of it and its duration, then the name and where it came from.
+func (a *App) mediaCard(c *ui.Context, t *ui.Theme, m library.Media) {
+	id := m.ID
+	card := ui.Column(c.Key(id)).Width(cardWidth).Shrink(0).Gap(t.Space(2)).Cursor(ui.CursorPointer)
+	card.Children(func() {
+		a.mediaThumb(c, t, m, id == a.sel)
+		ui.Text(c, m.Name).FontSize(t.FontSize).Bold().MaxLines(2)
+		ui.Text(c, cardSubtitle(m)).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine()
+	})
+	if card.Clicked() {
+		a.openDetail(id)
+	}
+	card.ContextMenu(func(mn *ui.Menu) {
+		if mn.Item("Transcript").Chosen() {
+			a.openDetail(id)
+			a.tab = 0
+		}
+		if mn.Item("Translate").Chosen() {
+			a.openDetail(id)
+			a.tab = 1
+		}
+		if mn.Item("Summary").Chosen() {
+			a.openDetail(id)
+			a.tab = 2
+		}
+		mn.Separator()
+		if mn.Item("Show the file").Chosen() {
+			mygo.Shell.ShowItemInFolder(m.Path)
+		}
+		if mn.Item("Delete…").Chosen() {
+			a.delID, a.confirmDel = id, true
+		}
+	})
+}
+
+// mediaThumb is the picture of a media, on the dark ground every thumbnail
+// shares. There is no decoder in the window yet (docs/native-playback.md), so
+// the tile says what the media is rather than drawing its first frame.
+func (a *App) mediaThumb(c *ui.Context, t *ui.Theme, m library.Media, chosen bool) {
+	thumb := ui.Column(c).FillWidth().AspectRatio(16.0 / 9.0).Radius(t.Radius + 2).
+		Clip().Justify(ui.End)
+	from, to := mediaBackdrop(t.Dark)
+	thumb.Gradient(from, to, 90)
+	if chosen {
+		thumb.BorderWidth(2).BorderColor(t.Accent)
+	}
+	thumb.Children(func() {
+		switch {
+		case m.Source == "screenshot" || !m.HasVideo:
+			ui.Column(c).Grow(1).Center().Children(func() {
+				ui.Icon(c, iconScreen).FontSize(t.FontSize + 16).TextColor(onMedia()).Opacity(0.7)
+			})
+		default:
+			ui.Column(c).Grow(1).Center().Children(func() {
+				ui.Icon(c, iconPlay).FontSize(t.FontSize + 10).TextColor(onMedia()).Opacity(0.8)
+			})
+		}
+		ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Padding(t.Space(2), t.Space(2.5)).Children(func() {
+			for _, chip := range mediaChips(m) {
+				chipLabel(c, t, chip)
+			}
+			ui.Spacer(c)
+			if m.TranscriptStatus == "pending" || m.SummaryStatus == "pending" {
+				ui.Text(c, "Working…").FontSize(t.FontSize - 3).TextColor(onMedia()).Opacity(0.85)
+			} else if m.DurationMs > 0 {
+				ui.Text(c, fmtDuration(m.DurationMs)).FontSize(t.FontSize - 3).Bold().
+					TextColor(onMedia()).FontFeatures("tnum")
+			}
+		})
+	})
+}
+
+// mediaChips say what has been made of a media, as the card's small badges.
+func mediaChips(m library.Media) []string {
+	var chips []string
+	if m.Source == "screenshot" {
+		chips = append(chips, "PNG")
+	}
+	switch m.TranscriptStatus {
+	case "done":
+		chips = append(chips, "TXT")
+	case "error":
+		chips = append(chips, "TXT!")
+	}
+	if m.SummaryStatus == "done" {
+		chips = append(chips, "AI")
+	}
+	return chips
+}
+
+// chipLabel is one small badge on a thumbnail: a dark pill with a hairline, so
+// that it reads on any picture.
+func chipLabel(c *ui.Context, t *ui.Theme, text string) {
+	ui.Row(c).Padding(t.Space(0.5), t.Space(1.5)).Radius(t.Space(1.5)).
+		Background(ui.RGBA(10, 13, 20, 0.72)).Border(1, ui.RGBA(255, 255, 255, 0.16)).
+		Children(func() {
+			ui.Text(c, text).FontSize(t.FontSize - 5).Bold().TextColor(onMedia())
+		})
+}
+
+// cardSubtitle is the line under a card's name: what it is and when it was
+// made.
+func cardSubtitle(m library.Media) string {
+	source := m.Source
+	if m.Source == "screenshot" {
+		source = "Screenshot"
+	}
+	return fmt.Sprintf("%s · %s", source, m.CreatedAt.Local().Format("Jan 2, 15:04"))
 }
 
 // orphanNotice says that recordings on disk are not in the library, and offers
@@ -449,66 +620,6 @@ func (a *App) orphanNotice(c *ui.Context, t *ui.Theme) {
 				a.confirmOrphans = true
 			}
 		})
-	})
-}
-
-func (a *App) emptyList() string {
-	if strings.TrimSpace(a.query) != "" {
-		return "Nothing matches that search."
-	}
-	return "Nothing yet: record the screen, or import a file."
-}
-
-func (a *App) mediaRow(c *ui.Context, t *ui.Theme, m library.Media) {
-	id := m.ID
-	row := ui.Row(c.Key(id)).Gap(t.Space(2.5)).Padding(t.Space(2), t.Space(3)).
-		Radius(t.Radius).Cursor(ui.CursorPointer)
-	chosen := id == a.sel && !a.recording
-	switch {
-	case chosen:
-		row.Background(t.Accent).TextColor(t.AccentText)
-	case row.Hovered():
-		row.Background(t.SurfaceHover)
-	}
-	row.Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, m.Name).SingleLine().FontSize(t.FontSize - 1)
-			meta := ui.Text(c, mediaMeta(m)).SingleLine().FontSize(t.FontSize - 3)
-			if chosen {
-				meta.TextColor(t.AccentText.Alpha(0.75))
-			} else {
-				meta.TextColor(t.TextMuted)
-			}
-		})
-		if m.TranscriptStatus == "pending" || m.SummaryStatus == "pending" {
-			ui.Spinner(c).Label("Working")
-		} else if chosen {
-			ui.Badge(c, fmtDuration(m.DurationMs))
-		}
-	})
-	if row.Clicked() {
-		a.selectMedia(id)
-	}
-	row.ContextMenu(func(mn *ui.Menu) {
-		if mn.Item("Transcript").Chosen() {
-			a.selectMedia(id)
-			a.tab = 0
-		}
-		if mn.Item("Translate").Chosen() {
-			a.selectMedia(id)
-			a.tab = 1
-		}
-		if mn.Item("Summary").Chosen() {
-			a.selectMedia(id)
-			a.tab = 2
-		}
-		mn.Separator()
-		if mn.Item("Show the file").Chosen() {
-			mygo.Shell.ShowItemInFolder(m.Path)
-		}
-		if mn.Item("Delete…").Chosen() {
-			a.delID, a.confirmDel = id, true
-		}
 	})
 }
 

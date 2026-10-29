@@ -39,6 +39,13 @@ var (
 	iconCamera = loadIcon("video")
 	// import: adding a file to the library.
 	iconImport = loadIcon("import")
+	// folder and trash-2: file actions on a chosen media.
+	iconFolder = loadIcon("folder")
+	iconTrash  = loadIcon("trash-2")
+	// download: the export menu of a tab.
+	iconDownload = loadIcon("download")
+	// play: the player in the detail page.
+	iconPlay = loadIcon("play")
 	// library and sun/moon: the footer windows and theme toggle.
 	iconLibrary = loadIcon("library")
 	iconSun     = loadIcon("sun")

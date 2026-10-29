@@ -39,12 +39,21 @@ action; no disabled Area/Camera cards or duplicate theme/Library controls.
 - Three surface levels carry the hierarchy: `bg` for a window, `surface` for
   raised rows, cards and the title bar, `surface-sunken` for navigation,
   search fields and hover fills. Hairline borders and a two-step shadow do the
-  rest — no heavy outlines, no second accent.
+  rest — no heavy outlines, no second accent. The Go theme is
+  [ui/native/theme.go](../ui/native/theme.go), which keeps `ui.LightTheme` /
+  `ui.DarkTheme`'s structure and substitutes this palette.
 - Type is small and tight: 13–13.5px body, 640-weight headings with negative
   tracking, and 10.5px uppercase labels above groups and inside the item page's
   fact strip.
 - Thumbnails, the player stage and the recording preview share one dark
-  treatment so media always sits on the same ground in both themes.
+  treatment so media always sits on the same ground in both themes; text drawn
+  over them is light in both looks.
+- The grid is one wrapping row of fixed-width cards, so the column count
+  follows the window instead of a fixed number: four at 1180 wide, two at 900,
+  one below 620.
+- Cards and the item page have no heading of their own. The window is named
+  `Ottr` and the media's name is its title, so no `Library` heading or item
+  count is drawn and no date/source line repeats what the fact strip says.
 - Short English labels, and a caption above each group of controls, as a
   settings window has them.
 - Capture sources are cards with an icon and name; speakers and microphones
@@ -99,13 +108,17 @@ Recorded screen  Bug triage      Design ref
 ```
 
 ```
-Library ▸ item (back arrow returns to the grid)
-‹ Recorded screen 2026-10-24               [📁] [🗑 Delete]
-┌──────────────────────────────────┬────────────────────────────┐
-│                                  │ Transcript | Summary  [⤓]  │
-│            ▷  player             │ 0:00  Alright, let's start…│
-│   ──────●───────────────────     │ 0:04  We ship the editor…  │
-└──────────────────────────────────┴────────────────────────────┘
+Library ▸ item (the arrow beside the name returns to the grid)
+‹ Recorded screen 2026-10-24                 [📁] [🗑 Delete]
+┌──────────────────────────────┬────────────────────────────────┐
+│                              │ Transcript | Summary     [⤓]   │
+│          ▷  player           │ 0:00  Alright, let's start…    │
+│                              │ 0:04  We ship the editor…      │
+└──────────────────────────────┴────────────────────────────────┘
+┌──────────┬──────────┬──────────────────┬─────────────────────┐
+│ SOURCE   │ DURATION │ CREATED          │ STATUS              │
+│ Recorded │ 3:43     │ Oct 29, 14:32    │ Transcribed · …     │
+└──────────┴──────────┴──────────────────┴─────────────────────┘
 ```
 
 The main form's upper part — the cards and picture — scrolls in a short
@@ -161,28 +174,27 @@ hangs below the bar rather than over it.
   the window name already says `Ottr`, so the cards start at the top and no
   item count is drawn. An empty library says so, and so does a search with no
   hits.
-- A card's chips say what has been made of it: `TXT` for a transcript, the
-  target language for a translation, `AI` for a summary. A spinner replaces
-  them while a transcript is pending.
-- Clicking a card opens its page in place: `Back` returns to the grid, and the
-  card that was open keeps the accent ring. `New recording` opens the recorder
-  page in place, whose `Library` button returns to the grid.
+- A card's chips say what has been made of it: `TXT` for a transcript, `AI` for
+  a summary, `PNG` for a screenshot. A card whose transcript is pending says
+  `Working…` in place of its duration.
+- Clicking a card opens its page in place: the back arrow beside the name
+  returns to the grid, and the card that was open keeps the accent ring. `New
+  recording` in the header opens the recorder page in place, whose `Library`
+  button returns to the grid.
 - The `Library` icon in the main window's status bar always opens the grid, not
   the last open item.
 - A right-click on a card opens a menu of the tabs, "Show the file" and
   `Delete…`.
 - `Delete…` asks in a modal, with "Keep the file on disk" checked by default:
   the card goes, the recording stays.
-- The item page keeps the visual language of the grid: a dark player stage with
-  the frame inset and the controls in a strip below, and a muted four-cell
-  fact strip (source, duration, created, status) under the player. A screenshot
-  drops the controls and shows the still full-bleed with a `Screenshot` badge.
-- The import button, an icon alone beside `New recording` in the `Library`
-  header, adds media files through a native dialog. Each one is transcribed on
-  this computer, as a recording is; the `Translate + summarize imports` switch
-  (off by default, because it spends the provider's quota) also translates them
-  into the Translate tab's language and summarizes them, as one `import` job
-  the page shows and can cancel.
+- The item page keeps the visual language of the grid: the name with an icon
+  button for `Show file` and a `Delete` in the danger tint, a dark player stage
+  with the picture centred and the file's time in a strip below, and a
+  four-cell fact strip (source, duration, created, status) divided by
+  hairlines. A screenshot shows the still instead of a play button.
+- To add imports to the automatic chain, the `Translate + summarize imports`
+  switch sits in Settings ▸ Translation: the grid has no room for it now, and
+  it is a preference rather than a per-import choice.
 - Below the grid, a notice says how many files in the recordings folder no
   record holds — left there by a removal that kept the file — with `Add back`
   (re-add them as recordings) and `Delete files…`, which asks in a modal that

@@ -42,15 +42,16 @@ func themeBackground() string {
 
 // settingsView draws sections on the left and the chosen one on the right.
 func (a *App) settingsView(c *ui.Context) {
-	t := c.Theme()
+	t := a.applyTheme(c)
 	a.drain()
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
-		a.windowTitleBar(c, t, "Ottr")
+		a.windowTitleBar(c, t, "Ottr", nil)
 		ui.Row(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Column(c).Width(190).Shrink(0).FillHeight().Padding(t.Space(3)).Gap(t.Space(1)).
-				Background(t.Surface).BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
-				ui.Text(c, "Settings").FontSize(t.FontSize+2).Bold().
-					Padding(t.Space(1), t.Space(2), t.Space(3), t.Space(2))
+			ui.Column(c).Width(200).Shrink(0).FillHeight().Padding(t.Space(3)).
+				Gap(t.Space(1)).Background(t.Background).BorderWidth(0, 1, 0, 0).
+				BorderColor(t.Border).Children(func() {
+				ui.Text(c, "Settings").FontSize(t.FontSize+1).Bold().TextColor(t.TextMuted).
+					Padding(t.Space(1), t.Space(2), t.Space(2), t.Space(2))
 				for i, item := range []struct {
 					label string
 					icon  *ui.SVG
@@ -64,7 +65,7 @@ func (a *App) settingsView(c *ui.Context) {
 				}
 			})
 			ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
-				ui.Row(c).Padding(t.Space(4), t.Space(5), t.Space(2), t.Space(5)).Children(func() {
+				ui.Row(c).Padding(t.Space(5), t.Space(5), t.Space(2), t.Space(5)).Children(func() {
 					ui.Text(c, []string{"Appearance", "Transcription", "Translation", "Summary"}[a.settingsTab]).
 						FontSize(t.FontSize + 5).Bold()
 				})
@@ -78,16 +79,16 @@ func (a *App) settingsView(c *ui.Context) {
 }
 
 func (a *App) settingsNav(c *ui.Context, t *ui.Theme, tab int, label string, icon *ui.SVG) {
-	nav := ui.ButtonBase(c).Label(label).FillWidth().Padding(t.Space(2.5), t.Space(3)).
-		Radius(t.Radius).Cursor(ui.CursorPointer)
+	nav := ui.ButtonBase(c).Label(label).FillWidth().Padding(t.Space(2), t.Space(2.5)).
+		Radius(t.Space(2)).Cursor(ui.CursorPointer)
 	if a.settingsTab == tab {
-		nav.Background(t.SurfaceHover)
+		nav.Background(t.Surface).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.06))
 	} else {
 		nav.TextColor(t.TextMuted)
 	}
 	nav.Children(func() {
 		ui.Row(c).Grow(1).Gap(t.Space(2.5)).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, icon).FontSize(t.FontSize + 3)
+			ui.Icon(c, icon).FontSize(t.FontSize + 2)
 			ui.Text(c, label).FontSize(t.FontSize - 1)
 		})
 	})
@@ -442,6 +443,9 @@ func (a *App) translationSettings(c *ui.Context, t *ui.Theme) {
 			ui.TextInput(c, &a.transCfg.Model).Placeholder("deepseek-chat").Grow(1).Label("Model")
 		})
 	}
+	settingRow(c, t, "Translate + summarize imports",
+		"Imported files are translated into the tab's language and summarized too, as one job. Off by default: it spends the provider's quota.",
+		func() { ui.Switch(c, &a.importChain).Label("Translate and summarize imports") })
 	a.saveRow(c, t, func() { a.saveTransSettings() })
 }
 

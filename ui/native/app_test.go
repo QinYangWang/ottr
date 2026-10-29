@@ -67,15 +67,17 @@ func newTestApp(t *testing.T) (*App, int64) {
 	return a, id
 }
 
-// The window lists what it recorded and shows the transcript of the file
-// chosen, which its tabs switch away from and back to.
+// The library lists what it recorded as cards, and opening one shows its
+// transcript, which its tabs switch away from and back to.
 func TestWindowShowsTranscript(t *testing.T) {
-	a, _ := newTestApp(t)
+	a, id := newTestApp(t)
 	tt := ui.NewTester(a.libraryView, 1100, 720)
-	// The library lists the file, and the transcript tab shows its lines.
+	// The grid lists the file; its card opens the media's page.
 	if !tt.HasText("standup") {
 		t.Fatalf("the library does not list the recording: %q", tt.Texts())
 	}
+	tt.Frame()
+	a.openDetail(id)
 	tt.Frame()
 	for i := 0; i < 5 && !tt.HasText("first line"); i++ {
 		tt.Frame()
@@ -109,7 +111,7 @@ func TestSearchFilters(t *testing.T) {
 	a.query = "nothing-like-this"
 	a.reload()
 	tt.Frame()
-	if !tt.HasText("Nothing matches that search.") {
+	if !tt.HasText("No results for") {
 		t.Errorf("search: %q", tt.Texts())
 	}
 	a.query = "stand"
@@ -132,7 +134,10 @@ func TestDeleteMedia(t *testing.T) {
 	if len(a.media) != 0 {
 		t.Fatalf("still %d records", len(a.media))
 	}
-	if !tt.HasText("Nothing yet: record the screen, or import a file.") {
+	for i := 0; i < 5 && !tt.HasText("No recordings yet"); i++ {
+		tt.Frame()
+	}
+	if !tt.HasText("No recordings yet") {
 		t.Errorf("the empty library says %q", tt.Texts())
 	}
 }
@@ -163,6 +168,9 @@ func TestCancelStopsTheSummaryJob(t *testing.T) {
 	}
 
 	tt := ui.NewTester(a.libraryView, 1100, 720)
+	tt.Frame()
+	a.openDetail(id)
+	tt.Frame()
 	if err := tt.Click("Summary"); err != nil {
 		t.Fatal(err)
 	}
@@ -484,22 +492,29 @@ func TestMainWindowKeepsLibrarySeparate(t *testing.T) {
 
 	lt := ui.NewTester(a.libraryView, WideWidth, WideHeight)
 	lt.Frame()
-	for i := 0; i < 20 && !lt.HasText("Transcript"); i++ {
-		time.Sleep(5 * time.Millisecond)
-		lt.Frame()
-	}
-	if !lt.HasText("standup") || !lt.HasText("Transcript") {
-		t.Fatalf("Library does not show media and details: %q", lt.Texts())
+	if !lt.HasText("standup") {
+		t.Fatalf("Library does not list the media: %q", lt.Texts())
 	}
 	if _, ok := lt.Find("Import"); !ok {
 		t.Errorf("Library has no import button: %q", lt.Texts())
 	}
-	if err := lt.Click("Close"); err != nil {
+	// A card opens the media's page in place of the grid.
+	id := a.media[0].ID
+	a.openDetail(id)
+	for i := 0; i < 20 && !lt.HasText("Transcript"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		lt.Frame()
+	}
+	if !lt.HasText("Transcript") {
+		t.Fatalf("opening a card did not show its details: %q", lt.Texts())
+	}
+	// Back returns to the grid, the library itself.
+	if err := lt.Click("Back"); err != nil {
 		t.Fatal(err)
 	}
 	lt.Frame()
-	if !lt.HasText("Nothing chosen") {
-		t.Errorf("closing details changed the main window or left details open")
+	if lt.HasText("Transcript") || !lt.HasText("standup") {
+		t.Errorf("back did not return to the grid: %q", lt.Texts())
 	}
 }
 

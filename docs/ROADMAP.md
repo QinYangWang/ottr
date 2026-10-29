@@ -52,10 +52,10 @@ What it still does not do:
 
 `Library.Import` probes and inserts, then the window runs one `import` job per
 file with audio: `asr.TranscribeNow` (the offline pass a recording gets), and,
-when the `Translate + summarize imports` switch is on, translation into the
-Translate tab's language and a summary, in that order. A file already in that
-language skips translation rather than spending quota on it. One job means one
-progress bar and one Cancel for the whole chain. See
+when the `Translate + summarize imports` switch in Settings ▸ Translation is
+on, translation into the Translate tab's language and a summary, in that order.
+A file already in that language skips translation rather than spending quota on
+it. One job means one progress bar and one Cancel for the whole chain. See
 [UI](ui.md#main-window-and-library).
 
 What it still does not do:

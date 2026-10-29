@@ -73,15 +73,21 @@ windows with the same hidden, app-drawn title bar:
 | Part | Shows |
 |---|---|
 | Main window | source cards, a window dropdown, the preview, full-row speaker/microphone dropdowns, Start recording, and theme/Library/Settings icon buttons |
-| Library header | the `Library` heading with an item count, `Search`, `New recording`, and the import icon button |
-| Library grid | one card per media: 16:9 thumbnail, status chips and duration, name, source and date, with a right-click menu of the tabs, Show the file and Delete |
-| Library recording page | the preview frame, provisional live transcript, and Delete/Stop, shown in place of the grid |
-| Library session page | the player and details on the left, the Transcript and Summary tabs on the right, opened by a card and left by Back |
+| Library title strip | `Ottr` and, on the grid, `Search`, `New recording` and the import icon button; an inner page carries a back arrow beside its own title instead |
+| Library grid (`libraryGrid`) | one card per media: a 16:9 dark thumbnail with status chips and duration in its lower corners, then the name and the source with the date, with a right-click menu of the tabs, Show the file and Delete |
+| Library new recording (`recordPage`) | the recording form in place of the grid: a back arrow and `New recording`, the source preview beside the cards, window and audio dropdowns, and Start |
+| Library recording page (`recorderPage`) | the preview frame in the same dark ground, the live transcript in a panel beside it, and Delete/Stop |
+| Library session page (`sessionPage`) | the name with `Show file` and `Delete`, the dark player stage, a four-cell fact strip, and the Transcript/Translate/Summary tabs in a right-hand pane, opened by a card and left by the arrow |
 | Settings window | which model transcribes, and which provider translates and summarizes |
 
 The main window is always 420 × 800. Library is 1180 × 800 and Settings is
 920 × 660. Starting a recording opens or focuses Library, which shows the live
 capture in place of the grid and then the finished recording's page.
+
+`ui/native/theme.go` holds the palette all three windows share: it starts from
+`ui.LightTheme` / `ui.DarkTheme` and substitutes the prototype's surfaces,
+accent, radii and tight type, so widgets the app does not draw itself — buttons,
+fields, tabs, scroll bars — land on the same look.
 
 ## Events (Go → app)
 
