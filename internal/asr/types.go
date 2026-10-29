@@ -18,10 +18,20 @@ type Transcript struct {
 	Segments  []Segment `json:"segments"`
 }
 
-// LiveSubtitle is broadcast during real-time transcription.
+// LiveSubtitle is one revision of the line being spoken while a recording runs.
+//
+// The same utterance is published again and again with more text, each time
+// with the same Utterance number: the window replaces that line instead of
+// adding one. Final marks the revision that will not change again.
 type LiveSubtitle struct {
-	StartMs int64  `json:"startMs"`
-	EndMs   int64  `json:"endMs"`
-	Text    string `json:"text"`
-	Final   bool   `json:"final"`
+	Utterance int64  `json:"utterance"`
+	StartMs   int64  `json:"startMs"`
+	EndMs     int64  `json:"endMs"`
+	Text      string `json:"text"`
+	Final     bool   `json:"final"`
+	// Warn is set on a revision that only tells the window live text is
+	// behind; it carries no text and replaces nothing.
+	Warn string `json:"warn,omitempty"`
+	// Error is set when live recognition stopped for good.
+	Error string `json:"error,omitempty"`
 }

@@ -228,7 +228,7 @@ func TestImportChainRecordsWhatItDid(t *testing.T) {
 			if job.Kind != jobs.KindImport {
 				t.Errorf("the import job is of kind %q", job.Kind)
 			}
-			// The test app has no sherpa-onnx binary, so this is the honest
+			// The test app has no native ASR runtime, so this is the honest
 			// end of the chain rather than a fabricated one.
 			if job.State != jobs.StateFailed || !strings.Contains(job.Error, "sherpa-onnx") {
 				t.Errorf("the import job ended as %q: %+v", job.State, job)
@@ -330,8 +330,8 @@ func TestSettingsChooseAModel(t *testing.T) {
 	if !tt.HasText("missing tokens.txt") {
 		t.Errorf("the unusable folder does not say why: %q", tt.Texts())
 	}
-	if !tt.HasText("sherpa-onnx binary not found") {
-		t.Errorf("the page does not say the binary is missing: %q", tt.Texts())
+	if !tt.HasText("the sherpa-onnx library is not in") {
+		t.Errorf("the page does not say the runtime is missing: %q", tt.Texts())
 	}
 
 	// Without a choice the first valid model is the one in use; the other is

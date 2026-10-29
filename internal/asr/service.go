@@ -149,12 +149,11 @@ func (s *Service) TranscribeNow(ctx context.Context, mediaID int64, progress fun
 }
 
 // recognition is what one transcription needs: where the media is, and which
-// binary and model read it.
+// model reads it.
 type recognition struct {
 	mediaID int64
 	path    string
-	bin     string
-	model   *models.ASRModel
+	model   models.ASRModel
 }
 
 // prepare checks that the media can be transcribed and marks it pending, so
@@ -167,8 +166,7 @@ func (s *Service) prepare(mediaID int64) (recognition, error) {
 	if !m.HasAudio {
 		return recognition{}, errors.New("this media file has no audio stream to transcribe")
 	}
-	bin, err := s.models.FindSherpaBin()
-	if err != nil {
+	if err := s.ready(); err != nil {
 		return recognition{}, err
 	}
 	mdl, err := s.models.FindASRModel()
@@ -183,7 +181,7 @@ func (s *Service) prepare(mediaID int64) (recognition, error) {
 		return recognition{}, err
 	}
 	library.Changed.Broadcast(struct{}{})
-	return recognition{mediaID: mediaID, path: m.Path, bin: bin, model: mdl}, nil
+	return recognition{mediaID: mediaID, path: m.Path, model: *mdl}, nil
 }
 
 // recognize turns the audio into segments and stores them.
@@ -196,7 +194,7 @@ func (s *Service) recognize(ctx context.Context, r recognition, progress func(fl
 		return s.endFailed(r.mediaID, ctx, err)
 	}
 	progress(0.15) // extraction done; sherpa-onnx then runs the file in one go
-	segments, err := RunSherpa(ctx, r.bin, r.model, tmpWav)
+	segments, err := recognizeWav(ctx, r.model, tmpWav)
 	if err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
 	}

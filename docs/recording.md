@@ -1,103 +1,98 @@
 # Recording
 
-Windows-only in the current implementation. Other platforms return an explicit
-"not implemented yet (Phase 6)" error from `capture/listSources`.
+Windows-only in the current implementation. Other platforms report
+`capture.ErrUnsupported` from the backend.
+
+Capture is native now — Windows Graphics Capture through cgo, no `gdigrab`, no
+`ddagrab`, no MJPEG preview socket. Encoding and muxing are still FFmpeg until
+`internal/media` lands; see [Native capture and media redesign](native-capture.md)
+for the target and its status.
 
 ## Why this design
 
-Verified on the development machine (FFmpeg 9.0.1 Windows build):
-
-- `ffmpeg -devices` lists **only** `gdigrab` and `dshow`. There is no `ddagrab`
-  and no `wasapi` demuxer.
-- Windows loopback capture through `dshow` requires installing a separate
-  virtual-audio device driver, which is not acceptable as a product dependency.
-
-Therefore:
-
-- **Video** comes from FFmpeg's `gdigrab` (GDI screen capture), which is a
-  native Windows API and needs no extra drivers.
+- **Video** comes from Windows Graphics Capture, which records a display or a
+  window as Windows composites it. A small C ABI over cgo hands Go tightly
+  packed BGRA rows; no C++ or WinRT type crosses the boundary, and no helper
+  program runs.
 - **Audio** is captured in-process with WASAPI through pure-Go COM bindings
   (`moutend/go-wca`), then written as raw `f32le` PCM into a Windows named pipe
-  that FFmpeg reads as an input.
-- **Encoding, resampling, mixing, and muxing** are all done by FFmpeg.
+  that the encoder reads as an input.
+- **Encoding, resampling, mixing, and muxing** are still done by FFmpeg, as
+  phase 2 of [Native capture and media redesign](native-capture.md) replaces it
+  with native encoders and a shared MP4 writer.
 
-This keeps native code out of the Go process except for the COM calls WASAPI
-requires, and keeps FFmpeg from needing a build with Windows audio demuxers.
+Windows loopback capture through FFmpeg's `dshow` would require a separate
+virtual-audio device driver, which is not acceptable as a product dependency;
+that is why audio has always been captured in Go. Video used to be `gdigrab`
+and then `ddagrab` through FFmpeg, and no longer is.
 
 ## Pipeline
 
 ```
-ddagrab (else       ──┐
- gdigrab)             ├─► ffmpeg ─► .mp4 (h264_nvenc/qsv/amf, else libx264, + aac)
-WASAPI loopback ──pipe┘         └► mpjpeg over TCP ─► preview hub ─► window bitmap
-WASAPI microphone ─pipe┘
-WASAPI (any) ─────────┴─► liveFeed ─► asr live sink ─► live subtitles
+Windows.Graphics.Capture ──BGRA──┬─► preview (Go JPEG, 5 fps) ─► window bitmap
+  (display or window)            └─► newest frame repeated at 30 fps
+                                          │ named pipe (raw BGRA)
+                                          ▼
+WASAPI loopback ──pipe──► ffmpeg ─► .mp4 (h264_nvenc/qsv/amf, else libx264, + aac)
+WASAPI microphone ─pipe──┘
+WASAPI (any) ───────────► liveFeed ─► asr live sink ─► live subtitles
 ```
 
 ## Sources
 
-`Recorder.Sources()` enumerates three kinds:
+`Recorder.Sources()` asks the capture backend. On Windows it enumerates three
+kinds, each with the platform's own identity:
 
 | Kind | ID format | How it is captured |
 |---|---|---|
-| `screen` | `screen` | `ddagrab` (Desktop Duplication), or `gdigrab -i desktop` where that is refused |
-| `display` | `display:N` | the same, offset and sized from `EnumDisplayMonitors` |
-| `window` | `window:<title>` | a crop of the duplicated desktop at the window's frame, found through `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` |
+| `screen` | `screen` | WGC `CreateForMonitor` on the primary display |
+| `display` | `display:<HMONITOR hex>` | WGC `CreateForMonitor` |
+| `window` | `window:<HWND hex>` | WGC `CreateForWindow` |
 
-Desktop Duplication is preferred because it reads what the compositor already
-drew instead of forcing a fresh GDI copy. Windows refuses it while the session
-sits on a secure or disconnected desktop (a locked screen, fast user switching,
-a dropped remote session), so `ddaAvailable` probes it once per run with a
-single frame.
+A window is captured by Windows itself, not cropped out of the desktop, so a
+covered window is still recorded correctly and resizing the window does not move
+the capture. A window that closes ends its stream: the backend polls whether the
+handle still names a visible window with a title.
 
-Windows have no duplication mode, so a window is a crop of the desktop at the
-window's own rectangle. That rectangle comes from DWM, not `GetWindowRect`: the
-latter answers in DIPs — a 2882-pixel window read back as 1441 at 200% scaling —
-while the duplication frame is in physical pixels.
+The full screen is the bounding box of every display; per-display sources are
+listed alongside it, not instead of it. `Detail` carries the size in physical
+pixels. The pointer is drawn in recordings and screenshots, and left out of the
+idle preview.
 
-`gdigrab`'s `title=` capture is **not** used for windows: it reads the window's
-own surface through GDI, and a window drawn by the compositor — anything
-Chromium, Electron or a modern editor — comes back a pure black rectangle.
-Measured on five open windows, four were entirely black through `title=` and
-all five were correct through duplication. A window is therefore reported as an
-error when duplication is unavailable, rather than recorded blank.
-
-Because a window is a crop of the desktop, anything on top of it is recorded
-too: a window that is covered is captured covered.
-
-Monitor rectangles come from `EnumDisplayMonitors`; window titles and sizes from
-`EnumWindows` and `GetWindowRect`, filtered to visible windows with a non-empty
-title, excluding the Ottr process itself. Display sources are only offered when
-more than one monitor exists. Both carry a `Detail` — the rectangle's size, as
-`1920x1080` — which the window dropdown shows; a window that reports no sane
-rectangle (minimized, or in another session) carries none.
-
-Window capture matches by title. If two windows share a title the first one
-wins.
+The backend releases every native object on the thread that made it, and
+`Stream.Close` waits for a callback already in flight before it returns, so no
+frame arrives after close and the cgo handle can be freed with it.
 
 ## Preview before recording
 
-`capture.Previewer` runs the same input `resolveSourceFPS` resolves for a
-recording, at `previewFPS` (5) instead of 30, and writes an `mpjpeg` stream over
-TCP into a `previewHub` that keeps only the newest frame. The window decodes it
-into a bitmap and draws it in the main window. Asking the source for five frames
-a second rather than grabbing thirty and dropping most of them is what keeps the
-cost down: 36% of a core instead of 112%.
+`capture.Previewer` opens the same source at `previewFPS` (5) and keeps only the
+newest raw frame; a goroutine in the process scales it to 960 pixels wide and
+encodes it as JPEG, at most five times a second. There is no socket, no MJPEG
+parser and no second process: the first frame appears in about 180 ms, and a
+slower window only causes frames to be skipped.
 
-The preview passes `-draw_mouse 0` — the desktop's own pointer already sits over
-the picture, and a second one lags behind it as it moves.
+The idle preview asks for no pointer — the display's own pointer already sits
+over the picture, and a second one would lag behind it. Recordings and
+screenshots take the pointer.
 
-Library's recording page shows the recorder's own `mpjpeg` preview the same way,
-which only runs while a recording does.
+Library's recording page shows the recorder's own preview the same way; that
+stream only runs while a recording does.
 
 Starting a recording stops the previewer — the recording draws its own frames —
 and stopping it starts the previewer again. Switching sources restarts it.
 
-When FFmpeg stops on its own — bad arguments, a window that closed, no FFmpeg at
-all — the panel shows the first line of what FFmpeg said, with `Try again` to
-start it afresh. `OTTR_LIVE=1 go test ./internal/capture -run
-TestPreviewerShowsTheScreen` grabs the real screen and checks that what comes
-back is a JPEG.
+A source that cannot be opened reports the backend's error in the panel, with
+`Try again` to retry. `OTTR_LIVE=1 go test ./internal/capture -run
+'TestPreviewerDrawsTheSource|TestScreenshotWritesAPNG'` uses the real desktop.
+
+## Screenshots
+
+`capture.Snapshotter.Screenshot(ctx, sourceID)` takes one frame of the current
+source, converts BGRA to `image.RGBA`, and writes a PNG through a temporary file
+and a rename, so a crash leaves either a whole image or none. The record is
+inserted with `source = "screenshot"`, its native size, and no duration; nothing
+transcribes it. A screenshot is taken from the WGC stream's first frame, since
+Windows Graphics Capture has no one-shot read.
 
 ## Where FFmpeg and ffprobe come from
 
@@ -149,13 +144,15 @@ WASAPI call fails, which covers device unplug.
 `Start(cfg)`:
 
 1. Reject if a session is active.
-2. Resolve the source to FFmpeg input arguments; fail if the display or window
-   no longer exists.
-3. Start audio streams (fail the whole start if a requested device is
-   unavailable, releasing anything already started).
-4. Create the preview hub (a localhost TCP listener).
-5. Spawn FFmpeg with `StdinPipe`, capture stderr into a buffer.
-6. Publish `recording:state{recording:true, startedAt}`.
+2. Open the native capture stream and wait for its first frame; fail atomically
+   on denial, cancellation or an empty initial frame. The first frame fixes the
+   recording canvas.
+3. Start the raw-frame pipe the encoder reads, and start audio streams (fail
+   the whole start if a requested device is unavailable, releasing anything
+   already started).
+4. Start the recording's own preview stream.
+5. Spawn FFmpeg with the pipe as its video input, capture stderr into a buffer.
+7. Publish `recording:state{recording:true, startedAt}`.
 
 A watchdog goroutine waits on the FFmpeg process. If FFmpeg exits while
 `r.current` still points at this session (i.e. not via `Stop`), the session is
@@ -167,7 +164,7 @@ never be reported as successful.
 
 1. Clear `r.current` so the watchdog treats the exit as expected.
 2. Write `q` to FFmpeg stdin and close it, so the MP4 container is finalized.
-3. Stop audio and close the preview.
+3. Close the capture stream, stop audio and close the preview.
 4. Wait for exit with a 15 s deadline; on timeout, kill the process and delete
    the file.
 5. Verify the file exists and is non-empty; otherwise delete and error.
@@ -177,14 +174,10 @@ never be reported as successful.
 
 ## Live preview
 
-`previewHub` listens on `127.0.0.1:0` and receives FFmpeg's second output
-(`-f mpjpeg tcp://...`). It scans the byte stream for JPEG start/end markers and
-keeps **only the most recent frame**. Memory is therefore bounded by one frame
-regardless of how slow the window is.
-
-`Recorder.Preview()` returns that frame, and the window decodes it into a
-bitmap at most five times a second, so the view never touches the JPEG bytes
-directly.
+`Recorder.Preview()` returns the newest JPEG from the recording's own preview
+stream, and the window decodes it into a bitmap at most five times a second, so
+the view never touches the raw frames. See
+[Preview before recording](#preview-before-recording) for how they are made.
 
 ## Live transcription
 
@@ -202,6 +195,12 @@ Files are written to `<userData>/recordings/Recording YYYY-MM-DD HH.MM.SS.mp4`
 with `libx264 -preset veryfast -crf 23 -pix_fmt yuv420p` and `aac 160k` when
 audio is present. `yuv420p` keeps the file playable everywhere, the system's
 own player included.
+
+The recording canvas is fixed by the first frame: its size, rounded down to even
+sides, is what the encoder is told. A window that resizes afterwards is scaled
+and letterboxed into that canvas, so the codec's configuration never changes
+mid-file. Frames are BGRA straight from the capture, and the encoder converts
+them once.
 
 ### Encoder
 
@@ -226,14 +225,20 @@ the duration and streams, and `asr.ExtractWav` extracts the audio as before.
 
 ## Testing
 
-`recorder_windows_test.go` performs real recordings (no mocks):
+`backend_test.go` needs no desktop and no media program: it uses a fake backend
+of synthetic frames and covers the bounded queue (newest two, oldest dropped,
+cancellation), BGRA→RGBA channel order, stride removal, aspect-fit letterboxing,
+the JPEG preview rate, the previewer's error reporting, and PNG screenshots.
+
+`recorder_windows_test.go` performs real recordings, all behind `OTTR_LIVE=1`:
 
 - sources enumeration,
+- one stream: tightly packed BGRA at physical pixels, a monotonic PTS, and a
+  second `Close` that is safe,
+- preview: a JPEG arrives from the real desktop,
 - screen + system audio: asserts a valid JPEG preview frame arrives, a second
   `Start` is rejected, and the output has both video and audio,
 - video only,
 - microphone,
-- bad source.
-
-A separate check verified with ffprobe that video and audio `start_time` are
-both `0.000000` on a mixed system-audio + microphone recording.
+- a closed window is refused rather than recorded,
+- a screenshot is a PNG at the source's own size and lands as `screenshot`.

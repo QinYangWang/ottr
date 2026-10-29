@@ -6,26 +6,40 @@
 |---|---|---|
 | Go | 1.27+ | MyGo requires 1.27 |
 | FFmpeg + ffprobe | any recent build | probing, recording, the live preview, audio extraction |
-| sherpa-onnx | v1.12.17 binary | offline ASR (optional; transcription tests skip without it) |
+| sherpa-onnx | v2.0.1 C API library | offline ASR (optional; transcription tests skip without it) |
+| C toolchain | gcc/clang | cgo: the ASR wrapper is C |
 | Windows 10/11 | — | recording is Windows-only today |
 
-No cgo, no Node, no Bun. The window is native UI written in Go, so there is no
-frontend to build.
+No Node, no Bun. The window is native UI written in Go, so there is no frontend
+to build. cgo is used only by `internal/asr/native`; `CGO_ENABLED=0` still
+builds the whole app, with ASR unavailable and saying so.
 
-FFmpeg and ffprobe are searched for in `<userData>/bin` (the folder sherpa-onnx
-lives in), `%APPDATA%\Ottr\bin`, the folders `winget` installs into
-(`%LOCALAPPDATA%\Microsoft\WinGet`), next to the executable, and the `PATH`
-(`internal/tools`). Dropping the two binaries beside sherpa-onnx is enough — no
-system `PATH` change — and so is `winget install Gyan.FFmpeg` followed by
-`Re-check` in Settings, even in a running app: the folders are read at the
-moment the program is looked for. `Choose…` in Settings ▸ Transcription points
-Ottr at any `ffmpeg.exe` and remembers it.
+FFmpeg and ffprobe are searched for in `<userData>/bin`, `%APPDATA%\Ottr\bin`,
+the folders `winget` installs into (`%LOCALAPPDATA%\Microsoft\WinGet`), next to
+the executable, and the `PATH` (`internal/tools`). Dropping the two binaries in
+`<userData>/bin` is enough — no system `PATH` change — and so is
+`winget install Gyan.FFmpeg` followed by `Re-check` in Settings, even in a
+running app: the folders are read at the moment the program is looked for.
+`Choose…` in Settings ▸ Transcription points Ottr at any `ffmpeg.exe` and
+remembers it.
+
+The sherpa-onnx library is looked for in two places: the app's own resources
+(`resources/bin`, merged per platform at build time) and then `<userData>/bin`.
+`PATH` is never used, because a library from there could be any build with any
+dependencies. See [Resources](models.md#packaging) for shipping it with the app — that
+is why `CGO_ENABLED=1 go tool mygo build` is the command, not plain
+`go tool mygo build`.
 
 ## Run
 
 ```sh
-go run ./cmd/studio
+CGO_ENABLED=1 go run ./cmd/studio
 ```
+
+`CGO_ENABLED=1` is what makes ASR work; without it the app builds and runs, and
+transcription says native ASR is unavailable. Likewise `CGO_ENABLED=1 go tool
+mygo dev` and `CGO_ENABLED=1 go tool mygo build`: the MyGo tool defaults to
+`CGO_ENABLED=0`, and a build without cgo has no ASR.
 
 The window has no webview and so no devtools. `ui.NewTester` runs the view
 without a window, for tests (see below).
@@ -47,7 +61,7 @@ docs/                   this documentation
 | `%APPDATA%\Ottr\ottr.db` | SQLite database |
 | `%APPDATA%\Ottr\recordings\` | recorded `.mp4` files |
 | `%APPDATA%\Ottr\models\` | ASR model directories |
-| `%APPDATA%\Ottr\bin\` | `sherpa-onnx.exe` + onnxruntime DLLs |
+| `%APPDATA%\Ottr\bin\` | `sherpa-onnx-c-api.dll` + onnxruntime DLLs |
 
 ## Prepare ASR
 
@@ -55,8 +69,11 @@ docs/                   this documentation
    `sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23.tar.bz2` from the
    sherpa-onnx `asr-models` release.
 2. Extract it under `%APPDATA%\Ottr\models\`.
-3. Copy `sherpa-onnx.exe`, `onnxruntime.dll`, and
-   `onnxruntime_providers_shared.dll` into `%APPDATA%\Ottr\bin\`.
+3. Copy the C API library — `sherpa-onnx-c-api.dll` on Windows,
+   `libsherpa-onnx-c-api.dylib` on macOS, `libsherpa-onnx-c-api.so` on Linux —
+   with its `onnxruntime` libraries into `%APPDATA%\Ottr\bin\`, from the
+   release matching the pinned version in
+   [Models](models.md#native-runtime). No `sherpa-onnx` executable is used.
 
 Transcription then appears automatically in the Session page. Without these
 files the UI shows the real error and no transcript is produced.
@@ -76,7 +93,7 @@ Test suites and what they touch:
 | `internal/library` | real SQLite, real SQL |
 | `internal/media` | real ffmpeg generates a clip, real ffprobe probes it |
 | `internal/capture` | real screen/audio recording (Windows) |
-| `internal/asr` | real sherpa-onnx run on a real WAV |
+| `internal/asr` | real sherpa-onnx library run on a real WAV (skips without it) |
 | `internal/translate` | real HTTP call to MyMemory |
 | `internal/summary` | local `httptest` server exercising the production HTTP path |
 | `ui/native` | the view in `ui.NewTester`, over a real SQLite database |

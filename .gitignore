@@ -1,1 +1,9 @@
 .preview/
+/ottr.exe
+/bin/ottr.exe
+/dist/
+# The ASR native libraries are third-party binaries; see resources/README.md
+/resources/*/bin/
+
+# Built setup binary
+/setup.exe

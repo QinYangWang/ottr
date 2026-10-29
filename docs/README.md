@@ -14,7 +14,10 @@ and a local video knowledge base.
 | Document | Covers |
 |---|---|
 | [architecture.md](architecture.md) | Module layout, boundaries, data flow, threading |
-| [recording.md](recording.md) | Screen/audio capture pipeline, sources, lifecycle |
+| [recording.md](recording.md) | Current Windows capture pipeline, sources, lifecycle |
+| [native-capture.md](native-capture.md) | Native cgo capture (implemented on Windows), target encoding/muxing, screenshots, FFmpeg removal |
+| [asr-cgo.md](asr-cgo.md) | In-process sherpa-onnx batch and streaming recognition (implemented; see transcription.md) |
+| [native-playback.md](native-playback.md) | Proposed in-window native audio/video playback |
 | [transcription.md](transcription.md) | sherpa-onnx integration, segmentation, subtitle handling |
 | [translation.md](translation.md) | Online translation providers, bilingual alignment, export |
 | [summary.md](summary.md) | Remote AI summarization, structured output, Markdown |

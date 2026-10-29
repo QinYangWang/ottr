@@ -1,4 +1,5 @@
-// Package models manages local offline AI models and their binaries.
+// Package models manages the local offline AI models Ottr runs, and where the
+// native library that runs them lives.
 package models
 
 import (
@@ -6,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -92,11 +92,23 @@ func (m *Manager) ModelsDir() string {
 	return m.modelsDir
 }
 
-// BinDir returns the folder the sherpa-onnx binary is installed in.
+// BinDir returns the folder the native ASR library and its dependencies are
+// installed in, or "" when none was configured.
 func (m *Manager) BinDir() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.binDir
+	if m.binDir != "" {
+		return m.binDir
+	}
+	// No folder was configured: the one beside the data files Ottr itself
+	// writes to is the one an install puts them in.
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		return filepath.Join(appData, "Ottr", "bin")
+	}
+	if exe, err := os.Executable(); err == nil {
+		return filepath.Join(filepath.Dir(exe), "bin")
+	}
+	return ""
 }
 
 // SetDirs updates the search directories.
@@ -105,41 +117,6 @@ func (m *Manager) SetDirs(modelsDir, binDir string) {
 	defer m.mu.Unlock()
 	m.modelsDir = modelsDir
 	m.binDir = binDir
-}
-
-// FindSherpaBin locates the sherpa-onnx executable.
-func (m *Manager) FindSherpaBin() (string, error) {
-	m.mu.Lock()
-	binDir := m.binDir
-	m.mu.Unlock()
-
-	name := "sherpa-onnx"
-	var cands []string
-	if binDir != "" {
-		cands = append(cands, filepath.Join(binDir, name+".exe"), filepath.Join(binDir, name))
-	} else {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			cands = append(cands, filepath.Join(appData, "Ottr", "bin", name+".exe"), filepath.Join(appData, "Ottr", "bin", name))
-		}
-		if exe, err := os.Executable(); err == nil {
-			cands = append(cands,
-				filepath.Join(filepath.Dir(exe), "bin", name+".exe"),
-				filepath.Join(filepath.Dir(exe), "bin", name),
-				filepath.Join(filepath.Dir(exe), name+".exe"),
-				filepath.Join(filepath.Dir(exe), name),
-			)
-		}
-	}
-	for _, c := range cands {
-		if st, err := os.Stat(c); err == nil && !st.IsDir() {
-			return c, nil
-		}
-	}
-	// Fall back to PATH.
-	if p, err := exec.LookPath(name); err == nil {
-		return p, nil
-	}
-	return "", fmt.Errorf("sherpa-onnx binary not found; please ensure it is installed in %s or on PATH", binDir)
 }
 
 // FindASRModel returns the model the user chose, or the first valid one in the

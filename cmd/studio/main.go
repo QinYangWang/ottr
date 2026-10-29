@@ -30,17 +30,30 @@ func main() {
 	asrSvc := asr.NewService(lib, mm, js)
 	trSvc := translate.NewService(lib, asrSvc, js)
 	sumSvc := summary.NewService(lib, asrSvc, js)
-	rec := &capture.Recorder{Lib: lib, ASR: asrSvc}
+	// One capture backend serves the three products: recording, the idle
+	// preview and screenshots.
+	backend := capture.NewBackend()
+	rec := &capture.Recorder{Backend: backend, Lib: lib, ASR: asrSvc}
 	rec.Live = func(rate, channels int) (capture.LiveWriter, error) {
 		return asrSvc.StartLive(rate, channels, func(sub asr.LiveSubtitle) {
-			rec.SetLiveText(sub.Text)
+			// The window polls the recorder, so State carries the same
+			// revision the event does.
+			line := &capture.LiveLine{Utterance: sub.Utterance, StartMs: sub.StartMs, Text: sub.Text, Final: sub.Final}
+			if sub.Warn != "" {
+				line.Warn = sub.Warn
+			}
+			if sub.Error != "" {
+				line.Text, line.Warn = "", sub.Error
+			}
+			rec.SetLiveText(line)
 			asr.BroadcastLive(sub)
 		})
 	}
 
 	app := &native.App{
 		Lib: lib, Rec: rec, ASR: asrSvc, Trans: trSvc, Sum: sumSvc, Jobs: js, MM: mm,
-		Preview: capture.NewPreviewer(), // the picture of a source, before recording
+		Preview: capture.NewPreviewer(backend), // the picture of a source, before recording
+		Shot: &capture.Snapshotter{Backend: backend, Lib: lib},
 		Prefs:   prefs,
 	}
 
@@ -63,7 +76,10 @@ func main() {
 		mm.Open(db)
 		prefs.Open(db)
 		rec.Dir = filepath.Join(dir, "recordings")
+		app.Shot.Dir = filepath.Join(dir, "recordings")
 
+		// The encoder is FFmpeg until internal/media replaces it; the path
+		// setting outlives the FFmpeg screens it came from.
 		tools.SetChosen(prefs.Get(settings.FFmpegPath))
 
 		// The look chosen last, before the window exists, so that it starts in

@@ -17,9 +17,9 @@ shown in the window. See
 
 What it still does not do:
 
-- The chunks restart the recognizer each time, so a word at a chunk boundary
-  can be lost. True incremental state needs the sherpa-onnx C API (cgo) or a
-  binary that reads PCM from a pipe.
+- Recognition is continuous and in process now (see
+  [Transcription](transcription.md)), so nothing is lost at a chunk boundary;
+  dropping live audio when inference falls behind is reported instead of hidden.
 - Only the first audio stream is transcribed, so system audio plus microphone
   gives live text from one of them.
 - The live pass is provisional by design: the post-recording pass replaces it.
@@ -56,7 +56,7 @@ when the `Translate + summarize imports` switch is on, translation into the
 Translate tab's language and a summary, in that order. A file already in that
 language skips translation rather than spending quota on it. One job means one
 progress bar and one Cancel for the whole chain. See
-[UI](ui.md#library-sidebar).
+[UI](ui.md#main-window-and-library).
 
 What it still does not do:
 
@@ -78,7 +78,7 @@ with `Use`; `Open folder` and `Re-check` are there too. The choice is
 
 What it still does not do:
 
-- GPU selection: sherpa-onnx is still invoked with `--provider=cpu`, and no
+- GPU selection: the recognizer is configured with `provider = "cpu"`, and no
   build with CUDA providers is shipped.
 - No download, install, load/unload or disk management: the user puts the files
   there.
@@ -102,16 +102,21 @@ UI, so neither is implemented.
 
 ## 5. macOS and Linux capture — `open`
 
-**Requirement:** ScreenCaptureKit on macOS; XDG portal + PipeWire on Wayland;
-X11/XCB or `ffmpeg x11grab` on Linux.
+The replacement design is [Native capture and media redesign](native-capture.md).
+It uses cgo/native capture and encoding on all three platforms, includes
+screenshots, and removes FFmpeg/ffprobe rather than adding platform-specific
+FFmpeg inputs. The notes below are the old implementation direction.
 
-**Current state:** `capture/sources_other.go` and `audio_other.go` return
-`"screen recording is not implemented on <os> yet (Phase 6)"`. The code compiles
-on all platforms; only Windows records.
+**Requirement:** ScreenCaptureKit on macOS; XDG portal + PipeWire on Wayland;
+X11/XCB on Linux.
+
+**Current state:** `capture/backend_other.go` and `audio_other.go` report
+`capture.ErrUnsupported`. The code compiles on all platforms; only Windows
+captures, through `capture/backend_windows.go`.
 
 **Notes:**
-- `resolveSource` is the seam: return platform-appropriate FFmpeg input args
-  (`avfoundation` / `x11grab` / `kmsgrab`).
+- `capture.Backend` is the seam: `Sources`, `Open`, `Snapshot`, `Close`, with a
+  `Stream` of BGRA frames. A platform is a backend, not FFmpeg arguments.
 - macOS requires Screen Recording and Microphone TCC permissions; Linux Wayland
   requires the XDG Desktop Portal and a PipeWire session.
 - Reuse the `audioSpec`/named-pipe mechanism or replace it with FFmpeg's native
@@ -120,6 +125,9 @@ on all platforms; only Windows records.
 ---
 
 ## 6. Permissions handling — `open`
+
+Permission and portal-session ownership are part of the
+[native capture design](native-capture.md#platform-backends).
 
 **Requirement:** explain correct authorization; never bypass it.
 
@@ -138,12 +146,12 @@ retry loops that look like bypass attempts.
 **Requirement:** installers for the three platforms.
 
 **Current state:** there is no `mygo.json`, no `mygo.config.ts`, and only
-`go build` has been exercised. `sherpa-onnx.exe` and the models are not bundled
-or located relative to a packaged app.
+`go build` has been exercised. The native `sherpa-onnx-c-api` library and the
+models are not bundled or located relative to a packaged app.
 
 **Notes:** `mygo build` produces `.app`/`.dmg`, `.exe` + NSIS installer, and
 `.deb`. Shipping needs decisions on: whether to bundle FFmpeg, whether to bundle
-sherpa-onnx binaries, code signing/notarization, and license compliance for
+the sherpa-onnx native library, code signing/notarization, and license compliance for
 everything bundled.
 
 ---
@@ -162,9 +170,9 @@ model chosen in the Models page.
 The policy is to surface them and let the user decide; nothing is deleted
 silently. `Library.Orphans(dir)` lists the media files in the recordings folder
 that no record refers to, the window shows "N recording files are not in the
-library" under the list, and `Add back` (`Library.AddFiles`) or
+library" under the card grid, and `Add back` (`Library.AddFiles`) or
 `Delete files…` (`Library.DeleteFiles`, behind a modal that names the count)
-acts on them. See [UI](ui.md#library-sidebar).
+acts on them. See [UI](ui.md#main-window-and-library).
 
 What it still does not do:
 
@@ -209,7 +217,14 @@ What it still does not do:
 
 ---
 
-## 12. Higher-fidelity Windows capture — `open`
+## 12. Higher-fidelity Windows capture — `partial`
+
+Windows.Graphics.Capture now feeds all capture paths
+([Native capture and media redesign](native-capture.md)): displays and windows
+are captured by Windows itself, covered windows included, with the pointer
+optionally drawn in. What is still missing from the item below is Media
+Foundation encoding and the removal of FFmpeg, which is phase 2 of that
+document.
 
 `gdigrab` is GDI-based: it cannot capture hardware-accelerated/exclusive
 fullscreen content (some games, DRM surfaces), and its frame pacing is weaker
@@ -231,14 +246,15 @@ Related smaller gaps:
 
 ## 13. In-window playback — `open`
 
-The window shows the live preview of a recording, but not the media of a
-finished file: `Play` hands the file to the system's player, and the timestamps
-in the transcript and summary are therefore not clickable. MyGo's `ui` has no
-video element yet, so this waits on one, or on decoding frames in Go and
-drawing them into a bitmap as the preview does.
+The implementation design is [In-window native playback](native-playback.md).
+It uses native demux/decode and audio output with `ui.Bitmap`, not an external
+player, FFmpeg or a prerequisite custom video element.
 
-With no player to depend on, container support is whatever the system's player
-handles, which is the user's own business.
+The window currently shows the live preview of a recording, but not the media
+of a finished file: `Play` hands the file to the system's player, and the
+timestamps in the transcript and summary are therefore not clickable. Native
+container/codec support will be explicit rather than delegated to whatever the
+system player happens to handle.
 
 ---
 

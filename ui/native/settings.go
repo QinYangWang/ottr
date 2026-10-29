@@ -266,7 +266,7 @@ func (a *App) transcriptionSettings(c *ui.Context, t *ui.Theme) {
 		a.modelRow(c, t, info)
 	}
 	ui.Column(c).Gap(1).Children(func() {
-		ui.Text(c, "Recognizer binary").FontSize(t.FontSize - 1).Bold()
+		ui.Text(c, "Recognizer runtime").FontSize(t.FontSize - 1).Bold()
 		ui.Text(c, a.sherpaNote()).FontSize(t.FontSize - 3).TextColor(t.TextMuted).Selectable()
 	})
 	ui.Row(c).AlignItems(ui.Center).Gap(t.Space(3)).Children(func() {
@@ -302,15 +302,15 @@ func modelDetail(info models.Info) string {
 	return fmtSize(info.SizeBytes)
 }
 
-// sherpaNote says where the recognizer binary was found, or why it was not.
+// sherpaNote says which native ASR runtime loaded, or why none did.
 func (a *App) sherpaNote() string {
 	if a.modelBinErr != "" {
 		return a.modelBinErr
 	}
 	if a.modelBin == "" {
-		return "Looking for the binary…"
+		return "Looking for the sherpa-onnx library…"
 	}
-	return "Found at " + a.modelBin
+	return "sherpa-onnx " + a.modelBin
 }
 
 // loadModels reads the models on disk, and which one transcription would use.
@@ -321,7 +321,6 @@ func (a *App) loadModels() {
 	}
 	go func() {
 		list, err := a.MM.ListModels()
-		bin, binErr := a.MM.FindSherpaBin()
 		mdl, _ := a.MM.FindASRModel() // nil when none is usable
 		inUse := ""
 		if mdl != nil {
@@ -334,9 +333,11 @@ func (a *App) loadModels() {
 				a.setError(err)
 			}
 			a.modelList, a.modelInUse, a.modelLoading = list, inUse, false
-			a.modelBin, a.modelBinErr = bin, ""
-			if binErr != nil {
-				a.modelBinErr = binErr.Error()
+			a.modelBin, a.modelBinErr = "", ""
+			if rt := a.ASR.RuntimeStatus(); rt.OK() {
+				a.modelBin = rt.Version
+			} else {
+				a.modelBinErr = rt.Err
 			}
 			a.ffmpeg, a.ffmpegNote = ffmpeg, "Found at "+ffmpeg
 			switch {

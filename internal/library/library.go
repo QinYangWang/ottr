@@ -27,7 +27,7 @@ var Changed = mygo.NewEvent[struct{}]("library:changed")
 type Media struct {
 	ID               int64     `json:"id"`
 	Name             string    `json:"name"`
-	Source           string    `json:"source"` // import | recording
+	Source           string    `json:"source"` // import | recording | screenshot
 	Path             string    `json:"path"`
 	DurationMs       int64     `json:"durationMs"`
 	Width            int       `json:"width"`
@@ -40,7 +40,8 @@ type Media struct {
 	SummaryStatus    string    `json:"summaryStatus"`
 }
 
-// Extensions accepted by Import.
+// Extensions accepted by Import. Screenshots are written as PNG but are not
+// imported: they have no media streams to transcribe.
 var Extensions = []string{"mp4", "mov", "mkv", "webm", "mp3", "wav", "m4a"}
 
 // Service is bound to the frontend as "Library".
@@ -313,4 +314,64 @@ func scanMedia(row scanner) (Media, error) {
 	}
 	m.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	return m, nil
+}
+
+// Record is what a caller that already knows a file's metadata — native
+// capture does — tells the library about it, without probing anything.
+type Record struct {
+	Name       string
+	Path       string
+	DurationMs int64
+	Width      int
+	Height     int
+	Size       int64
+	HasAudio   bool
+	HasVideo   bool
+	Ext        string // written with sources "recording"; defaults to path's
+}
+
+// AddScreenshot adds an image to the library. A screenshot is its own source,
+// has no duration and is never transcribed.
+func (s *Service) AddScreenshot(r Record) (Media, error) {
+	if r.Size == 0 {
+		if st, err := os.Stat(r.Path); err == nil {
+			r.Size = st.Size()
+		}
+	}
+	return s.insert(r, "screenshot")
+}
+
+// AddNativeRecording adds a finished recording from the metadata its writer
+// reported, instead of probing the file.
+func (s *Service) AddNativeRecording(r Record) (Media, error) {
+	return s.insert(r, "recording")
+}
+
+func (s *Service) insert(r Record, source string) (Media, error) {
+	db, err := s.store()
+	if err != nil {
+		return Media{}, err
+	}
+	abs, err := filepath.Abs(r.Path)
+	if err != nil {
+		abs = r.Path
+	}
+	name := r.Name
+	if name == "" {
+		name = strings.TrimSuffix(filepath.Base(r.Path), filepath.Ext(r.Path))
+	}
+	res, err := db.Exec(`INSERT INTO media
+		(name, source, path, duration_ms, width, height, size, has_audio, has_video, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		name, source, abs, r.DurationMs, r.Width, r.Height, r.Size,
+		r.HasAudio, r.HasVideo, time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return Media{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Media{}, err
+	}
+	Changed.Broadcast(struct{}{})
+	return s.Get(id)
 }

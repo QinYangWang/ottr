@@ -4,4 +4,4 @@ package asr
 
 import "os/exec"
 
-func hideWindow(cmd *exec.Cmd) {}
+func hideWindowProc(cmd *exec.Cmd) {}

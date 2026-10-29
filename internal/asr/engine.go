@@ -1,76 +1,112 @@
 package asr
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/binary"
 	"fmt"
-	"os/exec"
+	"os"
 	"strings"
 
 	"ottr/internal/models"
-	"ottr/internal/tools"
 )
 
-type sherpaResult struct {
-	Text       string    `json:"text"`
-	Tokens     []string  `json:"tokens"`
-	Timestamps []float64 `json:"timestamps"`
+// batchSamples is how much audio one feed takes. Feeding in pieces lets a
+// cancelled job stop at the next one instead of waiting out the whole file.
+const batchSamples = 16000 // 1 s
+
+// recognizeWav runs a 16 kHz mono 16-bit WAV file through the streaming
+// recognizer and returns its subtitle segments on the file's timeline.
+//
+// The whole file is one utterance chain: an endpoint inside it ends an
+// utterance and starts the next, exactly as when the audio was live.
+func recognizeWav(ctx context.Context, mdl models.ASRModel, wavPath string) ([]Segment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	samples, rate, err := readWav(wavPath)
+	if err != nil {
+		return nil, err
+	}
+	if rate <= 0 {
+		return nil, fmt.Errorf("read %s: no sample rate", wavPath)
+	}
+	st, err := newStreamer(mdl)
+	if err != nil {
+		return nil, err
+	}
+	defer st.close()
+
+	conv := NewConverter(rate, 1)
+	var segments []Segment
+	flush := func() {
+		segments = append(segments, st.result().segments...)
+	}
+	for i := 0; i < len(samples); i += batchSamples {
+		if err := ctx.Err(); err != nil {
+			return nil, err // nothing is freed under an active native call
+		}
+		end := min(i+batchSamples, len(samples))
+		st.feed(conv.Feed(samples[i:end]))
+		if st.endpoint() {
+			flush()
+			st.reset()
+		}
+	}
+	st.feed(conv.Flush())
+	st.finish()
+	flush()
+	for i := range segments {
+		segments[i].Idx = i + 1
+	}
+	return segments, nil
 }
 
-// ExtractWav converts any media file's audio stream to 16kHz mono 16-bit WAV PCM.
-func ExtractWav(ctx context.Context, mediaPath, wavPath string) error {
-	ffmpeg, err := tools.FFmpeg()
+// readWav reads a 16 kHz mono 16-bit WAV file into float samples, and says what
+// rate they are at in case the file is not 16 kHz.
+func readWav(path string) ([]float32, int, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
-	cmd := exec.CommandContext(ctx, ffmpeg, "-y", "-i", mediaPath,
-		"-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", wavPath)
-	hideWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("audio extraction failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	if len(data) < 12 || string(data[:4]) != "RIFF" || string(data[8:12]) != "WAVE" {
+		return nil, 0, fmt.Errorf("%s is not a WAV file", path)
 	}
-	return nil
-}
-
-// RunSherpa executes sherpa-onnx on a 16kHz WAV file and returns grouped subtitle segments.
-func RunSherpa(ctx context.Context, binPath string, model *models.ASRModel, wavPath string) ([]Segment, error) {
-	cmd := exec.CommandContext(ctx, binPath,
-		"--tokens="+model.Tokens,
-		"--encoder="+model.Encoder,
-		"--decoder="+model.Decoder,
-		"--joiner="+model.Joiner,
-		"--provider=cpu",
-		"--num-threads=2",
-		wavPath)
-	hideWindow(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("sherpa-onnx failed: %w (%s)", err, strings.TrimSpace(string(out)))
-	}
-
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	var allSegments []Segment
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if !bytes.HasPrefix(line, []byte("{")) {
-			continue
-		}
-		var res sherpaResult
-		if err := json.Unmarshal(line, &res); err != nil {
-			continue
-		}
-		if len(res.Tokens) > 0 {
-			segs := GroupTokens(res.Tokens, res.Timestamps)
-			for _, s := range segs {
-				s.Idx = len(allSegments) + 1
-				allSegments = append(allSegments, s)
+	var rate, channels, bits int
+	var body []byte
+	for off := 12; off+8 <= len(data); {
+		id, size := string(data[off:off+4]), int(binary.LittleEndian.Uint32(data[off+4:]))
+		start := off + 8
+		end := min(start+size, len(data))
+		switch id {
+		case "fmt ":
+			if end-start < 16 {
+				return nil, 0, fmt.Errorf("%s has a truncated header", path)
 			}
+			channels = int(binary.LittleEndian.Uint16(data[start+2:]))
+			rate = int(binary.LittleEndian.Uint32(data[start+4:]))
+			bits = int(binary.LittleEndian.Uint16(data[start+14:]))
+		case "data":
+			body = data[start:end]
 		}
+		off = start + size + size&1 // chunks are word aligned
 	}
-	return allSegments, nil
+	if rate == 0 || channels == 0 {
+		return nil, 0, fmt.Errorf("%s has no audio format chunk", path)
+	}
+	if bits != 16 {
+		return nil, 0, fmt.Errorf("%s is %d-bit; only 16-bit PCM is read", path, bits)
+	}
+	frames := len(body) / 2 / channels
+	out := make([]float32, frames)
+	for i := 0; i < frames; i++ {
+		var sum int32
+		for ch := 0; ch < channels; ch++ {
+			at := (i*channels + ch) * 2
+			sum += int32(int16(binary.LittleEndian.Uint16(body[at:])))
+		}
+		out[i] = float32(sum) / float32(channels) / 32768
+	}
+	return out, rate, nil
 }
 
 // GroupTokens splits token sequences with timestamps into clean subtitle segments.

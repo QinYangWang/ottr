@@ -2,8 +2,6 @@ package capture
 
 import "strconv"
 
-const previewFilter = "fps=5,scale=960:-2"
-
 // audioSpec describes one PCM stream fed to ffmpeg over a pipe.
 type audioSpec struct {
 	rate     int
@@ -12,8 +10,8 @@ type audioSpec struct {
 }
 
 // buildArgs assembles the ffmpeg command: one video input, one f32le PCM
-// pipe per audio stream, an mp4 output and an MJPEG preview output.
-func buildArgs(video []string, audios []audioSpec, previewAddr, out string) []string {
+// pipe per audio stream, and a fragmented mp4 output.
+func buildArgs(video []string, audios []audioSpec, out string) []string {
 	args := []string{"-y", "-loglevel", "error"}
 	args = append(args, video...)
 	for _, a := range audios {
@@ -36,6 +34,9 @@ func buildArgs(video []string, audios []audioSpec, previewAddr, out string) []st
 	enc := videoEncoder()
 	args = append(args, "-c:v", enc.name)
 	args = append(args, enc.opts...)
+	// BGRA in, yuv420p out: the encoder reads the pipe's format and this is
+	// what every decoder expects. Captured frames are physical pixels, so the
+	// size is always even in practice.
 	args = append(args, "-pix_fmt", "yuv420p")
 	if len(audios) > 0 {
 		args = append(args, "-c:a", "aac", "-b:a", "160k")
@@ -46,10 +47,5 @@ func buildArgs(video []string, audios []audioSpec, previewAddr, out string) []st
 	// last keyframe. A plain mp4 of the same recording holds nothing readable.
 	args = append(args, "-g", "30", "-movflags", "+frag_keyframe+empty_moov+default_base_moof")
 	args = append(args, out)
-	if previewAddr != "" {
-		args = append(args,
-			"-map", "0:v", "-vf", previewFilter,
-			"-f", "mpjpeg", "tcp://"+previewAddr)
-	}
 	return args
 }

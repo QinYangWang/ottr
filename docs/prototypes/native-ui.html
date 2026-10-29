@@ -1,0 +1,1402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ottr native UI prototype</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --surface-sunken: #f0f0f4;
+    --surface-hover: #ededf2;
+    --text: #17171b;
+    --muted: #6d6d78;
+    --faint: #94949f;
+    --border: #e5e5ec;
+    --border-strong: #d4d4dd;
+    --accent: #4658d6;
+    --accent-text: #ffffff;
+    --accent-soft: #eaecfd;
+    --danger: #c3273a;
+    --danger-soft: #fdeff1;
+    --translation: #0a7378;
+    --shadow-sm: 0 1px 2px #17171c0a, 0 2px 8px #17171c08;
+    --shadow-md: 0 2px 6px #17171c0d, 0 12px 28px #17171c12;
+    --shadow: 0 28px 80px #17171c24, 0 2px 8px #17171c10;
+    --radius: 12px;
+    --radius-lg: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1013;
+    --surface: #17181d;
+    --surface-sunken: #1d1e24;
+    --surface-hover: #24262d;
+    --text: #f2f2f5;
+    --muted: #a0a0ac;
+    --faint: #74747f;
+    --border: #272830;
+    --border-strong: #363844;
+    --accent: #98a6ff;
+    --accent-text: #101227;
+    --accent-soft: #232a4d;
+    --danger: #ff8b96;
+    --danger-soft: #3d2229;
+    --translation: #6fd2d2;
+    --shadow-sm: 0 1px 2px #0000004d;
+    --shadow-md: 0 10px 30px #00000066;
+    --shadow: 0 28px 80px #000000a6, 0 2px 8px #00000059;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    color: var(--text);
+    background: radial-gradient(120% 120% at 50% 0%, #e9ecf4 0%, #d9dee9 55%, #cfd5e1 100%) fixed;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  :root[data-theme="dark"] body { background: radial-gradient(120% 120% at 50% 0%, #14151b 0%, #0c0d10 100%) fixed; }
+  button, input, select { font: inherit; }
+  button, select, input[type="range"] { cursor: pointer; }
+  button { color: inherit; }
+  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  button:disabled { cursor: not-allowed; opacity: .45; }
+  [hidden] { display: none !important; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: 21px; line-height: 1.22; letter-spacing: -.021em; font-weight: 680; text-wrap: balance; }
+  h2 { font-size: 17px; line-height: 1.28; letter-spacing: -.014em; font-weight: 650; }
+  h3 { font-size: 13px; font-weight: 640; letter-spacing: .005em; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .time { font-variant-numeric: tabular-nums; white-space: nowrap; font-feature-settings: "tnum" 1; }
+  .icon { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .window { background: var(--bg); color: var(--text); }
+  .status-bar { flex: none; min-height: 42px; display: flex; align-items: center; gap: 2px; padding: 3px 8px; border-top: 1px solid var(--border); background: var(--surface); }
+  .status-action { min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 5px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; }
+  .status-action:hover { background: var(--surface-hover); color: var(--text); }
+  .status-action .icon { width: 17px; height: 17px; }
+  .titlebar {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px 7px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    user-select: none;
+  }
+  .brand { font-size: 15px; font-weight: 680; letter-spacing: -.015em; margin-inline-end: auto; }
+  .title-actions { display: flex; gap: 4px; }
+  .icon-button, .ghost-button, .secondary-button, .primary-button, .danger-button {
+    min-height: 36px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 7px 13px;
+    background: transparent;
+    font-weight: 560;
+    font-size: 13.5px;
+    letter-spacing: -.005em;
+    white-space: nowrap;
+  }
+  .icon-button { width: 36px; padding: 0; }
+  .primary-button { background: var(--accent); color: var(--accent-text); box-shadow: 0 1px 2px #17171c26, inset 0 1px 0 #ffffff2e; }
+  .secondary-button { background: var(--surface); border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+  .danger-button { background: var(--danger); color: #fff; box-shadow: 0 1px 2px #17171c26, inset 0 1px 0 #ffffff2e; }
+  :root[data-theme="dark"] .danger-button { color: #2a1418; }
+  .ghost-button { color: var(--muted); }
+  .ghost-button:hover, .icon-button:hover, .secondary-button:hover { background: var(--surface-hover); color: var(--text); }
+  .secondary-button:hover { border-color: var(--border-strong); }
+  .primary-button:hover { filter: brightness(1.06); }
+  .danger-button:hover { filter: brightness(1.05); }
+  button:active { scale: .975; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #9a9aa81f; border: 3px solid transparent; border-radius: 11px; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #9a9aa840; background-clip: content-box; }
+  :root[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #ffffff17; background-clip: content-box; }
+  :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #ffffff30; background-clip: content-box; }
+  @media (prefers-reduced-motion: no-preference) {
+    button { transition: background-color 130ms ease, color 130ms ease, border-color 130ms ease, scale 90ms ease, box-shadow 130ms ease; }
+  }
+
+  /* Compact recorder */
+  #stage { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+  .compact {
+    width: 420px;
+    height: min(748px, calc(100vh - 48px));
+    min-height: 580px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+  .record-main { padding: 24px 22px; overflow: auto; display: flex; flex-direction: column; gap: 18px; flex: 1; }
+  .record-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-block-end: 2px; }
+  .source-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .source-card {
+    min-height: 76px;
+    padding: 13px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+  .source-card:hover { border-color: var(--border-strong); }
+  .source-card .icon { width: 21px; height: 21px; color: var(--muted); stroke-width: 1.6; }
+  .source-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, var(--shadow-sm); }
+  .source-card[aria-pressed="true"] .icon { color: var(--accent); }
+  .field { display: grid; gap: 7px; color: var(--text); font-weight: 550; font-size: 13px; }
+  .field select, .field input, .search-input {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 11px;
+    font-weight: 450;
+    box-shadow: var(--shadow-sm);
+  }
+  .field select:focus, .field input:focus, .search-input:focus { border-color: var(--accent); }
+  .combo { position: relative; min-width: 0; }
+  .combo-trigger { width: 100%; min-height: 42px; display: flex; align-items: center; gap: 12px; padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--text); text-align: start; font-weight: 550; font-size: 13px; box-shadow: var(--shadow-sm); }
+  .combo-trigger:hover { background: var(--surface-hover); }
+  .combo-trigger[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .combo-label { flex: none; }
+  .combo-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); text-align: end; font-weight: 450; }
+  .combo-arrow { flex: none; color: var(--faint); font-size: 11px; }
+  .combo-menu { position: absolute; z-index: 40; inset-inline: 0; inset-block-start: calc(100% + 5px); max-height: 252px; overflow: auto; padding: 5px; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--surface); box-shadow: var(--shadow-md); }
+  .combo-option { width: 100%; min-height: 36px; display: flex; align-items: center; padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text); text-align: start; font-size: 13.5px; }
+  .combo-option:hover, .combo-option:focus-visible { background: var(--surface-hover); }
+  .combo-option[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+  .preview {
+    position: relative;
+    flex: none;
+    height: 220px;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: #10151f;
+    border: 1px solid #00000018;
+    box-shadow: inset 0 0 0 1px #ffffff0a;
+  }
+  .preview-badge {
+    position: absolute;
+    inset-inline-start: 10px;
+    inset-block-end: 10px;
+    padding: 4px 9px;
+    border-radius: 7px;
+    background: #0b0f16c9;
+    border: 1px solid #ffffff1a;
+    backdrop-filter: blur(10px);
+    color: #f4f6fa;
+    font-size: 11.5px;
+    font-weight: 550;
+    letter-spacing: -.005em;
+  }
+  .mock-desktop { position: absolute; inset: 0; background: linear-gradient(150deg, #33456a 0%, #1b2537 58%, #121a26 100%); }
+  .mock-window {
+    position: absolute;
+    inset: 13% 12% 16%;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8f9fc;
+    box-shadow: 0 14px 44px #00000059, 0 0 0 1px #ffffff14;
+    color: #293347;
+  }
+  .mock-window-bar { height: 18%; background: #eceff5; display: flex; align-items: center; padding: 0 8%; gap: 6px; }
+  .mock-window-bar::before { content: ""; width: 34%; height: 4px; border-radius: 4px; background: #b3bcc9; }
+  .mock-window-body { display: grid; grid-template-columns: 30% 1fr; height: 82%; }
+  .mock-side { background: #eef1f6; padding: 14% 12%; }
+  .mock-content { padding: 9%; display: grid; align-content: start; gap: 9%; }
+  .mock-line { height: 5px; border-radius: 5px; background: #c6cdd9; }
+  .mock-line.short { width: 55%; }
+  .mock-line.accent { width: 72%; background: #8e9de0; }
+  .mock-block { height: 35px; border-radius: 6px; background: #e2e7f0; }
+  .preview.window-source .mock-window { inset: 5% 5% 5%; }
+  .preview.window-source .mock-desktop { background: linear-gradient(150deg, #232c3d, #141a24); }
+  .audio-fields { display: grid; gap: 10px; }
+  .record-footer { flex: none; padding: 0 22px 22px; background: var(--bg); }
+  #startRecording { width: 100%; min-height: 44px; font-size: 14px; }
+
+  /* Recording strip */
+  .floating {
+    position: fixed;
+    z-index: 20;
+    inset-block-start: 28px;
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 26px;
+    background: var(--surface);
+    box-shadow: var(--shadow-md);
+    user-select: none;
+    touch-action: none;
+  }
+  .floating .icon-button { width: 40px; height: 40px; border-radius: 50%; }
+  .floating-stop {
+    min-width: 98px;
+    height: 40px;
+    border: 0;
+    border-radius: 20px;
+    background: transparent;
+    color: var(--danger);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 12px 0 4px;
+    font-size: 16px;
+    font-weight: 640;
+    font-variant-numeric: tabular-nums;
+  }
+  .floating-stop:hover { background: var(--danger-soft); }
+  .stop-symbol { width: 25px; height: 25px; border: 2px solid currentColor; border-radius: 50%; display: grid; place-items: center; }
+  .stop-symbol::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
+  .floating [aria-pressed="true"] { background: var(--surface-hover); }
+  .floating .danger-icon { color: var(--danger); }
+
+  /* Library */
+  #stage:has(.library:not([hidden])) { padding: 0; display: block; }
+  .library { width: 100%; height: 100vh; min-height: 600px; display: flex; flex-direction: column; background: var(--bg); }
+  .library .titlebar { padding-inline: 22px 14px; min-height: 58px; gap: 8px; }
+  .library-toolbar { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; }
+  .search-wrap { position: relative; }
+  .search-wrap .icon { position: absolute; inset-inline-start: 11px; inset-block-start: 50%; transform: translateY(-50%); color: var(--faint); width: 16px; height: 16px; pointer-events: none; }
+  .search-wrap input {
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 12px 6px 34px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: var(--surface-sunken);
+    color: var(--text);
+    font-size: 13px;
+  }
+  .search-wrap input::placeholder { color: var(--faint); }
+  .search-wrap input:hover { border-color: var(--border); }
+  .search-wrap input:focus { background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search-wrap input:focus-visible { outline: none; }
+  .library .search-wrap { width: min(240px, 30vw); }
+  .library-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px 26px 40px; }
+  .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 28px 18px; }
+  .media-card {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    text-align: start;
+    display: grid;
+    gap: 9px;
+    align-content: start;
+    border-radius: var(--radius);
+  }
+  .media-thumb {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: linear-gradient(150deg, #2b3752, #141b27);
+    box-shadow: var(--shadow-sm), inset 0 0 0 1px #ffffff0f;
+    transition: box-shadow 160ms ease, transform 160ms ease;
+  }
+  .media-card:hover .media-thumb { box-shadow: var(--shadow-md), inset 0 0 0 1px #ffffff1f; transform: translateY(-1px); }
+  .media-card[aria-current="true"] .media-thumb { box-shadow: 0 0 0 2px var(--accent), var(--shadow-md); }
+  .media-thumb .mock-desktop { position: absolute; inset: 0; display: block; }
+  .media-thumb .mock-window { inset: 16% 15% 20%; border-radius: 6px; }
+  .media-thumb .mock-line, .media-thumb .mock-block { display: block; }
+  .media-thumb::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #00000000 60%, #0000004f 100%); pointer-events: none; }
+  .play-hint { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; background: #0b0f1699; opacity: 0; transition: opacity 160ms ease; z-index: 1; }
+  .play-hint span { width: 44px; height: 44px; border-radius: 50%; background: #ffffff1f; border: 1px solid #ffffff33; backdrop-filter: blur(12px); display: grid; place-items: center; }
+  .play-hint .icon { width: 20px; height: 20px; margin-inline-start: 2px; stroke-width: 2; }
+  .media-card:hover .play-hint, .media-card:focus-visible .play-hint { opacity: 1; }
+  .media-thumb.screenshot { display: grid; place-items: center; background: linear-gradient(150deg, #33405c, #171d29); color: #97a3bd; }
+  .media-thumb.screenshot .icon { width: 32px; height: 32px; stroke-width: 1.2; z-index: 1; }
+  :root[data-theme="dark"] .media-thumb .mock-window { filter: brightness(.8) saturate(.85); }
+  :root[data-theme="dark"] .media-thumb { background: linear-gradient(150deg, #1e2637, #0e131c); }
+  .media-thumb-foot { position: absolute; inset-block-end: 0; inset-inline: 0; z-index: 2; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; padding: 9px 10px; }
+  .media-chips { display: flex; gap: 4px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: #0b0f16b8;
+    border: 1px solid #ffffff26;
+    color: #f0f3f9;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    backdrop-filter: blur(8px);
+  }
+  .media-duration { color: #ffffffd9; font-size: 11.5px; font-weight: 600; text-shadow: 0 1px 3px #00000080; }
+  .media-card-title {
+    font-size: 13.5px;
+    font-weight: 620;
+    line-height: 1.36;
+    letter-spacing: -.008em;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .media-card-sub { color: var(--faint); font-size: 12px; margin-block-start: -4px; }
+  .empty-library { grid-column: 1 / -1; padding: 64px 2px; color: var(--muted); display: grid; justify-items: center; text-align: center; gap: 6px; }
+  .empty-library .icon { width: 34px; height: 34px; color: var(--faint); stroke-width: 1.3; }
+  .empty-library p { font-size: 14px; }
+  .empty-library button { margin-block-start: 10px; }
+
+  /* Item page */
+  .detail { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 356px); }
+  .detail-stage { min-width: 0; min-height: 0; overflow: auto; padding: 18px 24px 28px; display: flex; flex-direction: column; gap: 16px; }
+  .detail-side { min-height: 0; display: flex; flex-direction: column; border-inline-start: 1px solid var(--border); background: var(--surface); }
+  .detail-side .tabs-row { padding-inline: 16px; }
+  .detail-side .tab-actions { padding: 14px 16px 0; margin: 0; }
+  .detail-side .tab-panel { flex: 1; min-height: 0; overflow: auto; padding: 10px 16px 24px; }
+  .detail-meta { margin: 2px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--border); overflow: hidden; }
+  .detail-meta div { background: var(--surface); padding: 11px 14px; display: grid; gap: 2px; }
+  .detail-meta dt { color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .detail-meta dd { margin: 0; font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
+  .detail-head { display: flex; align-items: flex-start; gap: 10px; }
+  .detail-heading { min-width: 0; flex: 1; display: grid; gap: 3px; padding-block-start: 4px; }
+  .detail-heading h1 { font-size: 17px; font-weight: 640; overflow-wrap: anywhere; }
+  .detail-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .detail-actions .icon-button { width: 32px; min-height: 32px; border-color: var(--border-strong); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--muted); }
+  .detail-actions .icon-button:hover { color: var(--text); }
+  .detail-actions .icon-button .icon { width: 16px; height: 16px; }
+  .detail-actions .danger-button { min-height: 32px; padding: 5px 11px; font-size: 13px; background: var(--danger-soft); color: var(--danger); box-shadow: none; border-color: transparent; }
+  .detail-actions .danger-button:hover { background: var(--danger-soft); filter: brightness(.96); }
+  .detail-actions .danger-button .icon { width: 15px; height: 15px; }
+  .library-recorder { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 8px 26px 30px; }
+  .library-recorder .record-main { width: 100%; max-width: 1000px; margin-inline: auto; overflow: visible; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr); grid-template-areas: "heading heading" "preview sources" "preview display" "preview window" "preview audio"; gap: 16px 24px; }
+  .library-recorder .record-heading { grid-area: heading; }
+  .library-recorder .record-heading h1 { font-size: 20px; }
+  .library-recorder .source-switch { grid-area: sources; }
+  .library-recorder #displayPicker { grid-area: display; }
+  .library-recorder #windowPicker { grid-area: window; }
+  .library-recorder .preview { grid-area: preview; height: 100%; min-height: 220px; }
+  .library-recorder .audio-fields { grid-area: audio; }
+  .library-recorder .record-footer { width: 100%; max-width: 1000px; margin: 22px auto 0; padding: 0; display: flex; justify-content: flex-end; background: transparent; }
+  .library-recorder #startRecording { width: auto; min-width: 172px; }
+
+  /* Player */
+  .player { overflow: hidden; border-radius: var(--radius); background: #0a0d13; color: #fff; box-shadow: var(--shadow-md), inset 0 0 0 1px #ffffff12; }
+  .player-screen { position: relative; aspect-ratio: 16 / 9; width: 100%; max-height: 46vh; overflow: hidden; background: radial-gradient(120% 100% at 50% 0%, #202c42, #0b111b 72%); }
+  .player.is-image .player-screen { max-height: 52vh; }
+  .player-screen .mock-desktop { background: none; }
+  .player-screen .mock-window { inset: 8% 8% 8%; border-radius: 8px; background: linear-gradient(155deg, #22304a 0%, #16202f 55%, #0e1622 100%); box-shadow: 0 20px 60px #00000080, 0 0 0 1px #ffffff1a; }
+  .player-screen .mock-window-bar { height: 11%; background: #ffffff0f; }
+  .player-screen .mock-window-bar::before { background: #ffffff33; }
+  .player-screen .mock-window-body { height: 89%; }
+  .player-screen .mock-side { background: #ffffff08; padding: 5% 3%; }
+  .player-screen .mock-content { padding: 7% 7%; gap: 7%; }
+  .player-screen .mock-line { height: 5px; background: #ffffff2b; }
+  .player-screen .mock-line.accent { background: #8f9dff80; }
+  .player-screen .mock-block { height: 34px; background: #ffffff14; }
+  .player-screen::after { content: ""; position: absolute; inset: 0; background: radial-gradient(70% 70% at 50% 50%, #06090f00 40%, #06090f8f 100%); pointer-events: none; }
+  .player-screen .play-overlay { z-index: 1; }
+  .player.is-image .player-screen { aspect-ratio: 16 / 9; max-height: 52vh; background: radial-gradient(120% 100% at 50% 0%, #1a2230, #0b111b 72%); }
+  .player.is-image .player-screen .mock-window { inset: 0; border-radius: 0; background: #eef1f6; box-shadow: none; }
+  .player.is-image .player-screen .mock-window-bar { display: none; }
+  .player.is-image .player-screen .mock-window-body { height: 100%; grid-template-columns: 30% 1fr; }
+  .player.is-image .player-screen::after { background: none; }
+  .player.is-image .player-screen .mock-line { background: #c6cdd9; }
+  .player.is-image .player-screen .mock-line.accent { background: #8e9de0; }
+  .player.is-image .player-screen .mock-block { background: #e2e7f0; }
+  .player.is-image .player-screen .mock-side { background: #e5e9f1; }
+  .player.is-image .player-screen .mock-window-bar { background: #e3e7ef; }
+  .player.is-image .player-screen .mock-window-bar::before { background: #b3bcc9; }
+  .play-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    display: grid;
+    place-items: center;
+  }
+  .play-overlay span { width: 58px; height: 58px; border-radius: 50%; background: #ffffff1c; border: 1px solid #ffffff2e; backdrop-filter: blur(14px); display: grid; place-items: center; transition: background-color 140ms ease, transform 140ms ease; }
+  .play-overlay:hover span { background: #ffffff2e; transform: scale(1.04); }
+  .play-overlay .icon { width: 25px; height: 25px; margin-inline-start: 3px; stroke-width: 2; }
+  .player-controls { min-height: 50px; display: flex; align-items: center; gap: 12px; padding: 6px 14px; background: #10141b; border-top: 1px solid #ffffff12; }
+  .player-controls .icon-button { color: #e8ebf2; border-radius: 50%; }
+  .player-controls .icon-button:hover { background: #ffffff14; color: #fff; }
+  .player-controls input[type="range"] { flex: 1; min-width: 50px; accent-color: #a5b0ff; }
+  .player-time { font-size: 11.5px; color: #aeb6c6; letter-spacing: .01em; }
+  .tabs-row { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 2px; flex: 1; }
+  .tab {
+    position: relative;
+    min-height: 44px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    padding: 8px 12px;
+    color: var(--faint);
+    font-weight: 580;
+    font-size: 13.5px;
+    letter-spacing: -.005em;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  .tabs-row .ghost-button { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+  .tab-panel { padding-block-start: 16px; }
+  .transcript-list { display: grid; gap: 1px; }
+  .transcript-line {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 12px;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    text-align: start;
+    line-height: 1.55;
+  }
+  .transcript-line:hover { background: var(--surface-sunken); }
+  .transcript-line .time { color: var(--faint); font-size: 11.5px; padding-block-start: 2px; }
+  .transcript-copy { display: grid; gap: 3px; }
+  .translation-text { color: var(--translation); font-size: 13px; }
+  .translation-picker { display: flex; align-items: center; gap: 8px; color: var(--faint); font-size: 12.5px; }
+  .translation-picker select { min-height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); padding: 4px 8px; font-size: 13px; box-shadow: var(--shadow-sm); }
+  .tab-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-block-end: 14px; }
+  .tab-actions .secondary-button { min-height: 32px; padding: 5px 11px; font-size: 13px; }
+  .summary { max-width: 70ch; display: grid; gap: 12px; line-height: 1.62; font-size: 13.5px; }
+  .summary h3 { color: var(--faint); text-transform: uppercase; font-size: 10.5px; letter-spacing: .07em; }
+  .summary ul { margin: 0; padding-inline-start: 20px; display: grid; gap: 5px; }
+  .empty-action { padding: 26px 0; display: grid; justify-items: start; gap: 12px; color: var(--muted); font-size: 13.5px; }
+
+  /* Settings and confirmations */
+  dialog { color: var(--text); }
+  dialog::backdrop { background: #0d0e1466; backdrop-filter: blur(4px); }
+  .settings {
+    width: min(920px, calc(100vw - 32px));
+    height: min(660px, calc(100vh - 32px));
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--bg);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .settings[open] { display: flex; flex-direction: column; }
+  .settings-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); }
+  .settings-nav { background: var(--surface-sunken); border-inline-end: 1px solid var(--border); padding: 16px 10px; display: grid; align-content: start; gap: 3px; }
+  .settings-nav h2 { padding: 2px 10px 12px; font-size: 15px; color: var(--muted); }
+  .settings-nav button { justify-content: flex-start; width: 100%; color: var(--muted); min-height: 34px; padding: 6px 10px; border-radius: 8px; font-size: 13.5px; }
+  .settings-nav button .icon { width: 16px; height: 16px; }
+  .settings-nav button:hover { color: var(--text); }
+  .settings-nav button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); font-weight: 600; }
+  .settings-content { overflow: auto; padding: 26px 30px 32px; }
+  .settings-content > h2 { margin-block-end: 20px; font-size: 20px; }
+  .settings-panel { display: grid; gap: 16px; }
+  .settings-panel > p { font-size: 13.5px; }
+  .theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .theme-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 9px; background: var(--surface); display: grid; gap: 9px; font-size: 13px; font-weight: 560; box-shadow: var(--shadow-sm); }
+  .theme-card:hover { border-color: var(--border-strong); }
+  .theme-card[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .theme-preview { height: 66px; border-radius: 7px; border: 1px solid #0000000f; display: grid; grid-template-columns: 26% 1fr; overflow: hidden; }
+  .theme-preview::before { content: ""; background: var(--preview-side); }
+  .theme-preview::after { content: ""; background: var(--preview-bg); }
+  .theme-preview.light { --preview-side: #e7e9ee; --preview-bg: #fff; }
+  .theme-preview.dark { --preview-side: #26282d; --preview-bg: #151619; }
+  .theme-preview.system { background: linear-gradient(90deg, #e7e9ee 0 26%, #fff 26% 50%, #26282d 50% 76%, #151619 76%); }
+  .theme-preview.system::before, .theme-preview.system::after { background: none; }
+  .setting-list { display: grid; gap: 8px; }
+  .setting-row { display: flex; align-items: center; gap: 16px; padding: 13px 15px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+  .setting-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .setting-copy strong { font-weight: 590; font-size: 13.5px; }
+  .setting-copy small { color: var(--faint); overflow-wrap: anywhere; font-size: 12px; }
+  .model-section-title { margin-block-start: 4px; color: var(--faint); text-transform: uppercase; font-size: 10.5px; letter-spacing: .07em; }
+  .model-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .model-actions button { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+  .download-progress { width: 140px; height: 6px; accent-color: var(--accent); border-radius: 3px; }
+  .segmented { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-sunken); border: 1px solid var(--border); }
+  .segmented button { border: 0; border-radius: 7px; min-height: 30px; padding: 4px 12px; background: transparent; font-size: 13px; }
+  .segmented button[aria-pressed="true"] { background: var(--surface); box-shadow: var(--shadow-sm); font-weight: 600; }
+  .settings-form { display: grid; gap: 14px; max-width: 520px; }
+  .settings-form .primary-button { justify-self: start; }
+  .field textarea { width: 100%; min-height: 100px; resize: vertical; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--text); padding: 9px 11px; font: inherit; font-size: 13px; line-height: 1.55; box-shadow: var(--shadow-sm); }
+  .field textarea:focus { border-color: var(--accent); }
+  .provider-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .provider-config { display: grid; gap: 20px; padding-block-start: 20px; border-top: 1px solid var(--border); }
+  .provider-config-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .provider-config-head h3 { flex: 1; }
+  .feature-settings { display: grid; gap: 12px; }
+  .feature-settings h3 { padding-block-end: 2px; color: var(--faint); text-transform: uppercase; font-size: 10.5px; letter-spacing: .07em; }
+  .model-input-row { display: flex; gap: 8px; align-items: center; }
+  .model-input-row input { flex: 1; min-width: 0; }
+  .provider-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .provider-dialog { width: min(560px, calc(100vw - 32px)); padding: 26px; }
+  .provider-dialog h2 { margin-block-end: 4px; }
+  .provider-dialog .settings-form { margin-block-start: 20px; }
+  .form-error { color: var(--danger); font-size: 13px; }
+  .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 630; white-space: nowrap; }
+  .confirm { width: min(420px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); }
+  .confirm p { margin-block: 10px 22px; color: var(--muted); font-size: 13.5px; }
+  .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .toast { position: fixed; z-index: 100; inset-inline-start: 50%; inset-block-end: 22px; transform: translateX(-50%); max-width: min(440px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 10px; background: var(--text); color: var(--bg); box-shadow: var(--shadow-md); font-size: 13px; font-weight: 550; }
+
+  @media (max-width: 900px) {
+    .detail { grid-template-columns: 1fr; grid-template-rows: auto auto; overflow: auto; }
+    .detail-stage { overflow: visible; }
+    .detail-side { border-inline-start: 0; border-top: 1px solid var(--border); }
+    .detail-side .tab-panel { overflow: visible; }
+  }
+  @media (max-width: 760px) {
+    .library { min-height: 100vh; height: auto; }
+    .library .titlebar { flex-wrap: wrap; gap: 8px; }
+    .library-toolbar { width: 100%; margin-inline-start: 0; }
+    .library .search-wrap { flex: 1; width: auto; }
+    .library-scroll { overflow: visible; padding: 4px 18px 26px; }
+    .media-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px 14px; }
+    .detail-stage { padding: 16px 18px 20px; }
+    .library-recorder { min-height: 650px; padding: 18px; }
+    .library-recorder .record-main { grid-template-columns: 1fr; grid-template-areas: "heading" "sources" "display" "window" "preview" "audio"; }
+    .library-recorder .preview { height: 220px; }
+    .library-recorder #startRecording { width: 100%; }
+    .player-screen { min-height: 160px; }
+  }
+  @media (max-width: 620px) {
+    #stage { padding: 0; }
+    .compact { width: 100%; height: 100vh; min-height: 560px; border: 0; border-radius: 0; }
+    .preview { height: 200px; }
+    .detail-head { flex-direction: column; }
+    .detail-actions { justify-content: flex-start; }
+    .settings-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    .settings-nav { display: flex; overflow-x: auto; padding: 8px; border-inline-end: 0; border-bottom: 1px solid var(--border); }
+    .settings-nav h2 { display: none; }
+    .settings-nav button { width: auto; white-space: nowrap; }
+    .settings-content { padding: 20px; }
+    .theme-options { grid-template-columns: 1fr; }
+    .theme-card { grid-template-columns: 100px 1fr; align-items: center; }
+    .setting-row { align-items: flex-start; flex-wrap: wrap; }
+    .floating { gap: 0; padding: 7px; }
+    .floating-stop { min-width: 88px; }
+  }
+</style>
+</head>
+<body>
+<svg class="svg-defs" aria-hidden="true">
+  <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></symbol>
+  <symbol id="i-library" viewBox="0 0 24 24"><path d="m4 19 5-15 3 1-5 15zm7 0 5-15 3 1-5 15zM3 19h18"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0m-7 7v3m-4 0h8"/></symbol>
+  <symbol id="i-mic-off" viewBox="0 0 24 24"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 4.8 2.4M15 9V6a3 3 0 0 0-5.8-1M5 11a7 7 0 0 0 11.7 5.2M19 11a7 7 0 0 1-.4 2.3M12 18v3m-4 0h8"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6m4-6v6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3m3 0-1 15H7L6 6m4 4v7m4-7v7"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zm4 4a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zm5 4 5 6m0-6-5 6"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></symbol>
+</svg>
+
+<div id="stage">
+  <section id="compact" class="window compact" aria-labelledby="recordTitle">
+    <header class="titlebar">
+      <div class="brand">Ottr</div>
+    </header>
+    <main class="record-main">
+      <div class="record-heading"><h1 id="recordTitle">New recording</h1></div>
+      <div class="source-switch" role="group" aria-label="Recording source">
+        <button class="source-card" data-source="screen" aria-pressed="true"><svg class="icon"><use href="#i-screen"/></svg>Full screen</button>
+        <button class="source-card" data-source="window" aria-pressed="false"><svg class="icon"><use href="#i-window"/></svg>Window</button>
+      </div>
+      <div id="displayPicker" class="combo">
+        <button class="combo-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span class="combo-label">Display</span><span class="combo-value"></span><span class="combo-arrow">▾</span></button>
+        <select id="displaySelect" hidden tabindex="-1" aria-hidden="true"><option>Display 1 · 2560 × 1440</option><option>Display 2 · 1920 × 1080</option><option>Display 3 · 1920 × 1080</option></select>
+        <div class="combo-menu" role="listbox" aria-label="Display" hidden></div>
+      </div>
+      <div id="windowPicker" class="combo" hidden>
+        <button class="combo-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span class="combo-label">Window</span><span class="combo-value"></span><span class="combo-arrow">▾</span></button>
+        <select id="windowSelect" hidden tabindex="-1" aria-hidden="true"><option>Design review — Figma</option><option>Ottr documentation — VS Code</option><option>Weekly notes — Obsidian</option></select>
+        <div class="combo-menu" role="listbox" aria-label="Window" hidden></div>
+      </div>
+      <div id="sourcePreview" class="preview" aria-label="Source preview">
+        <div class="mock-desktop"><div class="mock-window"><div class="mock-window-bar"></div><div class="mock-window-body"><div class="mock-side"><div class="mock-line"></div></div><div class="mock-content"><div class="mock-line short"></div><div class="mock-line accent"></div><div class="mock-block"></div><div class="mock-line"></div></div></div></div></div>
+        <span id="previewBadge" class="preview-badge">Display 1 · 2560 × 1440</span>
+      </div>
+      <div class="audio-fields">
+        <div class="combo">
+          <button class="combo-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span class="combo-label">System sound</span><span class="combo-value"></span><span class="combo-arrow">▾</span></button>
+          <select id="systemSound" hidden tabindex="-1" aria-hidden="true"><option value="speakers">Speakers (Realtek)</option><option value="off">Off</option></select>
+          <div class="combo-menu" role="listbox" aria-label="System sound" hidden></div>
+        </div>
+        <div class="combo">
+          <button class="combo-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span class="combo-label">Microphone</span><span class="combo-value"></span><span class="combo-arrow">▾</span></button>
+          <select id="microphone" hidden tabindex="-1" aria-hidden="true"><option value="off">Off</option><option value="mic">Microphone (USB)</option></select>
+          <div class="combo-menu" role="listbox" aria-label="Microphone" hidden></div>
+        </div>
+      </div>
+    </main>
+    <footer class="record-footer"><button id="startRecording" class="primary-button">Start recording</button></footer>
+    <footer class="status-bar"><button id="openLibrary" class="status-action" aria-label="Open Library" title="Library"><svg class="icon"><use href="#i-library"/></svg></button><button class="status-action open-settings" aria-label="Open Settings" title="Settings"><svg class="icon"><use href="#i-settings"/></svg></button><button class="status-action" data-theme-toggle aria-label="Change theme"></button></footer>
+  </section>
+
+  <section id="library" class="window library" aria-label="Library" hidden>
+    <header class="titlebar">
+      <div class="brand">Ottr</div>
+      <div class="library-toolbar">
+        <button id="closeRecorder" class="ghost-button" hidden><svg class="icon"><use href="#i-back"/></svg>Library</button>
+        <label class="search-wrap"><svg class="icon"><use href="#i-search"/></svg><input id="librarySearch" class="search-input" type="search" aria-label="Search Library" placeholder="Search recordings"></label>
+        <button id="newRecording" class="secondary-button"><svg class="icon"><use href="#i-screen"/></svg>New recording</button>
+        <button id="importMedia" class="icon-button" aria-label="Import media" title="Import media"><svg class="icon"><use href="#i-import"/></svg></button>
+      </div>
+    </header>
+    <div id="libraryGrid" class="library-scroll">
+      <div id="mediaList" class="media-grid"></div>
+    </div>
+    <main id="recordSetup" class="library-recorder" aria-label="New recording" hidden></main>
+    <div id="session" class="detail" hidden>
+      <div class="detail-stage">
+        <div class="detail-head">
+          <button id="backToLibrary" class="icon-button" aria-label="Back to Library" title="Back to Library"><svg class="icon"><use href="#i-back"/></svg></button>
+          <div class="detail-heading"><h1 id="mediaTitle"></h1></div>
+          <div class="detail-actions"><button id="showFile" class="icon-button" aria-label="Show file" title="Show file"><svg class="icon"><use href="#i-folder"/></svg></button><button id="deleteMedia" class="danger-button"><svg class="icon"><use href="#i-trash"/></svg>Delete</button></div>
+        </div>
+        <section id="playerSection" class="player" aria-label="Media player">
+          <div class="player-screen">
+            <div class="mock-desktop"><div class="mock-window"><div class="mock-window-bar"></div><div class="mock-window-body"><div class="mock-side"><div class="mock-line"></div></div><div class="mock-content"><div class="mock-line short"></div><div class="mock-line accent"></div><div class="mock-block"></div><div class="mock-line"></div></div></div></div></div>
+            <button id="playOverlay" class="play-overlay" aria-label="Play"><span><svg class="icon"><use href="#i-play"/></svg></span></button>
+            <span id="imageBadge" class="preview-badge" hidden>Screenshot</span>
+          </div>
+          <div id="playerControls" class="player-controls">
+            <button id="playButton" class="icon-button" aria-label="Play"><svg class="icon"><use href="#i-play"/></svg></button>
+            <span id="playerTime" class="player-time time">0:00 / 0:00</span>
+            <input id="seek" type="range" min="0" max="100" value="0" aria-label="Playback position">
+            <button id="muteButton" class="icon-button" aria-label="Mute" aria-pressed="false"><svg class="icon"><use href="#i-volume"/></svg></button>
+          </div>
+        </section>
+        <dl id="mediaMeta" class="detail-meta"></dl>
+      </div>
+      <aside class="detail-side" aria-label="Media details">
+        <div class="tabs-row">
+          <div class="tabs" role="tablist" aria-label="Media details">
+            <button class="tab" role="tab" data-tab="transcript" aria-selected="true">Transcript</button>
+            <button class="tab" role="tab" data-tab="summary" aria-selected="false">Summary</button>
+          </div>
+          <button id="exportTab" class="ghost-button"><svg class="icon"><use href="#i-download"/></svg>Export</button>
+        </div>
+        <div id="tabPanel" class="tab-panel" role="tabpanel"></div>
+      </aside>
+    </div>
+    <footer class="status-bar"><button class="status-action open-settings" aria-label="Open Settings" title="Settings"><svg class="icon"><use href="#i-settings"/></svg></button><button class="status-action" data-theme-toggle aria-label="Change theme"></button></footer>
+  </section>
+  <div id="floating" class="floating" role="toolbar" aria-label="Recording controls. Drag or use arrow keys to move." tabindex="0" hidden>
+    <button id="stopRecording" class="floating-stop" aria-label="Stop and save recording" title="Stop and save"><span class="stop-symbol"></span><span id="recordTime" class="time">0:00</span></button>
+    <button id="toggleMic" class="icon-button" aria-label="Mute microphone" aria-pressed="false" title="Mute microphone"><svg class="icon"><use href="#i-mic"/></svg></button>
+    <button id="pauseRecording" class="icon-button" aria-label="Pause recording" aria-pressed="false" title="Pause"><svg class="icon"><use href="#i-pause"/></svg></button>
+    <button id="restartRecording" class="icon-button" aria-label="Restart recording" title="Restart"><svg class="icon"><use href="#i-restart"/></svg></button>
+    <button id="discardRecording" class="icon-button danger-icon" aria-label="Discard recording" title="Discard"><svg class="icon"><use href="#i-trash"/></svg></button>
+  </div>
+</div>
+
+<dialog id="settings" class="settings" aria-labelledby="settingsTitle">
+  <header class="titlebar"><div class="brand">Ottr</div><button id="closeSettings" class="icon-button" aria-label="Close Settings"><svg class="icon"><use href="#i-close"/></svg></button></header>
+  <div class="settings-body">
+    <nav class="settings-nav" aria-label="Settings sections">
+      <h2 id="settingsTitle">Settings</h2>
+      <button class="ghost-button" data-settings="appearance" aria-pressed="true"><svg class="icon"><use href="#i-settings"/></svg>Appearance</button>
+      <button class="ghost-button" data-settings="transcription" aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg>Transcription</button>
+      <button class="ghost-button" data-settings="providers" aria-pressed="false"><svg class="icon"><use href="#i-library"/></svg>Providers</button>
+    </nav>
+    <div class="settings-content">
+      <h2 id="settingsSectionTitle">Appearance</h2>
+      <section id="settings-appearance" class="settings-panel">
+        <p class="muted">Choose how Ottr looks.</p>
+        <div class="theme-options">
+          <button class="theme-card" data-theme-choice="system" aria-pressed="true"><span class="theme-preview system"></span>System</button>
+          <button class="theme-card" data-theme-choice="light" aria-pressed="false"><span class="theme-preview light"></span>Light</button>
+          <button class="theme-card" data-theme-choice="dark" aria-pressed="false"><span class="theme-preview dark"></span>Dark</button>
+        </div>
+      </section>
+      <section id="settings-transcription" class="settings-panel" hidden>
+        <p class="muted">Offline speech recognition. Downloading never changes the active model.</p>
+        <h3 class="model-section-title">Downloaded models</h3>
+        <div id="downloadedModels" class="setting-list"></div>
+        <h3 class="model-section-title">Available to download</h3>
+        <div id="availableModels" class="setting-list"></div>
+        <div class="tab-actions"><button id="openModelFolder" class="secondary-button">Open model folder</button><button id="recheckModels" class="ghost-button">Re-check</button></div>
+        <p id="runtimeStatus" class="small muted">sherpa-onnx native runtime · ready</p>
+      </section>
+      <section id="settings-providers" class="settings-panel" hidden>
+        <div class="provider-heading"><p class="muted">One connection for translation and summaries.</p><button id="addProvider" class="primary-button">Add provider</button></div>
+        <div id="providerList" class="setting-list"></div>
+        <div id="providerEmpty" class="empty-action" hidden><p>No AI provider configured.</p><button id="addFirstProvider" class="primary-button">Add provider</button></div>
+        <form id="aiSettingsForm" class="provider-config">
+          <div class="provider-config-head"><h3 id="activeProviderName">OpenAI</h3><button id="fetchModels" class="secondary-button" type="button">Fetch models</button></div>
+          <datalist id="providerModelOptions"></datalist>
+          <section class="feature-settings" aria-labelledby="translationSettingsTitle">
+            <h3 id="translationSettingsTitle">Translation</h3>
+            <label class="field">Model<input id="translationModel" list="providerModelOptions" placeholder="Search or enter a model ID" required></label>
+            <label class="field">Prompt<textarea id="translationPrompt" required></textarea></label>
+          </section>
+          <section class="feature-settings" aria-labelledby="summarySettingsTitle">
+            <h3 id="summarySettingsTitle">Summary</h3>
+            <label class="field">Model<input id="summaryModel" list="providerModelOptions" placeholder="Search or enter a model ID" required></label>
+            <label class="field">Prompt<textarea id="summaryPrompt" required></textarea></label>
+          </section>
+          <p id="providerConfigError" class="form-error" role="alert"></p>
+          <div class="provider-actions"><button class="primary-button" type="submit">Save models and prompts</button><button id="resetPrompts" class="ghost-button" type="button">Reset prompts</button></div>
+        </form>
+      </section>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="providerDialog" class="confirm provider-dialog" aria-labelledby="providerDialogTitle">
+  <h2 id="providerDialogTitle">Add provider</h2>
+  <form id="providerForm" class="settings-form">
+    <label class="field">Name<input id="providerName" placeholder="My Relay" required></label>
+    <label class="field">Base URL<input id="providerUrl" type="url" placeholder="https://example.com/v1" required></label>
+    <label class="field">API key<span class="model-input-row"><input id="providerKey" type="password" autocomplete="off" placeholder="Optional for local providers"><button id="toggleProviderKey" class="ghost-button" type="button">Show</button></span></label>
+    <label class="field">Model IDs<input id="providerModels" placeholder="gpt-4o-mini, gpt-4.1-mini"><span class="small muted">Comma-separated. You can also enter a custom model ID later.</span></label>
+    <p id="providerError" class="form-error" role="alert"></p>
+    <div class="confirm-actions"><button id="cancelProvider" class="secondary-button" type="button">Cancel</button><button id="saveProvider" class="primary-button" type="submit">Add provider</button></div>
+  </form>
+</dialog>
+
+<dialog id="confirm" class="confirm" aria-labelledby="confirmTitle">
+  <h2 id="confirmTitle"></h2><p id="confirmBody"></p>
+  <div class="confirm-actions"><button id="cancelConfirm" class="secondary-button">Cancel</button><button id="acceptConfirm" class="danger-button"></button></div>
+</dialog>
+<input id="fileInput" type="file" accept="video/*,audio/*,image/png" multiple hidden>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const esc = (value) => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const formatTime = (seconds) => {
+    const total = Math.max(0, Math.floor(seconds || 0));
+    const h = Math.floor(total / 3600), m = Math.floor(total % 3600 / 60), s = total % 60;
+    return h ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${m}:${String(s).padStart(2,"0")}`;
+  };
+  const sampleTranscript = [
+    {at: 0, text: "Today we are simplifying the recording flow."},
+    {at: 12, text: "The compact window keeps only the choices needed to start."},
+    {at: 29, text: "During recording, the floating bar stays out of the way."},
+    {at: 47, text: "Stopping opens the finished video and its transcript here."}
+  ];
+  const sampleTranslation = [
+    {at: 0, text: "今天我们简化录制流程。"},
+    {at: 12, text: "小窗口只保留开始所需的选择。"},
+    {at: 29, text: "录制时，悬浮条不会遮挡工作。"},
+    {at: 47, text: "停止后，在这里查看视频和转录。"}
+  ];
+  const defaultPrompts = {
+    translation: "Translate each subtitle into natural, concise {language}. Preserve meaning, names, numbers and timestamps. Return only the translated text.",
+    summary: "Summarize the transcript into a short overview, key points and action items. Keep timestamps and names accurate."
+  };
+  const state = {
+    view: "compact", source: "screen", recording: false, paused: false, micMuted: false,
+    elapsed: 0, startedAt: 0, selectedId: 1, detailOpen: false, tab: "transcript", playing: false,
+    playPosition: 0, playStartedAt: 0, muted: false, theme: "system",
+    activeProvider: 1,
+    providers: [{id: 1, name: "OpenAI", url: "https://api.openai.com/v1", key: "", models: ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o"], translationModel: "gpt-4o-mini", summaryModel: "gpt-4o-mini", translationPrompt: defaultPrompts.translation, summaryPrompt: defaultPrompts.summary}],
+    activeASRModel: 1,
+    asrModels: [
+      {id: 1, name: "Chinese Zipformer 14M", description: "Fast Chinese recognition", language: "Chinese", size: "58 MB", downloaded: true, downloading: false, progress: 100},
+      {id: 2, name: "English Zipformer 20M", description: "Fast English recognition", language: "English", size: "76 MB", downloaded: true, downloading: false, progress: 100},
+      {id: 3, name: "Multilingual Zipformer 30M", description: "Chinese, English and Japanese", language: "Multi-language", size: "118 MB", downloaded: false, downloading: false, progress: 0},
+      {id: 4, name: "English Zipformer 50M", description: "Higher accuracy English recognition", language: "English", size: "156 MB", downloaded: false, downloading: false, progress: 0}
+    ],
+    media: [
+      {id: 1, name: "Recording flow review", duration: 223, date: "Today, 14:32", source: "Recorded", transcript: sampleTranscript, translated: null, translationLanguage: "zh", summary: {overview: "The team agreed to reduce the recording flow to three clear states.", points: ["Compact setup for choosing a source", "Minimal floating controls while recording", "Library playback and transcript review after stopping"]}},
+      {id: 2, name: "Weekly product notes", duration: 548, date: "Yesterday, 16:08", source: "Recorded", transcript: sampleTranscript.slice(0, 3), translated: null, summary: null},
+      {id: 3, name: "Design reference.png", duration: 0, date: "Oct 27, 10:14", source: "Screenshot", transcript: [], translated: null, summary: null}
+    ]
+  };
+  let confirmAction = null, toastTimer, drag = null;
+
+  function notify(message) {
+    clearTimeout(toastTimer);
+    $("toast").textContent = message;
+    $("toast").hidden = false;
+    toastTimer = setTimeout(() => $("toast").hidden = true, 2800);
+  }
+  function download(name, content) {
+    const url = URL.createObjectURL(new Blob([content], {type: "text/plain"}));
+    const a = document.createElement("a"); a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function selectedMedia() { return state.media.find(m => m.id === state.selectedId); }
+  function setView(view) {
+    state.view = view;
+    if (view !== "floating") restoreRecorderToCompact();
+    $("compact").hidden = view !== "compact";
+    $("library").hidden = view !== "library";
+    $("floating").hidden = view !== "floating";
+    if (view === "library") renderLibrary();
+  }
+  function restoreRecorderToCompact() {
+    const main = document.querySelector(".record-main"), footer = document.querySelector(".record-footer");
+    if (main.parentElement !== $("compact")) {
+      const status = $("compact").querySelector(":scope > .status-bar");
+      $("compact").insertBefore(main, status); $("compact").insertBefore(footer, status);
+    }
+    $("recordSetup").hidden = true;
+    $("closeRecorder").hidden = true;
+    document.querySelector(".library-toolbar .search-wrap").hidden = false;
+    $("newRecording").hidden = false;
+    $("importMedia").hidden = false;
+  }
+  function showLibraryRecorder() {
+    resetPlayback();
+    $("recordSetup").append(document.querySelector(".record-main"), document.querySelector(".record-footer"));
+    state.detailOpen = false;
+    $("libraryGrid").hidden = true;
+    $("session").hidden = true;
+    $("recordSetup").hidden = false;
+    $("closeRecorder").hidden = false;
+    document.querySelector(".library-toolbar .search-wrap").hidden = true;
+    $("newRecording").hidden = true;
+    $("importMedia").hidden = true;
+    state.view = "library";
+    $("compact").hidden = true; $("library").hidden = false; $("floating").hidden = true;
+  }
+  $("closeRecorder").addEventListener("click", () => {
+    restoreRecorderToCompact();
+    $("closeRecorder").hidden = true;
+    document.querySelector(".library-toolbar .search-wrap").hidden = false;
+    $("newRecording").hidden = false;
+    $("importMedia").hidden = false;
+    state.detailOpen = false;
+    renderLibrary();
+  });
+  function ask(title, body, label, action, danger = true) {
+    confirmAction = action;
+    $("confirmTitle").textContent = title;
+    $("confirmBody").textContent = body;
+    $("acceptConfirm").textContent = label;
+    $("acceptConfirm").className = danger ? "danger-button" : "primary-button";
+    $("confirm").showModal();
+  }
+
+  // Source and recording
+  document.querySelectorAll("[data-source]").forEach(button => button.addEventListener("click", () => {
+    closeAllCombos();
+    state.source = button.dataset.source;
+    document.querySelectorAll("[data-source]").forEach(b => b.setAttribute("aria-pressed", String(b === button)));
+    $("displayPicker").hidden = state.source !== "screen";
+    $("windowPicker").hidden = state.source !== "window";
+    $("sourcePreview").hidden = false;
+    $("sourcePreview").classList.toggle("window-source", state.source === "window");
+    updatePreviewLabel();
+  }));
+  function updatePreviewLabel() {
+    $("previewBadge").textContent = state.source === "screen" ? $("displaySelect").value : $("windowSelect").value;
+  }
+  $("displaySelect").addEventListener("change", updatePreviewLabel);
+  $("windowSelect").addEventListener("change", updatePreviewLabel);
+  function closeAllCombos() {
+    document.querySelectorAll(".combo-menu").forEach(menu => { menu.hidden = true; });
+    document.querySelectorAll(".combo-trigger").forEach(trigger => trigger.setAttribute("aria-expanded", "false"));
+  }
+  function setupCombo(combo) {
+    const select = combo.querySelector("select"), trigger = combo.querySelector(".combo-trigger"), menu = combo.querySelector(".combo-menu"), value = combo.querySelector(".combo-value");
+    const options = () => [...menu.querySelectorAll(".combo-option")];
+    function sync() {
+      value.textContent = select.selectedOptions[0]?.textContent || "";
+      menu.innerHTML = [...select.options].map((option, index) => `<button type="button" class="combo-option" role="option" data-combo-index="${index}" aria-selected="${index === select.selectedIndex}">${esc(option.textContent)}</button>`).join("");
+    }
+    function open(focusOption = false) {
+      closeAllCombos(); menu.hidden = false; trigger.setAttribute("aria-expanded", "true");
+      if (focusOption) (options()[select.selectedIndex] || options()[0])?.focus();
+    }
+    function close(restoreFocus = false) { menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); if (restoreFocus) trigger.focus(); }
+    trigger.addEventListener("click", () => menu.hidden ? open() : close());
+    trigger.addEventListener("keydown", event => {
+      if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+      event.preventDefault(); open();
+      const list = options(), index = event.key === "ArrowDown" ? Math.max(0, select.selectedIndex) : list.length - 1;
+      list[index]?.focus();
+    });
+    menu.addEventListener("click", event => {
+      const option = event.target.closest("[data-combo-index]"); if (!option) return;
+      select.selectedIndex = Number(option.dataset.comboIndex);
+      select.dispatchEvent(new Event("change", {bubbles: true})); sync(); close(true);
+    });
+    menu.addEventListener("keydown", event => {
+      if (event.key === "Escape") { event.preventDefault(); close(true); return; }
+      if (event.key === "Tab") { close(); return; }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const list = options(), current = list.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? list.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + list.length) % list.length;
+      list[next]?.focus();
+    });
+    select.addEventListener("change", sync);
+    sync();
+  }
+  document.querySelectorAll(".combo").forEach(setupCombo);
+  document.addEventListener("click", event => {
+    document.querySelectorAll(".combo").forEach(combo => { if (!combo.contains(event.target)) { combo.querySelector(".combo-menu").hidden = true; combo.querySelector(".combo-trigger").setAttribute("aria-expanded", "false"); } });
+  });
+  $("startRecording").addEventListener("click", () => {
+    closeAllCombos();
+    state.recording = true; state.paused = false; state.elapsed = 0; state.startedAt = Date.now();
+    state.micMuted = $("microphone").value === "off";
+    updateRecordingControls(); setView("floating");
+  });
+  function recordSeconds() { return state.elapsed + (!state.paused ? (Date.now() - state.startedAt) / 1000 : 0); }
+  function updateRecordingControls() {
+    $("toggleMic").setAttribute("aria-pressed", String(state.micMuted));
+    $("toggleMic").setAttribute("aria-label", state.micMuted ? "Unmute microphone" : "Mute microphone");
+    $("toggleMic").title = state.micMuted ? "Unmute microphone" : "Mute microphone";
+    $("toggleMic").innerHTML = icon(state.micMuted ? "mic-off" : "mic");
+    $("pauseRecording").setAttribute("aria-pressed", String(state.paused));
+    $("pauseRecording").setAttribute("aria-label", state.paused ? "Resume recording" : "Pause recording");
+    $("pauseRecording").title = state.paused ? "Resume" : "Pause";
+    $("pauseRecording").innerHTML = icon(state.paused ? "play" : "pause");
+  }
+  $("toggleMic").addEventListener("click", () => { state.micMuted = !state.micMuted; updateRecordingControls(); });
+  $("pauseRecording").addEventListener("click", () => {
+    if (state.paused) { state.startedAt = Date.now(); state.paused = false; }
+    else { state.elapsed = recordSeconds(); state.paused = true; }
+    updateRecordingControls();
+  });
+  $("stopRecording").addEventListener("click", () => {
+    const duration = Math.max(1, Math.round(recordSeconds()));
+    const id = Math.max(0, ...state.media.map(m => m.id)) + 1;
+    state.media.unshift({id, name: `Recording ${new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}`, duration, date: "Just now", source: "Recorded", transcript: [], translated: null, summary: null});
+    state.recording = false; state.selectedId = id; state.tab = "transcript"; state.detailOpen = true; resetPlayback(); setView("library"); notify("Recording saved");
+  });
+  $("restartRecording").addEventListener("click", () => ask("Restart recording?", "The current recording will be discarded and the timer will start again.", "Restart recording", () => {
+    state.elapsed = 0; state.startedAt = Date.now(); state.paused = false; updateRecordingControls(); notify("Recording restarted");
+  }));
+  $("discardRecording").addEventListener("click", () => ask("Discard this recording?", "The recorded video and audio will be deleted.", "Discard recording", () => {
+    state.recording = false; setView("compact"); notify("Recording discarded");
+  }));
+
+  // Draggable recording strip, with a keyboard equivalent.
+  $("floating").addEventListener("pointerdown", event => {
+    if (event.target.closest("button")) return;
+    const bar = $("floating"), rect = bar.getBoundingClientRect();
+    bar.style.transform = "none"; bar.style.left = `${rect.left}px`; bar.style.top = `${rect.top}px`;
+    drag = {x: event.clientX - rect.left, y: event.clientY - rect.top}; bar.setPointerCapture(event.pointerId);
+  });
+  $("floating").addEventListener("pointermove", event => {
+    if (!drag) return;
+    const bar = $("floating");
+    bar.style.left = `${Math.max(8, Math.min(innerWidth - bar.offsetWidth - 8, event.clientX - drag.x))}px`;
+    bar.style.top = `${Math.max(8, Math.min(innerHeight - bar.offsetHeight - 8, event.clientY - drag.y))}px`;
+  });
+  $("floating").addEventListener("pointerup", () => drag = null);
+  $("floating").addEventListener("keydown", event => {
+    if (!event.key.startsWith("Arrow")) return;
+    event.preventDefault();
+    const bar = $("floating"), rect = bar.getBoundingClientRect(), step = event.shiftKey ? 30 : 10;
+    const x = rect.left + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0);
+    const y = rect.top + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0);
+    bar.style.transform = "none";
+    bar.style.left = `${Math.max(8, Math.min(innerWidth - bar.offsetWidth - 8, x))}px`;
+    bar.style.top = `${Math.max(8, Math.min(innerHeight - bar.offsetHeight - 8, y))}px`;
+  });
+
+  // Library and player
+  $("openLibrary").addEventListener("click", () => { state.detailOpen = false; setView("library"); });
+  $("newRecording").addEventListener("click", showLibraryRecorder);
+  $("backToLibrary").addEventListener("click", () => { state.detailOpen = false; resetPlayback(); renderLibrary(); });
+  function renderLibrary() {
+    if (!state.media.length) state.selectedId = 0;
+    if (state.selectedId && !selectedMedia()) state.selectedId = state.media[0]?.id || 0;
+    renderMediaList(); renderSession();
+  }
+  function languageLabel(code) {
+    return {zh: "中", en: "EN", ja: "日"}[code] || String(code || "").toUpperCase();
+  }
+  function renderMediaList() {
+    const query = $("librarySearch").value.trim().toLowerCase();
+    const items = state.media.filter(m => m.name.toLowerCase().includes(query));
+    if (!items.length) {
+      $("mediaList").innerHTML = `<div class="empty-library">${icon(query ? "search" : "library")}<p>${query ? `No results for “${esc(query)}”` : "No recordings yet"}</p><span class="small">${query ? "Try a different search." : "Record your screen or import a media file to get started."}</span><button id="emptyImport" class="secondary-button">${icon("import")}Import media</button></div>`;
+      $("emptyImport").addEventListener("click", () => $("fileInput").click());
+      return;
+    }
+    $("mediaList").innerHTML = items.map(m => {
+      const screenshot = m.source === "Screenshot";
+      const chips = [
+        screenshot ? `<span class="chip">PNG</span>` : "",
+        m.transcript.length ? `<span class="chip">TXT</span>` : "",
+        m.translated ? `<span class="chip">${esc(languageLabel(m.translationLanguage))}</span>` : "",
+        m.summary ? `<span class="chip">AI</span>` : ""
+      ].join("");
+      return `<button class="media-card" data-media="${m.id}" aria-current="${m.id === state.selectedId && state.detailOpen}" aria-label="Open ${esc(m.name)}">
+        <span class="media-thumb${screenshot ? " screenshot" : ""}">${screenshot ? icon("screen") : `<div class="mock-desktop"><div class="mock-window"><div class="mock-window-bar"></div><div class="mock-window-body"><div class="mock-side"><div class="mock-line"></div></div><div class="mock-content"><div class="mock-line short"></div><div class="mock-line accent"></div><div class="mock-block"></div><div class="mock-line"></div></div></div></div></div><span class="play-hint"><span>${icon("play")}</span></span>`}<span class="media-thumb-foot"><span class="media-chips">${chips}</span><span class="media-duration">${screenshot ? "" : formatTime(m.duration)}</span></span></span>
+        <span class="media-card-title">${esc(m.name)}</span>
+        <span class="media-card-sub">${screenshot ? "Screenshot" : esc(m.source)} · ${esc(m.date)}</span>
+      </button>`;
+    }).join("");
+    document.querySelectorAll("[data-media]").forEach(button => button.addEventListener("click", () => {
+      state.selectedId = Number(button.dataset.media); state.detailOpen = true; resetPlayback(); restoreRecorderToCompact(); renderLibrary();
+    }));
+  }
+  $("librarySearch").addEventListener("input", renderMediaList);
+  $("librarySearch").addEventListener("keydown", event => { if (event.key === "Escape") { $("librarySearch").value = ""; renderMediaList(); } });
+  function renderSession() {
+    const media = selectedMedia();
+    const open = Boolean(media) && state.detailOpen;
+    $("session").hidden = !open;
+    $("libraryGrid").hidden = open || !$("recordSetup").hidden;
+    if (!open) return;
+    $("mediaTitle").textContent = media.name;
+    const meta = [
+      ["Source", media.source === "Screenshot" ? "Screenshot" : media.source],
+      ["Duration", media.source === "Screenshot" ? "—" : formatTime(media.duration)],
+      ["Created", media.date],
+      ["Status", [media.transcript.length ? "Transcribed" : "No transcript", media.translated ? "Translated" : "", media.summary ? "Summarized" : ""].filter(Boolean).join(" · ")]
+    ];
+    $("mediaMeta").innerHTML = meta.map(([label, value]) => `<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`).join("");
+    $("seek").max = Math.max(1, media.duration);
+    renderPlayer(); renderTab();
+  }
+  function resetPlayback() { state.playing = false; state.playPosition = 0; state.muted = false; }
+  function playbackSeconds() { return state.playPosition + (state.playing ? (Date.now() - state.playStartedAt) / 1000 : 0); }
+  function togglePlayback() {
+    const media = selectedMedia(); if (!media || media.source === "Screenshot") return;
+    if (state.playing) { state.playPosition = playbackSeconds(); state.playing = false; }
+    else {
+      if (state.playPosition >= media.duration && media.duration) state.playPosition = 0;
+      state.playStartedAt = Date.now(); state.playing = true;
+    }
+    renderPlayer();
+  }
+  function renderPlayer() {
+    const media = selectedMedia(); if (!media) return;
+    const screenshot = media.source === "Screenshot";
+    const position = Math.min(playbackSeconds(), media.duration || playbackSeconds());
+    $("playerSection").classList.toggle("is-image", screenshot);
+    $("playerControls").hidden = screenshot;
+    $("imageBadge").hidden = !screenshot;
+    $("playOverlay").hidden = state.playing || screenshot;
+    $("playButton").innerHTML = icon(state.playing ? "pause" : "play");
+    $("playButton").setAttribute("aria-label", state.playing ? "Pause" : "Play");
+    $("seek").disabled = screenshot;
+    $("playerTime").textContent = screenshot ? "Still image" : `${formatTime(position)} / ${formatTime(media.duration)}`;
+    if (document.activeElement !== $("seek")) $("seek").value = Math.min(position, media.duration);
+    $("muteButton").innerHTML = icon(state.muted ? "mute" : "volume");
+    $("muteButton").setAttribute("aria-pressed", String(state.muted));
+    $("muteButton").setAttribute("aria-label", state.muted ? "Unmute" : "Mute");
+  }
+  $("playOverlay").addEventListener("click", togglePlayback);
+  $("playButton").addEventListener("click", togglePlayback);
+  $("seek").addEventListener("input", () => { state.playPosition = Number($("seek").value); state.playStartedAt = Date.now(); renderPlayer(); });
+  $("muteButton").addEventListener("click", () => { state.muted = !state.muted; renderPlayer(); });
+  $("showFile").addEventListener("click", () => notify("Opened in the system file manager"));
+  $("deleteMedia").addEventListener("click", () => {
+    const media = selectedMedia(); if (!media) return;
+    ask("Delete this media?", `“${media.name}” and its transcript will be removed from Library.`, "Delete media", () => {
+      state.media = state.media.filter(m => m.id !== media.id);
+      state.selectedId = state.media[0]?.id || 0; state.detailOpen = false; resetPlayback(); renderLibrary(); notify("Media deleted");
+    });
+  });
+  $("importMedia").addEventListener("click", () => $("fileInput").click());
+  $("fileInput").addEventListener("change", () => {
+    for (const file of $("fileInput").files) {
+      const id = Math.max(0, ...state.media.map(m => m.id)) + 1;
+      const image = file.type === "image/png";
+      state.media.unshift({id, name: file.name, duration: 0, date: "Just now", source: image ? "Screenshot" : "Imported", transcript: [], translated: null, summary: null});
+      state.selectedId = id;
+    }
+    $("fileInput").value = ""; resetPlayback(); restoreRecorderToCompact(); renderLibrary(); notify("Media imported");
+  });
+
+  // Transcript, translation and summary
+  document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => {
+    state.tab = button.dataset.tab; renderTab();
+  }));
+  document.querySelector(".tabs").addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    const tabs = [...document.querySelectorAll("[data-tab]")], current = tabs.findIndex(t => t.dataset.tab === state.tab);
+    const next = tabs[(current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+    next.focus(); next.click(); event.preventDefault();
+  });
+  function renderTab() {
+    document.querySelectorAll("[data-tab]").forEach(button => button.setAttribute("aria-selected", String(button.dataset.tab === state.tab)));
+    const media = selectedMedia(); if (!media) return;
+    $("exportTab").hidden = (state.tab === "transcript" && !media.transcript.length) || (state.tab === "summary" && !media.summary);
+    if (state.tab === "transcript") renderTranscript(media);
+    if (state.tab === "summary") renderSummary(media);
+  }
+  function renderTranscript(media) {
+    if (!media.transcript.length) {
+      $("tabPanel").innerHTML = media.source === "Screenshot" ? `<p class="muted">Screenshots have no transcript.</p>` : `<div class="empty-action"><p>No transcript yet.</p><button id="transcribeNow" class="primary-button">Transcribe</button></div>`;
+      $("transcribeNow")?.addEventListener("click", () => {
+        $("tabPanel").innerHTML = `<p class="muted">Transcribing…</p>`;
+        setTimeout(() => { if (selectedMedia()?.id === media.id) { media.transcript = sampleTranscript; renderTab(); notify("Transcript ready"); } }, 700);
+      });
+      return;
+    }
+    const chosenLanguage = media.translationVisible === false ? "" : media.pendingTranslation ?? media.translationLanguage ?? "zh";
+    const showTranslation = media.translated && media.translationVisible !== false && !media.pendingTranslation;
+    $("tabPanel").innerHTML = `<div class="tab-actions"><label class="translation-picker">Translation<select id="targetLanguage"><option value="">Off</option><option value="zh" ${chosenLanguage === "zh" ? "selected" : ""}>Chinese</option><option value="en" ${chosenLanguage === "en" ? "selected" : ""}>English</option><option value="ja" ${chosenLanguage === "ja" ? "selected" : ""}>Japanese</option></select></label><button id="translateNow" class="secondary-button" ${media.translationVisible === false ? "hidden" : ""}>${media.translated ? "Translate again" : "Translate"}</button></div><div class="transcript-list">${media.transcript.map((line, index) => `<button class="transcript-line" data-seek="${line.at}"><span class="time">${formatTime(line.at)}</span><span class="transcript-copy"><span>${esc(line.text)}</span>${showTranslation && media.translated[index] ? `<span class="translation-text">${esc(media.translated[index].text)}</span>` : ""}</span></button>`).join("")}</div>`;
+    $("targetLanguage").addEventListener("change", event => {
+      const language = event.target.value;
+      media.translationVisible = language !== "";
+      media.pendingTranslation = language && language !== media.translationLanguage ? language : null;
+      renderTranscript(media);
+    });
+    $("translateNow").addEventListener("click", () => {
+      const language = $("targetLanguage").value;
+      const translated = language === "zh" ? sampleTranslation.map(line => line.text) : language === "ja" ? ["録画フローをシンプルにします。", "開始に必要な選択だけを表示します。", "録画中は小さなコントロールだけを表示します。", "停止後に動画と文字起こしを確認します。"] : sampleTranscript.map(line => line.text);
+      media.translated = media.transcript.map((line, i) => ({at: line.at, text: translated[i] || line.text}));
+      media.translationLanguage = language; media.pendingTranslation = null; media.translationVisible = true;
+      renderTranscript(media); notify("Translation ready");
+    });
+    document.querySelectorAll("[data-seek]").forEach(button => button.addEventListener("click", () => {
+      state.playPosition = Math.min(Number(button.dataset.seek), media.duration); state.playStartedAt = Date.now(); renderPlayer();
+      document.querySelector(".player").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "nearest"});
+    }));
+  }
+  function renderSummary(media) {
+    if (!media.transcript.length) { $("tabPanel").innerHTML = `<p class="muted">Transcribe this media before summarizing it.</p>`; return; }
+    if (!media.summary) {
+      $("tabPanel").innerHTML = `<div class="empty-action"><p>No summary yet.</p><button id="generateSummary" class="primary-button">Generate summary</button></div>`;
+      $("generateSummary").addEventListener("click", () => {
+        $("tabPanel").innerHTML = `<p class="muted">Generating summary…</p>`;
+        setTimeout(() => { if (selectedMedia()?.id === media.id) { media.summary = {overview: "The recording presents a simpler three-state recording experience.", points: ["Choose a source in the compact window", "Control recording from the floating bar", "Review video and transcript in Library"]}; renderTab(); } }, 700);
+      });
+      return;
+    }
+    $("tabPanel").innerHTML = `<div class="tab-actions"><button id="copySummary" class="secondary-button">${icon("copy")}Copy Markdown</button></div><article class="summary"><h3>Overview</h3><p>${esc(media.summary.overview)}</p><h3>Key points</h3><ul>${media.summary.points.map(point => `<li>${esc(point)}</li>`).join("")}</ul></article>`;
+    $("copySummary").addEventListener("click", async () => {
+      const text = `# Summary\n\n${media.summary.overview}\n\n${media.summary.points.map(p => `- ${p}`).join("\n")}`;
+      try { await navigator.clipboard.writeText(text); notify("Summary copied"); }
+      catch { download("summary.md", text); notify("Clipboard unavailable; downloaded Markdown"); }
+    });
+  }
+  $("exportTab").addEventListener("click", () => {
+    const media = selectedMedia(); if (!media) return;
+    if (state.tab === "transcript") download(`${media.name}.txt`, media.transcript.map((line, index) => {
+      const translation = media.translated && media.translationVisible !== false && !media.pendingTranslation ? `\n${media.translated[index]?.text || ""}` : "";
+      return `${formatTime(line.at)}  ${line.text}${translation}`;
+    }).join("\n"));
+    if (state.tab === "summary" && media.summary) download(`${media.name}.md`, `# Summary\n\n${media.summary.overview}\n\n${media.summary.points.map(p => `- ${p}`).join("\n")}`);
+  });
+
+  // Settings
+  document.querySelectorAll(".open-settings").forEach(button => button.addEventListener("click", () => $("settings").showModal()));
+  $("closeSettings").addEventListener("click", () => $("settings").close());
+  document.querySelectorAll("[data-settings]").forEach(button => button.addEventListener("click", () => {
+    document.querySelectorAll("[data-settings]").forEach(b => b.setAttribute("aria-pressed", String(b === button)));
+    document.querySelectorAll(".settings-panel").forEach(panel => panel.hidden = panel.id !== `settings-${button.dataset.settings}`);
+    $("settingsSectionTitle").textContent = button.textContent.trim();
+    if (button.dataset.settings === "providers") renderProviders();
+    if (button.dataset.settings === "transcription") renderASRModels();
+  }));
+  function applyTheme(choice) {
+    state.theme = choice;
+    const dark = choice === "dark" || (choice === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.querySelectorAll("[data-theme-choice]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice)));
+    const label = choice[0].toUpperCase() + choice.slice(1), symbol = choice === "dark" ? "moon" : choice === "light" ? "sun" : "screen";
+    document.querySelectorAll("[data-theme-toggle]").forEach(button => {
+      button.innerHTML = icon(symbol);
+      button.setAttribute("aria-label", `Theme: ${label}. Click to change.`);
+      button.title = `Theme: ${label}. Click to change.`;
+    });
+  }
+  document.querySelectorAll("[data-theme-toggle]").forEach(button => button.addEventListener("click", () => {
+    const choices = ["system", "light", "dark"];
+    applyTheme(choices[(choices.indexOf(state.theme) + 1) % choices.length]);
+  }));
+  document.querySelectorAll("[data-theme-choice]").forEach(button => button.addEventListener("click", () => applyTheme(button.dataset.themeChoice)));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (state.theme === "system") applyTheme("system"); });
+  function renderASRModels() {
+    const row = model => {
+      const copy = `<div class="setting-copy"><strong>${esc(model.name)}</strong><small>${esc(model.description)} · ${esc(model.language)} · ${esc(model.size)}</small></div>`;
+      if (model.downloaded) return `<div class="setting-row">${copy}<div class="model-actions">${model.id === state.activeASRModel ? `<span class="badge">In use</span>` : `<button class="secondary-button" data-asr-use="${model.id}">Use</button>`}<button class="ghost-button" data-asr-delete="${model.id}">Delete</button></div></div>`;
+      if (model.downloading) return `<div class="setting-row">${copy}<div class="model-actions"><span class="small muted time">${model.progress}%</span><progress class="download-progress" max="100" value="${model.progress}" aria-label="Downloading ${esc(model.name)}"></progress></div></div>`;
+      return `<div class="setting-row">${copy}<button class="secondary-button" data-asr-download="${model.id}">Download</button></div>`;
+    };
+    const downloaded = state.asrModels.filter(model => model.downloaded);
+    $("downloadedModels").innerHTML = downloaded.length ? downloaded.map(row).join("") : `<p class="muted">No models installed. Download one below.</p>`;
+    $("availableModels").innerHTML = state.asrModels.filter(model => !model.downloaded).map(row).join("");
+  }
+  function asrModelAction(event) {
+    const button = event.target.closest("button"); if (!button) return;
+    if (button.dataset.asrUse) {
+      state.activeASRModel = Number(button.dataset.asrUse); renderASRModels(); notify("Transcription model selected");
+    }
+    if (button.dataset.asrDelete) {
+      const id = Number(button.dataset.asrDelete), model = state.asrModels.find(item => item.id === id);
+      ask("Delete this transcription model?", `“${model.name}” will be removed from this computer. You can download it again later.`, "Delete model", () => {
+        model.downloaded = false; model.downloading = false; model.progress = 0;
+        if (state.activeASRModel === id) state.activeASRModel = state.asrModels.find(item => item.downloaded)?.id || 0;
+        renderASRModels(); notify("Transcription model deleted");
+      });
+    }
+    if (button.dataset.asrDownload) {
+      const id = Number(button.dataset.asrDownload), model = state.asrModels.find(item => item.id === id);
+      if (model.downloading) return;
+      model.downloading = true; model.progress = 0; renderASRModels();
+      const timer = setInterval(() => {
+        model.progress = Math.min(100, model.progress + 20);
+        if (model.progress === 100) {
+          clearInterval(timer); model.downloading = false; model.downloaded = true;
+          if (!state.activeASRModel) state.activeASRModel = id;
+          notify(`${model.name} downloaded`);
+        }
+        renderASRModels();
+      }, 150);
+    }
+  }
+  $("downloadedModels").addEventListener("click", asrModelAction);
+  $("availableModels").addEventListener("click", asrModelAction);
+  $("openModelFolder").addEventListener("click", () => notify("Opened the model folder"));
+  $("recheckModels").addEventListener("click", () => {
+    const count = state.asrModels.filter(model => model.downloaded).length;
+    $("runtimeStatus").textContent = `Checked just now · ${count} downloaded models · native runtime ready`; notify("Models refreshed");
+  });
+  renderASRModels();
+  function activeProvider() { return state.providers.find(provider => provider.id === state.activeProvider); }
+  function renderProviders() {
+    const active = activeProvider();
+    $("providerList").innerHTML = state.providers.map(provider => `<div class="setting-row"><div class="setting-copy"><strong>${esc(provider.name)}</strong><small>${esc(provider.url)}</small></div>${provider.id === state.activeProvider ? `<span class="badge">In use</span>` : `<button class="secondary-button" data-provider-use="${provider.id}">Use</button>`}<button class="ghost-button" data-provider-edit="${provider.id}">Edit</button><button class="ghost-button" data-provider-delete="${provider.id}">Delete</button></div>`).join("");
+    $("providerList").hidden = state.providers.length === 0;
+    $("providerEmpty").hidden = state.providers.length !== 0;
+    $("aiSettingsForm").hidden = !active;
+    if (!active) return;
+    $("activeProviderName").textContent = `${active.name} models and prompts`;
+    $("providerModelOptions").innerHTML = active.models.map(model => `<option value="${esc(model)}"></option>`).join("");
+    $("translationModel").value = active.translationModel;
+    $("summaryModel").value = active.summaryModel;
+    $("translationPrompt").value = active.translationPrompt;
+    $("summaryPrompt").value = active.summaryPrompt;
+    $("providerConfigError").textContent = "";
+  }
+  $("providerList").addEventListener("click", event => {
+    const button = event.target.closest("button"); if (!button) return;
+    if (button.dataset.providerUse) { state.activeProvider = Number(button.dataset.providerUse); renderProviders(); notify("Provider selected"); }
+    if (button.dataset.providerEdit) openProvider(Number(button.dataset.providerEdit));
+    if (button.dataset.providerDelete) {
+      const id = Number(button.dataset.providerDelete), provider = state.providers.find(item => item.id === id);
+      ask("Delete this provider?", `“${provider.name}” and its model/prompt settings will be removed.`, "Delete provider", () => {
+        state.providers = state.providers.filter(item => item.id !== id);
+        if (state.activeProvider === id) state.activeProvider = state.providers[0]?.id || 0;
+        renderProviders(); notify("Provider deleted");
+      });
+    }
+  });
+  let editingProvider = 0;
+  function openProvider(id = 0) {
+    editingProvider = id;
+    const provider = state.providers.find(item => item.id === id);
+    $("providerDialogTitle").textContent = provider ? "Edit provider" : "Add provider";
+    $("saveProvider").textContent = provider ? "Save provider" : "Add provider";
+    $("providerName").value = provider?.name || "";
+    $("providerUrl").value = provider?.url || "";
+    $("providerKey").value = provider?.key || "";
+    $("providerModels").value = provider?.models.join(", ") || "";
+    $("providerError").textContent = "";
+    $("providerDialog").showModal();
+  }
+  $("addProvider").addEventListener("click", () => openProvider());
+  $("addFirstProvider").addEventListener("click", () => openProvider());
+  $("cancelProvider").addEventListener("click", () => $("providerDialog").close());
+  $("toggleProviderKey").addEventListener("click", () => {
+    const show = $("providerKey").type === "password";
+    $("providerKey").type = show ? "text" : "password";
+    $("toggleProviderKey").textContent = show ? "Hide" : "Show";
+  });
+  $("providerForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const name = $("providerName").value.trim(), url = $("providerUrl").value.trim();
+    if (!name || !url) { $("providerError").textContent = "Enter a provider name and base URL."; return; }
+    try { new URL(url); } catch { $("providerError").textContent = "Enter a valid URL, including https://"; $("providerUrl").focus(); return; }
+    const models = $("providerModels").value.split(",").map(model => model.trim()).filter(Boolean);
+    const existing = state.providers.find(item => item.id === editingProvider);
+    if (existing) {
+      Object.assign(existing, {name, url, key: $("providerKey").value, models});
+      if (!existing.models.includes(existing.translationModel)) existing.translationModel = models[0] || "";
+      if (!existing.models.includes(existing.summaryModel)) existing.summaryModel = models[0] || "";
+    } else {
+      const id = Math.max(0, ...state.providers.map(item => item.id)) + 1;
+      state.providers.push({id, name, url, key: $("providerKey").value, models, translationModel: models[0] || "", summaryModel: models[0] || "", translationPrompt: defaultPrompts.translation, summaryPrompt: defaultPrompts.summary});
+      state.activeProvider = id;
+    }
+    $("providerDialog").close(); renderProviders(); notify(existing ? "Provider saved" : "Provider added");
+  });
+  $("fetchModels").addEventListener("click", () => {
+    const provider = activeProvider(); if (!provider) return;
+    $("fetchModels").disabled = true; $("fetchModels").textContent = "Fetching…";
+    setTimeout(() => {
+      for (const model of ["gpt-4.1-nano", "gpt-4o-mini"]) if (!provider.models.includes(model)) provider.models.push(model);
+      $("providerModelOptions").innerHTML = provider.models.map(model => `<option value="${esc(model)}"></option>`).join("");
+      $("fetchModels").disabled = false; $("fetchModels").textContent = "Fetch models";
+      notify(`${provider.models.length} models available`);
+    }, 500);
+  });
+  $("resetPrompts").addEventListener("click", () => {
+    $("translationPrompt").value = defaultPrompts.translation;
+    $("summaryPrompt").value = defaultPrompts.summary;
+    notify("Default prompts restored; save to apply");
+  });
+  $("aiSettingsForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const provider = activeProvider(); if (!provider) return;
+    const values = [$("translationModel").value.trim(), $("summaryModel").value.trim(), $("translationPrompt").value.trim(), $("summaryPrompt").value.trim()];
+    if (values.some(value => !value)) { $("providerConfigError").textContent = "Enter a model and prompt for both features."; return; }
+    [provider.translationModel, provider.summaryModel, provider.translationPrompt, provider.summaryPrompt] = values;
+    $("providerConfigError").textContent = ""; notify("Models and prompts saved");
+  });
+  renderProviders();
+
+  // Confirmation and timers
+  $("cancelConfirm").addEventListener("click", () => $("confirm").close());
+  $("acceptConfirm").addEventListener("click", () => { const action = confirmAction; $("confirm").close(); confirmAction = null; action?.(); });
+  setInterval(() => {
+    if (state.view === "floating" && state.recording) $("recordTime").textContent = formatTime(recordSeconds());
+    if (state.view === "library") {
+      const media = selectedMedia();
+      if (state.playing && media?.duration && playbackSeconds() >= media.duration) { state.playPosition = media.duration; state.playing = false; }
+      renderPlayer();
+    }
+  }, 250);
+  applyTheme("system");
+})();
+</script>
+</body>
+</html>

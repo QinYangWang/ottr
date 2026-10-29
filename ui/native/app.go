@@ -29,8 +29,9 @@ type App struct {
 	Sum     *summary.Service
 	Jobs    *jobs.Service
 	MM      *models.Manager
-	Preview *capture.Previewer // the picture of the source, before recording
-	Prefs   *settings.Service  // what the window itself remembers
+	Preview *capture.Previewer  // the picture of the source, before recording
+	Shot    *capture.Snapshotter // a PNG of the source, one at a time
+	Prefs   *settings.Service   // what the window itself remembers
 
 	win         *mygo.Window
 	libraryWin  *mygo.Window
@@ -64,7 +65,7 @@ type App struct {
 	// The recording in progress, mirrored from the recorder each frame.
 	recording bool
 	startedAt time.Time
-	liveText  string
+	liveWarn  string // why live text is behind, when it is
 	late      []liveLine
 	preview   *ui.Bitmap
 	previewW  int
@@ -98,8 +99,8 @@ type App struct {
 	ffmpegNote   string // where it is, or why it is not
 	modelList    []models.Info
 	modelInUse   string
-	modelBin     string
-	modelBinErr  string
+	modelBin     string // the native ASR version loaded, or ""
+	modelBinErr  string // why there is no native runtime
 	modelLoaded  bool
 	modelLoading bool
 
@@ -122,10 +123,13 @@ type App struct {
 	queue   []func()
 }
 
-// liveLine is one live subtitle the recording pane shows.
+// liveLine is one line of live text the recording pane shows: a finalized
+// utterance, or the one still being spoken.
 type liveLine struct {
-	at   int64
-	text string
+	at        int64  // ms into the recording where the line starts
+	utterance int64  // which utterance it belongs to
+	text      string
+	final     bool
 }
 
 // View returns the window's content.
@@ -310,14 +314,61 @@ func (a *App) mirror(c *ui.Context) {
 		return
 	}
 	a.startedAt = st.StartedAt
-	if st.LiveText != "" && (len(a.late) == 0 || a.late[len(a.late)-1].text != st.LiveText) {
-		a.late = append(a.late, liveLine{at: time.Since(st.StartedAt).Milliseconds(), text: st.LiveText})
-		if len(a.late) > 6 {
-			a.late = a.late[len(a.late)-6:]
-		}
+	if st.Live != nil {
+		a.reviseLive(asr.LiveSubtitle{
+			Utterance: st.Live.Utterance, StartMs: st.Live.StartMs,
+			Text: st.Live.Text, Final: st.Live.Final, Warn: st.Live.Warn,
+		})
 	}
 	a.grabPreview()
 	c.After(150 * time.Millisecond)
+}
+
+// reviseLive puts a live subtitle revision on the pane: a revision of the same
+// utterance updates that line in place, a final one freezes it, and the next
+// utterance becomes a new line. Only the newest six finalized lines are kept,
+// plus the one being spoken.
+func (a *App) reviseLive(sub asr.LiveSubtitle) {
+	switch {
+	case sub.Text == "" && sub.Warn != "":
+		a.liveWarn = sub.Warn
+		return
+	case sub.Error != "":
+		a.liveWarn = sub.Error
+		return
+	case sub.Text == "":
+		return
+	}
+	a.liveWarn = ""
+	at := sub.StartMs
+	if i := a.liveIndex(sub.Utterance); i >= 0 {
+		a.late[i].text, a.late[i].at, a.late[i].final = sub.Text, at, sub.Final
+	} else {
+		a.late = append(a.late, liveLine{at: at, utterance: sub.Utterance, text: sub.Text, final: sub.Final})
+	}
+	// Keep the newest six finalized lines. Provisional ones do not count, so
+	// the line being spoken is never scrolled away.
+	finals := 0
+	for i := len(a.late) - 1; i >= 0; i-- {
+		if !a.late[i].final {
+			continue
+		}
+		finals++
+		if finals > 6 {
+			a.late = a.late[i+1:]
+			break
+		}
+	}
+}
+
+// liveIndex finds the line of an utterance, or -1.
+func (a *App) liveIndex(utterance int64) int {
+	for i := len(a.late) - 1; i >= 0; i-- {
+		if a.late[i].utterance == utterance {
+			return i
+		}
+	}
+	return -1
 }
 
 // poll keeps frames coming while something the window shows is still moving,

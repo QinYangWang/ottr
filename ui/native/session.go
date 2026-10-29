@@ -59,6 +59,10 @@ func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
 
 func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
 	detail := []string{m.Source, fmtDuration(m.DurationMs), m.CreatedAt.Local().Format("Jan 2 15:04")}
+	if m.Source == "screenshot" {
+		// A screenshot has no duration to say: its size is what it is.
+		detail = []string{m.Source, fmtSize(m.Size), m.CreatedAt.Local().Format("Jan 2 15:04")}
+	}
 	if m.Width > 0 {
 		detail = append(detail, fmt.Sprintf("%dx%d", m.Width, m.Height))
 	}

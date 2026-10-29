@@ -78,13 +78,19 @@ func (a *App) startBar(c *ui.Context, t *ui.Theme) {
 		return
 	}
 	ui.Column(c).Padding(t.Space(2.5), t.Space(4), t.Space(3), t.Space(4)).Gap(t.Space(2)).Children(func() {
-		if ui.PrimaryButton(c, "Start recording").Disabled(a.busy).Clicked() {
-			a.startRecording()
-		}
+		ui.Row(c).Gap(t.Space(2)).Children(func() {
+			if ui.PrimaryButton(c, "Start recording").Disabled(a.busy).Grow(1).Clicked() {
+				a.startRecording()
+			}
+			if ui.Button(c, "Screenshot").Tooltip("Save a PNG of the source").
+				Disabled(a.busy || a.Shot == nil).Clicked() {
+				a.takeScreenshot()
+			}
+		})
 		if a.busy {
 			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c).Label("Starting")
-				ui.Text(c, "Starting the recorder…").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+				ui.Spinner(c).Label("Working")
+				ui.Text(c, "Working…").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 			})
 		}
 	})
@@ -163,7 +169,7 @@ const sourcePreviewHeight = 192
 func (a *App) sourcePreview(c *ui.Context, t *ui.Theme) {
 	height := float32(sourcePreviewHeight)
 	if a.previewErr != "" {
-		height = 168 // room for what FFmpeg said
+		height = 168 // room for what the capture backend said
 	}
 	box := ui.Column(c).Height(height).Radius(t.Radius).
 		BorderWidth(1).BorderColor(t.Border).Background(t.Background).Clip()
@@ -184,7 +190,8 @@ func (a *App) sourcePreview(c *ui.Context, t *ui.Theme) {
 					TextColor(t.TextMuted).SingleLine().TextAlign(ui.Center)
 				return
 			}
-			// What FFmpeg said, whole: it is the only clue there is.
+			// What the capture backend said, whole: it is the only clue
+			// there is.
 			ui.Text(c, a.previewErr).FontSize(t.FontSize - 3).TextColor(t.TextMuted).
 				MaxWidth(300).TextAlign(ui.Center).Selectable()
 			if ui.Button(c, "Try again").Clicked() {
@@ -508,7 +515,12 @@ func (a *App) mediaRow(c *ui.Context, t *ui.Theme, m library.Media) {
 // mediaMeta is the second line of a row: when it was made, how long it runs,
 // and what has been done with it.
 func mediaMeta(m library.Media) string {
-	parts := []string{m.CreatedAt.Local().Format("Jan 2 15:04"), fmtDuration(m.DurationMs)}
+	parts := []string{m.CreatedAt.Local().Format("Jan 2 15:04")}
+	if m.Source == "screenshot" {
+		parts = append(parts, "screenshot", fmtSize(m.Size))
+		return strings.Join(parts, " · ")
+	}
+	parts = append(parts, fmtDuration(m.DurationMs))
 	if m.Source == "recording" {
 		parts = append(parts, "recorded")
 	}
@@ -644,6 +656,31 @@ func (a *App) startRecording() {
 			a.recording, a.startedAt = st.Recording, st.StartedAt
 			a.late, a.preview = nil, nil
 			a.err = ""
+		})
+	}()
+}
+
+// takeScreenshot saves one frame of the source chosen; the library lists it
+// with the recordings, and nothing transcribes it.
+func (a *App) takeScreenshot() {
+	if a.Shot == nil || a.busy || a.recording {
+		return
+	}
+	a.busy = true
+	source := a.sourceID
+	go func() {
+		shot, err := a.Shot.Screenshot(context.Background(), source)
+		a.update(func() {
+			a.busy = false
+			if err != nil {
+				a.setError(err)
+				return
+			}
+			a.err = ""
+			a.reload()
+			a.selectMedia(shot.ID)
+			// The library shows it as the chosen record, which is the
+			// confirmation; selecting it opens its details.
 		})
 	}()
 }

@@ -1,7 +1,6 @@
 package asr
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -78,36 +77,4 @@ func TestTranscriptSaveAndGet(t *testing.T) {
 	if len(results) != 1 || results[0].Text != "Second sentence." {
 		t.Fatalf("search result: %+v", results)
 	}
-}
-
-func TestTranscribeRealModel(t *testing.T) {
-	svc, lib := setupTestASR(t)
-	// Check if sherpa-onnx and real zipformer model exist in AppData or ottr dir
-	userData, _ := filepath.Abs("../../..") // check local
-	_ = userData
-	mm := models.NewManager("", "")
-	bin, err := mm.FindSherpaBin()
-	if err != nil {
-		t.Skipf("sherpa-onnx not installed: %v", err)
-	}
-	mdl, err := mm.FindASRModel()
-	if err != nil {
-		t.Skipf("ASR model not found: %v", err)
-	}
-
-	// Run sherpa directly on the model's test_wavs/0.wav
-	wavPath := filepath.Join(mdl.Dir, "test_wavs", "0.wav")
-	segments, err := RunSherpa(context.Background(), bin, mdl, wavPath)
-	if err != nil {
-		t.Fatalf("RunSherpa failed: %v", err)
-	}
-	if len(segments) == 0 {
-		t.Fatal("expected recognized segments, got 0")
-	}
-	t.Logf("Recognized %d segments: %q", len(segments), segments[0].Text)
-	if segments[0].StartMs < 0 || segments[0].EndMs <= segments[0].StartMs {
-		t.Errorf("bad timestamps: %+v", segments[0])
-	}
-	_ = lib
-	_ = svc
 }

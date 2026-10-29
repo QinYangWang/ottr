@@ -5,10 +5,46 @@ webview and no frontend build step. Each view is a Go function of the app's
 state (`ui/native.App.view` and `App.settingsView`), rebuilt by MyGo after
 input and whenever the app asks for a frame.
 
+## Proposed three-window redesign
+
+[Open the interactive HTML prototype](prototypes/native-ui.html). It is a
+standalone, dependency-free interaction prototype, not a proposal to put HTML
+in the native application.
+
+1. **Compact recorder:** the current small window keeps only source, audio and
+   Start. Full screen and Window are the only source choices. Full screen has
+   a display picker; both display and window selection update the same visible
+   preview. Start remains in a fixed footer when the compact content scrolls.
+2. **Recording strip:** Start replaces the compact window with a small draggable
+   strip: Stop/save + timer, microphone, Pause, Restart and Discard. Restart and
+   Discard require confirmation. Stop saves and opens Library.
+3. **Library:** a grid of media cards with a toolbar search, not a permanent
+   sidebar list. Opening a card switches Library to that item's page: the
+   in-window player on the left, Transcript/Summary on the right. `Back`
+   returns to the grid. Transcript and its translation share one timestamped
+   list: original text above translated text, with language controls in that
+   pane's toolbar. `New recording` opens the recorder in place. There is no
+   separate large recording-details page.
+4. **Settings:** remains a separate window with the current section/sidebar
+   structure. The HTML prototype includes working theme, model and provider
+   interactions.
+
+Every visible control in the prototype changes state or performs its described
+action; no disabled Area/Camera cards or duplicate theme/Library controls.
+
 ## Design constraints
 
 - Light and dark follow the desktop; the accent color is the system's.
 - The theme's spacing unit sizes everything, so controls stay in step.
+- Three surface levels carry the hierarchy: `bg` for a window, `surface` for
+  raised rows, cards and the title bar, `surface-sunken` for navigation,
+  search fields and hover fills. Hairline borders and a two-step shadow do the
+  rest — no heavy outlines, no second accent.
+- Type is small and tight: 13–13.5px body, 640-weight headings with negative
+  tracking, and 10.5px uppercase labels above groups and inside the item page's
+  fact strip.
+- Thumbnails, the player stage and the recording preview share one dark
+  treatment so media always sits on the same ground in both themes.
 - Short English labels, and a caption above each group of controls, as a
   settings window has them.
 - Capture sources are cards with an icon and name; speakers and microphones
@@ -22,7 +58,8 @@ input and whenever the app asks for a frame.
   acting as a dead button: the disabled `Area` and `Camera only` cards carry
   the reason in their tooltips.
 - The window opens as the recording form alone, and grows when something is
-  opened beside it.
+  opened beside it. Library and its item page replace one another inside the
+  same window; no second window opens for details.
 - No timeline/editor UI.
 
 ## The window
@@ -37,18 +74,38 @@ the recording form. Library (1180 × 800) and Settings (920 × 660) are separate
 native windows and do not resize or cover the main one.
 
 ```
-Main: Ottr                         Library: Ottr
-Choose a capture source            ────────────────┬─────────────────────────
-┌──────────┐┌──────────┐          Library [Import] │ Recorded screen 2026-10-24
-│Full screen││ Display 1│         [Search]         │ Transcript Translate Summary
-└──────────┘└──────────┘          Recorded screen │ 0:00  Alright, let's start…
-┌──────────┐┌──────────┐          Bug triage      │ 0:04  We ship the editor…
-│ Display 2││  Window  │                           │
-└──────────┘└──────────┘                           │
+Main: Ottr
+Choose a capture source
+┌──────────┐┌──────────┐
+│Full screen││ Display 1│
+└──────────┘└──────────┘
+┌──────────┐┌──────────┐
+│ Display 2││  Window  │
+└──────────┘└──────────┘
 [🔈 System audio      Speakers ▾]
 [🎤 Microphone               Off ▾]
 [        Start recording        ]
                          [Theme] [Library] [Settings]  (icons)
+```
+
+```
+Library: Ottr              [Search recordings] [New recording] [Import]
+────────────────────────────────────────────────────────────────────────
+┌────────────┐  ┌────────────┐  ┌────────────┐
+│  ▷ preview │  │  ▷ preview │  │  ▣ shot    │   one card per media:
+└────────────┘  └────────────┘  └────────────┘   thumbnail, status chips,
+TXT AI    4:31  TXT       9:08  PNG   Oct 27     duration, name, source
+Recorded screen  Bug triage      Design ref
+```
+
+```
+Library ▸ item (back arrow returns to the grid)
+‹ Recorded screen 2026-10-24               [📁] [🗑 Delete]
+┌──────────────────────────────────┬────────────────────────────┐
+│                                  │ Transcript | Summary  [⤓]  │
+│            ▷  player             │ 0:00  Alright, let's start…│
+│   ──────●───────────────────     │ 0:04  We ship the editor…  │
+└──────────────────────────────────┴────────────────────────────┘
 ```
 
 The main form's upper part — the cards and picture — scrolls in a short
@@ -84,31 +141,49 @@ hangs below the bar rather than over it.
 - `Area` and `Camera only` are disabled: recording part of the screen and
   recording a camera are not implemented (see ROADMAP), and each card's
   tooltip says so.
-- Under them, a 192-DIP-high, 960-pixel-wide preview shows the source before
-  recording, refreshing five times a second. Before the first frame it says
+- Under them, a preview panel shows the source before recording, refreshing
+  five times a second. Before the first frame it says
   which source it is and its size, or why there is no picture.
 - `Start recording` uses the source chosen above it. System audio and the
   microphone are dropdowns of active WASAPI endpoints, with the default
   speaker selected and the microphone initially `Off`; `Off` leaves that
   sound out. The button is disabled while a start or stop is in flight, and
   a spinner says what is happening.
-- Starting a recording opens Library, whose right side shows the elapsed time,
+- Starting a recording opens Library, whose item page shows the elapsed time,
   live picture and transcript, with `Delete…` and `Stop and transcribe` above.
-- In Library, `Search` filters through `Library.List(search)` as it is typed, and Escape
-  clears it. An empty library says so, and so does a search with no hits.
-- A row shows the name, when it was made, how long it runs, and what has been
-  made of it (`recorded`, `transcribed`, `summary`), with a spinner while a
-  transcript is pending.
-- A right-click on a row opens the tabs, "Show the file" and `Delete…`.
+- Library is a page of cards, one per media, four to a row at 1180 wide and
+  fewer as the window narrows: a 16:9 thumbnail carrying the status chips and
+  the duration in its lower corners, the name on two lines at most, and the
+  source with the date. A screenshot shows its picture instead of a preview.
+- The `Library` header holds `Search` — which filters through
+  `Library.List(search)` as it is typed, and Escape clears it — plus
+  `New recording` and the import icon button. The grid has no title of its own:
+  the window name already says `Ottr`, so the cards start at the top and no
+  item count is drawn. An empty library says so, and so does a search with no
+  hits.
+- A card's chips say what has been made of it: `TXT` for a transcript, the
+  target language for a translation, `AI` for a summary. A spinner replaces
+  them while a transcript is pending.
+- Clicking a card opens its page in place: `Back` returns to the grid, and the
+  card that was open keeps the accent ring. `New recording` opens the recorder
+  page in place, whose `Library` button returns to the grid.
+- The `Library` icon in the main window's status bar always opens the grid, not
+  the last open item.
+- A right-click on a card opens a menu of the tabs, "Show the file" and
+  `Delete…`.
 - `Delete…` asks in a modal, with "Keep the file on disk" checked by default:
-  the row goes, the recording stays.
-- The import button, an icon alone at the right of the `Library` header, adds
-  media files through a native dialog. Each one is transcribed on
+  the card goes, the recording stays.
+- The item page keeps the visual language of the grid: a dark player stage with
+  the frame inset and the controls in a strip below, and a muted four-cell
+  fact strip (source, duration, created, status) under the player. A screenshot
+  drops the controls and shows the still full-bleed with a `Screenshot` badge.
+- The import button, an icon alone beside `New recording` in the `Library`
+  header, adds media files through a native dialog. Each one is transcribed on
   this computer, as a recording is; the `Translate + summarize imports` switch
   (off by default, because it spends the provider's quota) also translates them
   into the Translate tab's language and summarizes them, as one `import` job
   the page shows and can cancel.
-- Below the list, a notice says how many files in the recordings folder no
+- Below the grid, a notice says how many files in the recordings folder no
   record holds — left there by a removal that kept the file — with `Add back`
   (re-add them as recordings) and `Delete files…`, which asks in a modal that
   names the count and cannot be undone.
@@ -126,7 +201,7 @@ area on the right:
 | Section | Holds |
 |---|---|
 | Appearance | three cards — `System`, `Light`, `Dark`, each drawn as a miniature window in that look — that pick the appearance at once and remember it (`settings.ui_theme`) |
-| Transcription | the models found, with size or the reason a folder is unusable, `In use` beside the one transcription uses and `Use` on the others; `Open folder`, `Re-check`, and where the sherpa-onnx binary was found; then `FFmpeg and ffprobe` with the path they were found at, or why not, and `Choose…` to point at `ffmpeg.exe` when Ottr cannot find it itself |
+| Transcription | the models found, with size or the reason a folder is unusable, `In use` beside the one transcription uses and `Use` on the others; `Open folder`, `Re-check`, and which sherpa-onnx version the native runtime reports (or why there is none); then `FFmpeg and ffprobe` with the path they were found at, or why not, and `Choose…` to point at `ffmpeg.exe` when Ottr cannot find it itself |
 | Translation | the provider as a segmented control — the free MyMemory, or a custom OpenAI-compatible endpoint with base URL, key and model |
 | Summary | base URL, key and model of the model that writes summaries |
 
@@ -137,9 +212,15 @@ by `models.Manager.Select` as soon as it is clicked. The native window's close
 button closes Settings alone; the main window keeps its size and page. See
 [models.md](models.md).
 
+The visual language is one system across all three windows: a sunken
+`surface-sunken` for navigation and inputs, raised rows and cards on
+`surface` with a hairline border and a soft shadow, one accent used only for
+selection, primary actions and focus rings, small uppercase section labels,
+and 12–13.5px body text with tighter heading leading.
+
 ## Recording page
 
-Shown on the right of Library while recording.
+Shown in place of the card grid while recording.
 
 - The latest preview frame from `Recorder.Preview()`, decoded into a bitmap
   that is updated in place as frames come.
@@ -153,9 +234,12 @@ Shown on the right of Library while recording.
 
 ## Session page
 
-The header shows the name, the source, the duration, the creation time and the
-resolution, with `Play` (the system's player), `Show file`, `Delete…` and
-`Close`, which closes the details and leaves the media list open.
+Opened by clicking a card; `Back` returns to the grid. The stage on the left
+carries the name, a `Show file` icon button (folder glyph, name in its label and
+tooltip), a `Delete` button in the danger tint, the player, and a four-cell fact
+strip below it; the pane on the right carries the Transcript and Summary tabs
+and `Export…`. The name is the only text in the header — the date, source and
+duration live in the fact strip instead of repeating under the title.
 
 ### Transcript
 
@@ -199,4 +283,5 @@ replaced with placeholder content. Dismissing the banner clears it.
 The window shows a preview of a recording in progress, but not the media of a
 finished file: `Play` hands the file to the system's player. `ui` has no video
 element yet, so a player inside the window is roadmapped; the timestamps in the
-transcript and summary are not clickable for that reason.
+transcript and summary are not clickable for that reason. The proposed
+implementation is [In-window native playback](native-playback.md).

@@ -1,0 +1,6 @@
+{
+  "name": "Ottr",
+  "identifier": "com.ottr.app",
+  "version": "0.1.0",
+  "main": "./cmd/studio"
+}

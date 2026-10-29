@@ -69,16 +69,18 @@ func (a *App) livePane(c *ui.Context, t *ui.Theme) {
 						FontSize(t.FontSize - 1)
 					return
 				}
-				for i, line := range a.late {
-					newest := i == len(a.late)-1
+				for _, line := range a.late {
 					ui.Column(c).Gap(1).Children(func() {
 						ui.Text(c, fmtDuration(line.at)).FontSize(t.FontSize - 3).
 							TextColor(t.TextMuted).FontFeatures("tnum")
 						text := ui.Text(c, line.text).FontSize(t.FontSize - 1)
-						if !newest {
+						if line.final {
 							text.TextColor(t.TextMuted)
 						}
 					})
+				}
+				if a.liveWarn != "" {
+					ui.Text(c, a.liveWarn).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 				}
 			})
 		})
