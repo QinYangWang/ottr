@@ -25,7 +25,7 @@ func TestManagerNoModels(t *testing.T) {
 
 func TestManagerDetectsModel(t *testing.T) {
 	base := t.TempDir()
-	modelDir := filepath.Join(base, "sherpa-test-model")
+	modelDir := filepath.Join(base, "sherpa-streaming-test-model")
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +51,9 @@ func TestManagerDetectsModel(t *testing.T) {
 	}
 	if mdl.Size != int64(len("dummy-data")*4) {
 		t.Errorf("wrong size: %d", mdl.Size)
+	}
+	if !mdl.Streaming {
+		t.Error("a streaming model directory was not detected")
 	}
 }
 

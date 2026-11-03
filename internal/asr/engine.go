@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
+	"ottr/internal/asr/native"
 	"ottr/internal/models"
 )
 
@@ -29,6 +31,9 @@ func recognizeWav(ctx context.Context, mdl models.ASRModel, wavPath string) ([]S
 	}
 	if rate <= 0 {
 		return nil, fmt.Errorf("read %s: no sample rate", wavPath)
+	}
+	if !mdl.Streaming {
+		return recognizeOffline(ctx, mdl, samples, rate)
 	}
 	st, err := newStreamer(mdl)
 	if err != nil {
@@ -55,6 +60,54 @@ func recognizeWav(ctx context.Context, mdl models.ASRModel, wavPath string) ([]S
 	st.feed(conv.Flush())
 	st.finish()
 	flush()
+	for i := range segments {
+		segments[i].Idx = i + 1
+	}
+	return segments, nil
+}
+
+// recognizeOffline uses the non-streaming API required by offline transducer
+// models such as ReazonSpeech. It never sends those models to the online API.
+func recognizeOffline(ctx context.Context, mdl models.ASRModel, samples []float32, rate int) ([]Segment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	rec, err := native.NewOfflineRecognizer(mdl.Tokens, mdl.Encoder, mdl.Decoder, mdl.Joiner, 2)
+	if err != nil {
+		return nil, fmt.Errorf("sherpa-onnx could not load the offline model in %s: %w", mdl.Dir, err)
+	}
+	defer rec.Destroy()
+	const chunkSamples = 16000 * 10 // bound offline attention memory on long files
+	var segments []Segment
+	for start := 0; start < len(samples); start += chunkSamples {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		end := min(start+chunkSamples, len(samples))
+		stream := rec.Stream()
+		if stream == nil {
+			return nil, fmt.Errorf("sherpa-onnx could not open an offline recognition stream")
+		}
+		stream.Accept(rate, samples[start:end])
+		stream.Decode()
+		text, tokens, timestamps := stream.Result()
+		stream.Destroy()
+		offset := float64(start) / float64(rate)
+		if len(tokens) == 0 {
+			text = strings.TrimSpace(text)
+			if text != "" {
+				segments = append(segments, Segment{
+					StartMs: int64(offset * 1000), EndMs: int64(float64(end) / float64(rate) * 1000), Text: text,
+				})
+			}
+			continue
+		}
+		for i := range timestamps {
+			timestamps[i] += offset
+		}
+		segments = append(segments, GroupTokens(tokens, timestamps)...)
+	}
+	segments = mergeShortSegments(segments, 12000) // only artifacts at chunk edges
 	for i := range segments {
 		segments[i].Idx = i + 1
 	}
@@ -111,6 +164,10 @@ func readWav(path string) ([]float32, int, error) {
 
 // GroupTokens splits token sequences with timestamps into clean subtitle segments.
 func GroupTokens(tokens []string, timestamps []float64) []Segment {
+	return groupTokens(tokens, timestamps, 2000)
+}
+
+func groupTokens(tokens []string, timestamps []float64, shortGapMs int64) []Segment {
 	if len(tokens) == 0 {
 		return nil
 	}
@@ -162,5 +219,29 @@ func GroupTokens(tokens []string, timestamps []float64) []Segment {
 		}
 	}
 	flush(prevTime + 0.3)
-	return segments
+	return mergeShortSegments(segments, shortGapMs)
+}
+
+// mergeShortSegments keeps isolated characters and other tiny fragments out
+// of their own rows. Sentence punctuation and genuinely long pauses stay hard
+// boundaries; the larger offline gap joins artifacts at chunk edges.
+func mergeShortSegments(segments []Segment, maxGapMs int64) []Segment {
+	if len(segments) < 2 {
+		return segments
+	}
+	out := make([]Segment, 0, len(segments))
+	for _, seg := range segments {
+		if len(out) > 0 {
+			prev := &out[len(out)-1]
+			gap := seg.StartMs - prev.EndMs
+			short := utf8.RuneCountInString(prev.Text) < 4 || utf8.RuneCountInString(seg.Text) < 4
+			if gap >= 0 && gap <= maxGapMs && short && !strings.ContainsAny(prev.Text, "。！？!?") {
+				prev.Text += seg.Text
+				prev.EndMs = seg.EndMs
+				continue
+			}
+		}
+		out = append(out, seg)
+	}
+	return out
 }

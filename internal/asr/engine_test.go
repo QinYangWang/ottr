@@ -1,7 +1,10 @@
 package asr
 
 import (
+	"strings"
 	"testing"
+
+	"ottr/internal/models"
 )
 
 func TestGroupTokens(t *testing.T) {
@@ -23,6 +26,34 @@ func TestGroupTokens(t *testing.T) {
 	}
 	if segs[1].StartMs != 1800 {
 		t.Errorf("seg 1 start: %d", segs[1].StartMs)
+	}
+}
+
+func TestOfflineModelCanBeUsedForLiveRecognition(t *testing.T) {
+	st, err := newStreamer(models.ASRModel{Dir: "offline-model"})
+	if st != nil {
+		st.destroy()
+	}
+	if err != nil && strings.Contains(err.Error(), "choose a streaming model") {
+		t.Fatalf("offline model was rejected for live recognition: %v", err)
+	}
+}
+
+func TestGroupTokensMergesSingleCharacterFragments(t *testing.T) {
+	tokens := []string{"課", "長", "は", "い", "は", "い"}
+	timestamps := []float64{0, 1.5, 10, 19, 20, 29}
+	segments := groupTokens(tokens, timestamps, 12000)
+	if len(segments) != 1 || segments[0].Text != "課長はいはい" {
+		t.Fatalf("short fragments were not merged: %+v", segments)
+	}
+}
+
+func TestGroupTokensKeepsSentenceBoundaries(t *testing.T) {
+	tokens := []string{"好", "。", "好", "。"}
+	timestamps := []float64{0, 0.2, 1, 1.2}
+	segments := GroupTokens(tokens, timestamps)
+	if len(segments) != 2 || segments[0].Text != "好。" || segments[1].Text != "好。" {
+		t.Fatalf("sentence boundaries changed: %+v", segments)
 	}
 }
 

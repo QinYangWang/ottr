@@ -115,6 +115,10 @@ func TestPreview(t *testing.T) {
 	a.speakers = []capture.AudioDevice{{ID: "speakers", Name: "Speakers (Realtek Audio)"}}
 	a.microphones = []capture.AudioDevice{{ID: "microphone", Name: "Microphone (USB Audio)"}}
 	a.speaker, a.microphone = a.speakers[0], a.microphones[0]
+	video := testVideo(t)
+	if _, err := db.Exec(`UPDATE media SET path = ?, width = 640, height = 360 WHERE id = ?`, video, id); err != nil {
+		t.Fatal(err)
+	}
 	a.reload()
 	a.selectMedia(id)
 	a.trLang = "en"
@@ -149,7 +153,7 @@ func TestPreview(t *testing.T) {
 	a.previewErr = ""
 
 	mainTT := tt
-	tt = ui.NewTester(a.libraryView, WideWidth, WideHeight)
+	tt = ui.NewTester(a.view, WideWidth, WideHeight)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	a.preview = ui.NewBitmap(deskPicture())
 	a.previewW, a.previewH = 640, 360
@@ -157,13 +161,18 @@ func TestPreview(t *testing.T) {
 	// The grid, then one media's page in place of it.
 	a.closeDetail()
 	shot("12-library-grid")
+	if err := tt.Click("Choose a display"); err != nil {
+		t.Fatal(err)
+	}
+	shot("16-select-inline")
+	if err := tt.Click("Choose a display"); err != nil {
+		t.Fatal(err)
+	}
+	a.libraryGridView = true
+	shot("17-library-grid-view")
+	a.libraryGridView = false
 	a.openDetail(id)
 	shot("01-session")
-
-	// The recording form in place of the grid.
-	a.chooseRecording()
-	shot("13-library-new-recording")
-	a.stopChoosing()
 
 	tt = ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
@@ -191,7 +200,7 @@ func TestPreview(t *testing.T) {
 
 	// The media's page in the dark look.
 	a.openDetail(id)
-	lt := ui.NewTester(a.libraryView, WideWidth, WideHeight)
+	lt := ui.NewTester(a.view, WideWidth, WideHeight)
 	lt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	lt.SetDark(true)
 	for i := 0; i < 12; i++ {
@@ -254,7 +263,7 @@ func TestPreviewRecording(t *testing.T) {
 	a.pickSource()
 	a.forget() // nothing chosen: the empty page
 
-	tt := ui.NewTester(a.libraryView, 1180, 760)
+	tt := ui.NewTester(a.view, 1180, 760)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	shot := func(name string) {
 		for i := 0; i < 6; i++ {
@@ -272,6 +281,20 @@ func TestPreviewRecording(t *testing.T) {
 		}
 	}
 	shot("10-empty")
+
+	a.recording, a.startedAt = true, time.Now().Add(-23*time.Second)
+	a.preview = ui.NewBitmap(deskPicture())
+	a.previewW, a.previewH = 640, 360
+	a.late = []liveLine{{at: 4000, utterance: 1, text: "The compact preview keeps its own aspect ratio.", final: true}}
+	tt = ui.NewTester(func(c *ui.Context) {
+		t := a.applyTheme(c)
+		ui.Column(c).Fill().Children(func() {
+			a.titleBar(c, t)
+			a.recorderPage(c, t)
+		})
+	}, CompactWidth, CompactHeight)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
+	shot("15-recording-compact")
 }
 
 // The title bar as it looks while a recording runs, which the window shows

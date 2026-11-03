@@ -33,8 +33,9 @@ type liveFeed struct {
 	ch   int
 	stop bool
 
-	busy atomic.Bool
-	once sync.Once
+	busy   atomic.Bool
+	paused atomic.Bool
+	once   sync.Once
 }
 
 func newLiveFeed(starter LiveStarter) *liveFeed {
@@ -43,7 +44,7 @@ func newLiveFeed(starter LiveStarter) *liveFeed {
 
 // write offers one buffer of interleaved f32le samples.
 func (f *liveFeed) write(pcm []byte, rate, channels int) {
-	if f == nil || f.starter == nil || len(pcm) == 0 {
+	if f == nil || f.starter == nil || len(pcm) == 0 || f.paused.Load() {
 		return
 	}
 	f.mu.Lock()

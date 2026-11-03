@@ -44,6 +44,7 @@ type Config struct {
 // State is the recording status, broadcast on StateChanged.
 type State struct {
 	Recording bool      `json:"recording"`
+	Paused    bool      `json:"paused,omitempty"`
 	StartedAt time.Time `json:"startedAt,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	// Live is the current line of live text, as the live sink last revised
@@ -143,7 +144,19 @@ func (r *Recorder) stateLocked() State {
 	if r.current == nil {
 		return State{}
 	}
-	return State{Recording: true, StartedAt: r.current.started, Live: r.current.live}
+	return State{Recording: true, Paused: r.current.sink.paused.Load(), StartedAt: r.current.started, Live: r.current.live}
+}
+
+// SetPaused suspends encoded video and audio while leaving the source preview
+// live. Resume continues into the same file.
+func (r *Recorder) SetPaused(paused bool) {
+	r.mu.Lock()
+	sess := r.current
+	r.mu.Unlock()
+	if sess != nil {
+		sess.sink.paused.Store(paused)
+		StateChanged.Broadcast(r.State())
+	}
 }
 
 // Start begins a recording. It fails without side effects when a device is
@@ -263,7 +276,9 @@ func (r *Recorder) Start(cfg Config) error {
 				}
 				return
 			}
-			video.offer(fitFrame(f, width, height))
+			if !sess.sink.paused.Load() {
+				video.offer(fitFrame(f, width, height))
+			}
 		}
 	}()
 	go func() {
@@ -358,9 +373,6 @@ func (r *Recorder) Stop() (library.Media, error) {
 	if err != nil {
 		os.Remove(sess.file)
 		return library.Media{}, err
-	}
-	if r.ASR != nil && m.HasAudio {
-		go r.ASR.Transcribe(m.ID)
 	}
 	StateChanged.Broadcast(State{})
 	return m, nil

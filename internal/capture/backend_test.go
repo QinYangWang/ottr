@@ -199,6 +199,19 @@ func TestFitFrameLetterboxes(t *testing.T) {
 
 // The preview is a JPEG, scaled to the preview width, and its rate follows the
 // source only loosely: the newest frame wins.
+func TestRecorderPauseState(t *testing.T) {
+	r := &Recorder{}
+	r.current = &session{started: time.Now(), sink: newLiveFeed(nil)}
+	r.SetPaused(true)
+	if !r.State().Paused {
+		t.Fatal("recording did not pause")
+	}
+	r.SetPaused(false)
+	if r.State().Paused {
+		t.Fatal("recording did not resume")
+	}
+}
+
 func TestPreviewEncodesJPEG(t *testing.T) {
 	f := syntheticFrame(1920, 1080, 0)
 	data, err := encodePreview(f)

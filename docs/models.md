@@ -38,18 +38,19 @@ is the **library**, not an executable:
 | macOS | `libsherpa-onnx-c-api.dylib` |
 | Linux | `libsherpa-onnx-c-api.so` |
 
-`Service.RuntimeStatus` looks in two places, in this order:
+`Service.RuntimeStatus` looks in three places, in this order:
 
-1. the app's own resources, `resources/bin` — where `mygo build` puts what an
-   install carries, so a packaged Ottr needs no separate ASR install;
-2. the configured bin directory, `%APPDATA%\Ottr\bin` by default — where a
-   user installs it by hand, and what `go run` uses.
+1. the app's merged resources, `resources/bin` — what a packaged install uses;
+2. the current platform's resource directory, such as
+   `resources/windows-amd64/bin` — what `go run` uses directly;
+3. the configured bin directory, `%APPDATA%\Ottr\bin` by default — where a
+   user installs it by hand.
 
 Nothing on `PATH` is loaded: a library from there could be any build with any
 dependencies. On Windows the library's own folder is searched for its
 dependencies (`onnxruntime.dll`) and `PATH` is not; macOS and Linux builds
 should set `@rpath` / `$ORIGIN` deliberately. The library stays loaded for the
-life of the process, and Settings shows the version it reports.
+life of the process.
 
 **Version: 2.0.1.** `internal/asr/native/sherpa_c_api_v2.0.1.h` is a verbatim copy
 of `sherpa-onnx/c-api/c-api.h` from that release, and the shim compiles

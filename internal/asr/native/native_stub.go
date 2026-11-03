@@ -58,3 +58,19 @@ func (s *Stream) Result() (string, []string, []float64) { return "", nil, nil }
 
 // Destroy does nothing.
 func (s *Stream) Destroy() {}
+
+type OfflineRecognizer struct{}
+
+func NewOfflineRecognizer(tokens, encoder, decoder, joiner string, threads int) (*OfflineRecognizer, error) {
+	return nil, ErrUnavailable
+}
+
+func (r *OfflineRecognizer) Destroy() {}
+
+type OfflineStream struct{}
+
+func (r *OfflineRecognizer) Stream() *OfflineStream            { return nil }
+func (s *OfflineStream) Accept(rate int, samples []float32)    {}
+func (s *OfflineStream) Decode()                               {}
+func (s *OfflineStream) Result() (string, []string, []float64) { return "", nil, nil }
+func (s *OfflineStream) Destroy()                              {}

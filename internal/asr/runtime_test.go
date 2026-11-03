@@ -3,6 +3,7 @@ package asr
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,6 +38,26 @@ func TestRuntimePrefersTheAppsOwnResources(t *testing.T) {
 	}
 	if len(paths) != 1 {
 		t.Errorf("candidates are %v, want only what exists", paths)
+	}
+}
+
+func TestRuntimeFindsPlatformResourcesDuringGoRun(t *testing.T) {
+	res := t.TempDir()
+	bin := filepath.Join(res, runtime.GOOS+"-"+runtime.GOARCH, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bundled := filepath.Join(bin, libraryNames[0])
+	if err := os.WriteFile(bundled, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mygo.App.SetPath(mygo.PathResources, res)
+	t.Cleanup(func() { mygo.App.SetPath(mygo.PathResources, "") })
+
+	svc := NewService(nil, models.NewManager(t.TempDir(), t.TempDir()), nil)
+	paths, _ := svc.libraryCandidates()
+	if len(paths) != 1 || paths[0] != bundled {
+		t.Fatalf("candidates are %v, want %s", paths, bundled)
 	}
 }
 

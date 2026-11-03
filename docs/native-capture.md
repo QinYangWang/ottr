@@ -424,7 +424,7 @@ import supported media and transcribe.
 - `wgc.c` polls `ottr_wgc_alive` so that a closed window ends its stream instead
   of hanging the recorder.
 - `livepreview.go` replaces the MJPEG/TCP preview: the newest raw frame is
-  encoded to a 960-wide JPEG in process, at most five times a second.
+  encoded to a 1600-wide, quality-90 JPEG in process, at most five times a second.
 - `screenshot.go` writes PNG through a temporary file plus rename.
 - `Library.AddScreenshot`/`AddNativeRecording` insert metadata instead of
   probing.

@@ -118,6 +118,10 @@ func startAudioStream(loopback bool, deviceID string, sink *liveFeed) (*audioStr
 				return
 			default:
 			}
+			if sink.paused.Load() {
+				time.Sleep(20 * time.Millisecond)
+				continue
+			}
 			var packet uint32
 			if err := acc.GetNextPacketSize(&packet); err != nil {
 				return // device unplugged or session ended

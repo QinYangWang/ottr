@@ -66,8 +66,8 @@ frame arrives after close and the cgo handle can be freed with it.
 ## Preview before recording
 
 `capture.Previewer` opens the same source at `previewFPS` (5) and keeps only the
-newest raw frame; a goroutine in the process scales it to 960 pixels wide and
-encodes it as JPEG, at most five times a second. There is no socket, no MJPEG
+newest raw frame; a goroutine in the process scales it to 1600 pixels wide and
+encodes it as a quality-90 JPEG, at most five times a second. There is no socket, no MJPEG
 parser and no second process: the first frame appears in about 180 ms, and a
 slower window only causes frames to be skipped.
 

@@ -18,13 +18,14 @@ FFmpeg and ffprobe are searched for in `<userData>/bin`, `%APPDATA%\Ottr\bin`,
 the folders `winget` installs into (`%LOCALAPPDATA%\Microsoft\WinGet`), next to
 the executable, and the `PATH` (`internal/tools`). Dropping the two binaries in
 `<userData>/bin` is enough — no system `PATH` change — and so is
-`winget install Gyan.FFmpeg` followed by `Re-check` in Settings, even in a
-running app: the folders are read at the moment the program is looked for.
-`Choose…` in Settings ▸ Transcription points Ottr at any `ffmpeg.exe` and
-remembers it.
+`winget install Gyan.FFmpeg`; the folders are read each time the program is
+looked for, including while Ottr is running.
+An existing `ffmpeg_path` preference is still honored; FFmpeg discovery needs
+no settings UI.
 
-The sherpa-onnx library is looked for in two places: the app's own resources
-(`resources/bin`, merged per platform at build time) and then `<userData>/bin`.
+The sherpa-onnx library is looked for in the app's merged `resources/bin`,
+the platform directory used directly by `go run` (for example
+`resources/windows-amd64/bin`), and then `<userData>/bin`.
 `PATH` is never used, because a library from there could be any build with any
 dependencies. See [Resources](models.md#packaging) for shipping it with the app — that
 is why `CGO_ENABLED=1 go tool mygo build` is the command, not plain
@@ -65,9 +66,9 @@ docs/                   this documentation
 
 ## Prepare ASR
 
-1. Download a streaming Zipformer model, e.g.
-   `sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23.tar.bz2` from the
-   sherpa-onnx `asr-models` release.
+1. Download a streaming Zipformer model, or an offline transducer model such
+   as Japanese ReazonSpeech, from the sherpa-onnx `asr-models` release. Either
+   model kind works for live and file transcription.
 2. Extract it under `%APPDATA%\Ottr\models\`.
 3. Copy the C API library — `sherpa-onnx-c-api.dll` on Windows,
    `libsherpa-onnx-c-api.dylib` on macOS, `libsherpa-onnx-c-api.so` on Linux —

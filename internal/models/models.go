@@ -25,12 +25,13 @@ type Info struct {
 
 // ASRModel holds verified paths to sherpa-onnx zipformer model files.
 type ASRModel struct {
-	Dir     string
-	Tokens  string
-	Encoder string
-	Decoder string
-	Joiner  string
-	Size    int64
+	Dir       string
+	Tokens    string
+	Encoder   string
+	Decoder   string
+	Joiner    string
+	Size      int64
+	Streaming bool
 }
 
 // Manager finds and validates models in configured directories.
@@ -207,12 +208,13 @@ func inspectASRDir(dir string) (*ASRModel, error) {
 	}
 
 	return &ASRModel{
-		Dir:     dir,
-		Tokens:  tokens,
-		Encoder: encoder,
-		Decoder: decoder,
-		Joiner:  joiner,
-		Size:    totalSize,
+		Dir:       dir,
+		Tokens:    tokens,
+		Encoder:   encoder,
+		Decoder:   decoder,
+		Joiner:    joiner,
+		Size:      totalSize,
+		Streaming: strings.Contains(strings.ToLower(filepath.Base(dir)), "streaming"),
 	}, nil
 }
 

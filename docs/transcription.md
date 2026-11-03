@@ -1,7 +1,7 @@
 # Transcription
 
-Local, offline speech recognition using sherpa-onnx streaming Zipformer models,
-called **in process** through its C API. The library is loaded at run time, so
+Local, offline speech recognition using sherpa-onnx streaming and offline
+transducer models, called **in process** through its C API. The library is loaded at run time, so
 Ottr starts and works without it; only transcription needs it.
 
 ## Decision: the C API through cgo, not a process
@@ -15,9 +15,11 @@ recognizer. That is gone:
   entry points once; the configuration structs come from the vendored header
   `native/sherpa_c_api_v2.0.1.h`, so their layout is sherpa-onnx's own, never
   guessed.
-- Batch recognition and live text both use the same streaming recognizer. One
-  recording is one utterance chain: an endpoint ends an utterance and starts the
-  next, so words are not cut where a chunk used to end.
+- Live text and streaming-model batch jobs use the online recognizer. Offline
+  models such as ReazonSpeech use the offline recognizer in ten-second chunks,
+  which bounds attention memory and merges timestamps onto the file timeline.
+  The same offline model also works for live text: four-second chunks return
+  final lines without entering the incompatible online API.
 - A `CGO_ENABLED=0` build compiles, does everything except ASR, and answers
   “native ASR is not available in this build”. There is no executable fallback.
 - A packaged app carries the library in its own resources, so an install needs
@@ -37,9 +39,9 @@ media file ─► ffmpeg ─► 16 kHz mono s16le WAV (temp) ─► Converter �
 2. `readWav` reads it into float samples; `Converter` turns interleaved PCM at
    any rate or channel count into mono 16 kHz float32, keeping its fractional
    position across calls.
-3. `recognizeWav` feeds the recognizer one second at a time. Between pieces it
-   checks the job's context, so a cancelled job stops at a piece boundary rather
-   than inside a native decode.
+3. `recognizeWav` feeds a streaming recognizer one second at a time, or an
+   offline recognizer ten seconds at a time. It checks the job's context between
+   pieces, so a cancelled job stops at a piece boundary.
 4. `GroupTokens` turns the token/timestamp arrays into subtitle lines.
 5. Segments are written in one transaction, and `media.transcript_status`
    becomes `done`.
@@ -58,6 +60,9 @@ step 1 and with it the progress reporting.
 - Each segment's `StartMs` is the timestamp of its first token; `EndMs` is the
   last token's time plus a small tail so subtitles stay legible.
 - Empty results are dropped; a text-less group never reaches the database.
+- Fragments shorter than four runes merge with an adjacent row when they are
+  close enough, unless the preceding row ends a sentence. Offline chunk edges
+  use a wider merge gap so Japanese characters do not become one row each.
 
 This is deliberately simple. It is not sentence-level punctuation restoration —
 see ROADMAP.

@@ -53,7 +53,7 @@ func main() {
 	app := &native.App{
 		Lib: lib, Rec: rec, ASR: asrSvc, Trans: trSvc, Sum: sumSvc, Jobs: js, MM: mm,
 		Preview: capture.NewPreviewer(backend), // the picture of a source, before recording
-		Shot: &capture.Snapshotter{Backend: backend, Lib: lib},
+		Shot:    &capture.Snapshotter{Backend: backend, Lib: lib},
 		Prefs:   prefs,
 	}
 
@@ -85,13 +85,13 @@ func main() {
 		// The look chosen last, before the window exists, so that it starts in
 		// it.
 		mygo.Theme.SetSource(mygo.ThemeSource(prefs.Get(settings.Theme)))
-		background := "#101014"
+		background := "#141414"
 		if !mygo.Theme.IsDark() {
-			background = "#f6f6f8"
+			background = "#ffffff"
 		}
 
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:           "Ottr",
+			Title: "Ottr",
 			// The view draws its own title bar in the strip the window
 			// controls sit in (ui/native.titleBar).
 			TitleBarStyle:   mygo.TitleBarHidden,

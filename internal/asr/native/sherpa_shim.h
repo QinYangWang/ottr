@@ -19,7 +19,7 @@ const api_t *sherpa_api_load(const char *path);
 const char *sherpa_api_error(void);
 const char *sherpa_api_version(void);
 
-// --- streaming recognition, used for both batch and live audio
+// --- streaming recognition, used for live audio and streaming-model batch jobs
 const void *sherpa_online_create(const char *tokens, const char *encoder,
                                  const char *decoder, const char *joiner,
                                  int32_t num_threads, int32_t enable_endpoint,
@@ -44,6 +44,20 @@ void sherpa_online_stream_finish(const void *stream);
 int32_t sherpa_online_result(const void *recognizer, const void *stream,
                              char *text, int32_t text_len, char ***tokens,
                              float **stamps, int32_t *count);
+
+// --- offline recognition, used for non-streaming model batch jobs
+const void *sherpa_offline_create(const char *tokens, const char *encoder,
+                                  const char *decoder, const char *joiner,
+                                  int32_t num_threads);
+void sherpa_offline_destroy(const void *recognizer);
+const void *sherpa_offline_stream_create(const void *recognizer);
+void sherpa_offline_stream_destroy(const void *stream);
+void sherpa_offline_stream_accept(const void *stream, int32_t rate,
+                                  const float *samples, int32_t n);
+void sherpa_offline_stream_decode(const void *recognizer, const void *stream);
+int32_t sherpa_offline_result(const void *stream, char *text,
+                              int32_t text_len, char ***tokens, float **stamps,
+                              int32_t *count);
 
 void sherpa_free(void *p);
 

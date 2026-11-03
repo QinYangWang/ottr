@@ -34,9 +34,6 @@ var (
 	// arrow-left and check: going back, and what is chosen.
 	iconBack  = loadIcon("arrow-left")
 	iconCheck = loadIcon("check")
-	// scan and video: an area of the screen, and a camera.
-	iconArea   = loadIcon("scan")
-	iconCamera = loadIcon("video")
 	// import: adding a file to the library.
 	iconImport = loadIcon("import")
 	// folder and trash-2: file actions on a chosen media.
@@ -44,12 +41,15 @@ var (
 	iconTrash  = loadIcon("trash-2")
 	// download: the export menu of a tab.
 	iconDownload = loadIcon("download")
-	// play: the player in the detail page.
-	iconPlay = loadIcon("play")
-	// library and sun/moon: the footer windows and theme toggle.
-	iconLibrary = loadIcon("library")
-	iconSun     = loadIcon("sun")
-	iconMoon    = loadIcon("moon")
+	// play and pause: the player in the detail page.
+	iconPlay  = loadIcon("play")
+	iconPause = loadIcon("pause")
+	// Library's empty state, layout switch and right-panel toggle.
+	iconLibrary    = loadIcon("library")
+	iconGrid       = loadIcon("layout-grid")
+	iconList       = loadIcon("list")
+	iconPanelOpen  = loadIcon("panel-left-open")
+	iconPanelClose = loadIcon("panel-left-close")
 	// languages and file-text: the Settings window's last two sections.
 	iconLanguages = loadIcon("languages")
 	iconSummary   = loadIcon("file-text")

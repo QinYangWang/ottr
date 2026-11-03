@@ -214,8 +214,12 @@ func f32le(b []byte) []float32 {
 // own timestamps start again, so the audio fed so far moves them back onto the
 // recording.
 type streamer struct {
-	rec    *native.Recognizer
-	stream *native.Stream
+	rec     *native.Recognizer
+	stream  *native.Stream
+	offline *native.OfflineRecognizer
+	pending []float32
+	current utterance
+	done    bool
 
 	fed       int64 // samples fed to the stream
 	baseMs    int64 // recording time where the current utterance began
@@ -224,6 +228,16 @@ type streamer struct {
 }
 
 func newStreamer(mdl models.ASRModel) (*streamer, error) {
+	s := &streamer{}
+	if !mdl.Streaming {
+		rec, err := native.NewOfflineRecognizer(mdl.Tokens, mdl.Encoder, mdl.Decoder, mdl.Joiner, 2)
+		if err != nil {
+			return nil, fmt.Errorf("sherpa-onnx could not load the offline model in %s: %w", mdl.Dir, err)
+		}
+		s.offline = rec
+		s.startUtterance()
+		return s, nil
+	}
 	rec, err := native.NewRecognizer(mdl.Tokens, mdl.Encoder, mdl.Decoder, mdl.Joiner, 2, true, 2.4, 20)
 	if err != nil {
 		return nil, fmt.Errorf("sherpa-onnx could not load the model in %s: %w", mdl.Dir, err)
@@ -233,24 +247,71 @@ func newStreamer(mdl models.ASRModel) (*streamer, error) {
 		rec.Destroy()
 		return nil, errors.New("sherpa-onnx could not open a recognition stream")
 	}
-	s := &streamer{rec: rec, stream: stream}
+	s.rec, s.stream = rec, stream
 	s.startUtterance()
 	return s, nil
 }
 
 // feed takes mono 16 kHz samples and decodes everything they make ready.
 func (s *streamer) feed(samples []float32) {
+	if s.offline != nil {
+		s.fed += int64(len(samples))
+		s.pending = append(s.pending, samples...)
+		const chunk = 16000 * 4
+		if len(s.pending) >= chunk {
+			s.decodeOffline(s.pending[:chunk])
+			s.pending = s.pending[chunk:]
+		}
+		return
+	}
 	s.stream.Accept(16000, samples)
 	s.fed += int64(len(samples))
 	s.stream.Decode()
 }
 
+func (s *streamer) decodeOffline(samples []float32) {
+	startMs := (s.fed - int64(len(s.pending))) * 1000 / 16000
+	stream := s.offline.Stream()
+	if stream == nil {
+		return
+	}
+	stream.Accept(16000, samples)
+	stream.Decode()
+	text, tokens, stamps := stream.Result()
+	stream.Destroy()
+	u := utterance{text: strings.TrimSpace(text), startMs: startMs, endMs: startMs}
+	if len(stamps) > 0 {
+		u.startMs = startMs + int64(stamps[0]*1000)
+		u.endMs = startMs + int64(stamps[len(stamps)-1]*1000) + utteranceTailMs
+	}
+	if u.endMs < u.startMs+utteranceTailMs {
+		u.endMs = u.startMs + utteranceTailMs
+	}
+	if len(tokens) > 0 {
+		shifted := make([]float64, len(stamps))
+		for i, at := range stamps {
+			shifted[i] = at + float64(startMs)/1000
+		}
+		u.segments = GroupTokens(tokens, shifted)
+	}
+	s.baseMs, s.current, s.done = startMs, u, true
+}
+
 // endpoint reports whether the recognizer found the end of the utterance.
-func (s *streamer) endpoint() bool { return s.stream.Endpoint() }
+func (s *streamer) endpoint() bool {
+	if s.offline != nil {
+		return s.done
+	}
+	return s.stream.Endpoint()
+}
 
 // reset starts a new utterance without losing the recording's timeline.
 func (s *streamer) reset() {
-	s.stream.Reset()
+	if s.offline != nil {
+		s.done, s.current = false, utterance{}
+	} else {
+		s.stream.Reset()
+	}
 	s.startUtterance()
 }
 
@@ -263,12 +324,23 @@ func (s *streamer) startUtterance() {
 // finish decodes the audio still held after the last feed, which is what makes
 // the final result complete.
 func (s *streamer) finish() {
+	if s.offline != nil {
+		if len(s.pending) > 0 {
+			s.decodeOffline(s.pending)
+			s.pending = nil
+		}
+		return
+	}
 	s.stream.Finish()
 	s.stream.Decode()
 }
 
 // destroy frees the stream, then the recognizer it belongs to.
 func (s *streamer) destroy() {
+	if s.offline != nil {
+		s.offline.Destroy()
+		return
+	}
 	s.stream.Destroy()
 	s.rec.Destroy()
 }
@@ -289,6 +361,9 @@ type utterance struct {
 // result reads the current utterance, on the recording's timeline and grouped
 // into lines with the same rules a stored transcript uses.
 func (s *streamer) result() utterance {
+	if s.offline != nil {
+		return s.current
+	}
 	text, tokens, stamps := s.stream.Result()
 	u := utterance{text: strings.TrimSpace(text), startMs: s.baseMs, endMs: s.baseMs}
 	if len(stamps) > 0 {

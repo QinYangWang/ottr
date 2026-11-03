@@ -34,20 +34,27 @@ type App struct {
 	Prefs   *settings.Service    // what the window itself remembers
 
 	win         *mygo.Window
-	libraryWin  *mygo.Window
 	settingsWin *mygo.Window
 
-	theme string // system | light | dark
+	theme    string // system | light | dark
+	language string // en | zh
+	font     string // installed family, or the system default
+
+	libraryOpen     bool
+	librarySet      bool // a manual choice overrides the responsive default
+	libraryResized  bool // this toggle widened a compact window for both panes
+	libraryGridView bool
+	thumbs          map[int64]*ui.Bitmap
+	thumbLoading    map[int64]bool
 
 	// The library.
-	media []library.Media
-	query string
-	sel   int64
-	tab   int
-	err   string
-	// newRecording shows the recording form inside the Library window, in place
-	// of the grid, until a source is chosen and the form is left.
-	newRecording bool
+	media      []library.Media
+	query      string
+	sel        int64
+	tab        int
+	err        string
+	renameID   int64
+	renameText string
 
 	// The recording pane.
 	sources     []capture.Source
@@ -66,44 +73,47 @@ type App struct {
 	discard     bool
 
 	// The recording in progress, mirrored from the recorder each frame.
-	recording bool
-	startedAt time.Time
-	liveWarn  string // why live text is behind, when it is
-	late      []liveLine
-	preview   *ui.Bitmap
-	previewW  int
-	previewH  int
-	previewAt time.Time
+	recording       bool
+	recordingPaused bool
+	startedAt       time.Time
+	pauseStarted    time.Time
+	pausedTotal     time.Duration
+	liveWarn        string // why live text is behind, when it is
+	late            []liveLine
+	preview         *ui.Bitmap
+	previewW        int
+	previewH        int
+	previewAt       time.Time
+
+	// Playback belongs to the selected media and is closed before switching.
+	playback    playback
+	playbackGen int64
 
 	// The session shown, and its three tabs.
-	transcript   asr.Transcript
-	segs         []asr.Segment
-	trLoaded     bool
-	lang         string // the language the transcript says it is in
-	trLang       string
-	trans        translate.Translation
-	transLang    string
-	transLoading bool
-	sum          summary.Summary
-	sumLoaded    bool
-	segQuery     string
+	transcript      asr.Transcript
+	segs            []asr.Segment
+	trLoaded        bool
+	lang            string // the language the transcript says it is in
+	trLang          string
+	trans           translate.Translation
+	transLang       string
+	transLoading    bool
+	showTranslation bool
+	sum             summary.Summary
+	sumLoaded       bool
+	segQuery        string
 
 	// job is background work over the media shown: what it does, how far it
 	// has come, and what became of it.
 	job jobs.Job
 
-	// The page shown in the main window is only ever the recording form now:
-	// media lives in the Library window and sources are chosen in the form.
+	// The main window shows the recorder, its library, or one media's details.
 	page string
 
 	// The Settings window and what it shows.
 	settingsTab  int
-	ffmpeg       string // the program found, or ""
-	ffmpegNote   string // where it is, or why it is not
 	modelList    []models.Info
 	modelInUse   string
-	modelBin     string // the native ASR version loaded, or ""
-	modelBinErr  string // why there is no native runtime
 	modelLoaded  bool
 	modelLoading bool
 
@@ -146,6 +156,8 @@ func (a *App) Begin(win *mygo.Window) {
 		if source := a.Prefs.Get(settings.Theme); source != "" {
 			a.theme = source
 		}
+		a.language = a.Prefs.Get(settings.Language)
+		a.font = a.Prefs.Get(settings.Font)
 	}
 	a.reload()
 	a.loadAudioDevices()
@@ -168,14 +180,44 @@ func (a *App) showPreview() {
 	a.Preview.Show(a.sourceID)
 }
 
-// The room the window takes. The main window keeps the recording form alone:
-// media and settings have windows of their own.
+// The recording window grows a library beside it when both panes fit.
 const (
-	CompactWidth  = 420
-	CompactHeight = 800
-	WideWidth     = 1180
-	WideHeight    = 800
+	CompactWidth        = 420
+	CompactHeight       = 800
+	WideWidth           = 1180
+	WideHeight          = 800
+	libraryWidth        = 360
+	libraryAutoMinWidth = CompactWidth + libraryWidth + 60
 )
+
+func (a *App) libraryVisible(width float32) bool {
+	if a.librarySet {
+		return a.libraryOpen
+	}
+	return width >= libraryAutoMinWidth
+}
+
+func (a *App) toggleLibrary(width float32) {
+	a.libraryOpen = !a.libraryVisible(width)
+	a.librarySet = true
+	if a.libraryOpen {
+		a.closeDetail()
+		a.reload()
+		if a.win != nil && width < libraryAutoMinWidth {
+			_, height := a.win.Size()
+			a.libraryResized = true
+			a.win.SetMinimumSize(libraryAutoMinWidth, 560)
+			a.win.SetSize(libraryAutoMinWidth, height)
+		}
+	} else if a.libraryResized {
+		a.libraryResized = false
+		if a.win != nil {
+			_, height := a.win.Size()
+			a.win.SetMinimumSize(380, 560)
+			a.win.SetSize(CompactWidth, height)
+		}
+	}
+}
 
 func (a *App) resize() {
 	if a.win == nil {
@@ -191,9 +233,6 @@ func (a *App) resize() {
 // draws its own bar there.
 const titleBarHeight = 46
 
-// sidebarWidth is the column the library and the recording form take.
-const sidebarWidth = 320
-
 func (a *App) view(c *ui.Context) {
 	t := a.applyTheme(c)
 	a.drain()
@@ -201,13 +240,28 @@ func (a *App) view(c *ui.Context) {
 	a.poll(c)
 	ui.Column(c).Fill().Background(t.Background).Children(func() {
 		a.titleBar(c, t)
-		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			a.sidebar(c, t)
-		})
+		width, _ := c.Size()
+		switch {
+		case a.recording:
+			a.recorderPage(c, t)
+		case a.detail():
+			if m, ok := a.current(); ok {
+				a.sessionPage(c, t, m)
+			}
+		default:
+			showLibrary := a.libraryVisible(width)
+			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+				a.sidebar(c, t, showLibrary)
+				if showLibrary {
+					a.libraryPanel(c, t)
+				}
+			})
+		}
 	})
 	if a.err != "" {
 		a.banner(c, t)
 	}
+	a.dialogs(c, t)
 }
 
 // titleBar is the window's own title bar, in the strip the window controls
@@ -225,7 +279,14 @@ func (a *App) titleBar(c *ui.Context, t *ui.Theme) {
 		Background(t.Surface).DragWindow()
 	row.Children(func() {
 		ui.Text(c, "Ottr").FontSize(t.FontSize + 3).Bold()
-		a.recordingPill(c, t)
+		ui.Spacer(c)
+		width, _ := c.Size()
+		icon := iconPanelOpen
+		if a.libraryVisible(width) {
+			icon = iconPanelClose
+		}
+		a.iconButton(c, t, icon, a.tr("Library"), func() { a.toggleLibrary(width) })
+		a.iconButton(c, t, iconSliders, a.tr("Settings"), a.openSettings)
 	})
 }
 
@@ -246,23 +307,14 @@ func (a *App) windowTitleBar(c *ui.Context, t *ui.Theme, title string, tools fun
 	})
 }
 
-// titleBarActions are Library's own controls in its title strip: the tools of
-// the grid. An inner page carries its own way back instead, next to its title.
-func (a *App) titleBarActions(c *ui.Context, t *ui.Theme) {
-	if a.recording || a.detail() || a.newRecording {
-		return
-	}
-	a.libraryTools(c, t)
-}
-
 // backButton is the way out of an inner page: an arrow alone when label is
 // empty, else the arrow and the page it goes to.
 func (a *App) backButton(c *ui.Context, t *ui.Theme, label string) bool {
-	name := "Back"
+	name := a.tr("Back")
 	if label != "" {
-		name = "Back to " + label
+		name = a.tr("Back to ") + a.tr(label)
 	}
-	btn := ui.ButtonBase(c).Label("Back").Tooltip(name).
+	btn := ui.ButtonBase(c).Label(a.tr("Back")).Tooltip(name).
 		Padding(t.Space(1.5)).Radius(t.Radius).TextColor(t.TextMuted)
 	if btn.Hovered() {
 		btn.Background(t.SurfaceHover).TextColor(t.Text)
@@ -299,7 +351,7 @@ func (a *App) update(fn func()) {
 	if a.win != nil {
 		a.win.Update(func() {
 			fn()
-			for _, win := range []*mygo.Window{a.libraryWin, a.settingsWin} {
+			for _, win := range []*mygo.Window{a.settingsWin} {
 				if win != nil && !win.IsDestroyed() {
 					win.Invalidate()
 				}
@@ -340,6 +392,7 @@ func (a *App) mirror(c *ui.Context) {
 		a.showPreview()
 	case st.Recording && !a.recording:
 		a.recording, a.startedAt, a.late, a.preview = true, st.StartedAt, nil, nil
+		a.recordingPaused, a.pauseStarted, a.pausedTotal = false, time.Time{}, 0
 	}
 	if !a.recording {
 		// The source is live, so that what will be recorded is visible before
@@ -356,6 +409,12 @@ func (a *App) mirror(c *ui.Context) {
 		return
 	}
 	a.startedAt = st.StartedAt
+	if st.Paused && !a.recordingPaused {
+		a.pauseStarted = time.Now()
+	} else if !st.Paused && a.recordingPaused {
+		a.pausedTotal += time.Since(a.pauseStarted)
+	}
+	a.recordingPaused = st.Paused
 	if st.Live != nil {
 		a.reviseLive(asr.LiveSubtitle{
 			Utterance: st.Live.Utterance, StartMs: st.Live.StartMs,
@@ -370,6 +429,14 @@ func (a *App) mirror(c *ui.Context) {
 // utterance updates that line in place, a final one freezes it, and the next
 // utterance becomes a new line. Only the newest six finalized lines are kept,
 // plus the one being spoken.
+func (a *App) recordingElapsed() time.Duration {
+	elapsed := time.Since(a.startedAt) - a.pausedTotal
+	if a.recordingPaused {
+		elapsed -= time.Since(a.pauseStarted)
+	}
+	return max(elapsed, 0)
+}
+
 func (a *App) reviseLive(sub asr.LiveSubtitle) {
 	switch {
 	case sub.Text == "" && sub.Warn != "":
@@ -512,6 +579,7 @@ func (a *App) reload() {
 		return
 	}
 	a.media = items
+	a.ensureThumbnails()
 	if a.Rec != nil && a.Rec.Dir != "" {
 		if orphans, err := a.Lib.Orphans(a.Rec.Dir); err == nil {
 			a.orphans = orphans
@@ -538,7 +606,6 @@ func (a *App) selectMedia(id int64) {
 	}
 	a.forget()
 	a.sel = id
-	a.newRecording = false
 }
 
 // closeDetail goes back to the grid, and drops what was loaded for the media.
@@ -546,39 +613,28 @@ func (a *App) closeDetail() {
 	a.forget()
 }
 
-// openDetail shows one media's page in the Library window, in place of the
-// grid.
+// openDetail shows one media's page in the main window.
 func (a *App) openDetail(id int64) {
 	a.selectMedia(id)
-	a.newRecording = false
-}
-
-// chooseRecording shows the recording form in place of the grid, the way the
-// prototype opens New recording.
-func (a *App) chooseRecording() {
-	a.closeDetail()
-	a.newRecording = true
-}
-
-// stopChoosing leaves the recording form for the grid.
-func (a *App) stopChoosing() {
-	a.newRecording = false
 }
 
 // forget drops what was loaded for the media shown.
 func (a *App) forget() {
+	a.closePlayback()
 	a.sel = 0
+	a.renameID, a.renameText = 0, ""
 	a.transcript, a.segs = asr.Transcript{}, nil
 	a.trLoaded, a.sumLoaded = false, false
 	a.trans, a.sum = translate.Translation{}, summary.Summary{}
 	a.transLang, a.segQuery = "", ""
+	a.showTranslation = false
 	a.lang = ""
 }
 
 // pending reports whether something the window shows is still being worked
 // on, so that the window asks for frames until it settles.
 func (a *App) pending() bool {
-	if a.recording || a.busy || a.job.Running() {
+	if a.recording || a.busy || a.job.Running() || a.playbackPlaying() {
 		return true
 	}
 	m, ok := a.current()
@@ -591,7 +647,7 @@ func (a *App) pending() bool {
 	if a.tab == 0 && !a.trLoaded && m.TranscriptStatus == "done" {
 		return true
 	}
-	if a.tab == 2 && !a.sumLoaded && m.SummaryStatus == "done" {
+	if a.tab == 1 && !a.sumLoaded && m.SummaryStatus == "done" {
 		return true
 	}
 	return false
@@ -600,14 +656,14 @@ func (a *App) pending() bool {
 func (a *App) dialogs(c *ui.Context, t *ui.Theme) {
 	if a.discard {
 		ui.Modal(c, &a.discard, func() {
-			ui.Text(c, "Delete this recording?").Bold()
-			ui.Text(c, "The file is deleted from disk, and the library keeps nothing.").
+			ui.Text(c, a.tr("Delete this recording?")).Bold()
+			ui.Text(c, a.tr("The file is deleted from disk, and the library keeps nothing.")).
 				TextColor(t.TextMuted).FontSize(t.FontSize - 1)
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Keep recording").Clicked() {
+				if ui.Button(c, a.tr("Keep recording")).Clicked() {
 					a.discard = false
 				}
-				if ui.PrimaryButton(c, "Delete").Clicked() {
+				if ui.PrimaryButton(c, a.tr("Delete")).Clicked() {
 					a.discard = false
 					a.stopRecording(true)
 				}
@@ -616,14 +672,14 @@ func (a *App) dialogs(c *ui.Context, t *ui.Theme) {
 	}
 	if a.confirmOrphans {
 		ui.Modal(c, &a.confirmOrphans, func() {
-			ui.Text(c, fmt.Sprintf("Delete %d recording files?", len(a.orphans))).Bold()
-			ui.Text(c, "They were recorded here but no record in the library holds them. Deleting them cannot be undone.").
+			ui.Text(c, a.trf("Delete %d recording files?", len(a.orphans))).Bold()
+			ui.Text(c, a.tr("They were recorded here but no record in the library holds them. Deleting them cannot be undone.")).
 				TextColor(t.TextMuted).FontSize(t.FontSize - 1)
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Keep files").Clicked() {
+				if ui.Button(c, a.tr("Keep files")).Clicked() {
 					a.confirmOrphans = false
 				}
-				if ui.PrimaryButton(c, "Delete").Clicked() {
+				if ui.PrimaryButton(c, a.tr("Delete")).Clicked() {
 					a.confirmOrphans = false
 					a.deleteOrphans()
 				}
@@ -636,14 +692,14 @@ func (a *App) dialogs(c *ui.Context, t *ui.Theme) {
 			if m, ok := a.byID(a.delID); ok {
 				name = fmt.Sprintf("%q", m.Name)
 			}
-			ui.Text(c, "Delete "+name+"?").Bold()
+			ui.Text(c, a.tr("Delete ")+name+a.tr("?")).Bold()
 			keep := true
-			ui.Checkbox(c, &keep, "Keep the file on disk").Changed()
+			ui.Checkbox(c, &keep, a.tr("Keep the file on disk")).Changed()
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				if ui.Button(c, "Cancel").Clicked() {
+				if ui.Button(c, a.tr("Cancel")).Clicked() {
 					a.confirmDel = false
 				}
-				if ui.PrimaryButton(c, "Delete").Clicked() {
+				if ui.PrimaryButton(c, a.tr("Delete")).Clicked() {
 					a.confirmDel = false
 					a.removeMedia(a.delID, !keep)
 				}
@@ -661,7 +717,7 @@ func (a *App) banner(c *ui.Context, t *ui.Theme) {
 			Padding(t.Space(2.5), t.Space(4)).Radius(t.Radius).Gap(t.Space(3)).
 			AlignItems(ui.Center).Background(t.Danger).TextColor(t.AccentText).Children(func() {
 			ui.Text(c, a.err).FontSize(t.FontSize - 1).Grow(1).Selectable()
-			if ui.Button(c, "Dismiss").Clicked() {
+			if ui.Button(c, a.tr("Dismiss")).Clicked() {
 				a.err = ""
 			}
 		})

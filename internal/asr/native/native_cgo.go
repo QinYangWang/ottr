@@ -5,9 +5,8 @@
 // nothing above internal/asr sees a C type, and every native object is created
 // and destroyed here.
 //
-// Both batch and live audio go through a streaming recognizer: a streaming
-// zipformer model is exactly that, and one code path means the batch result and
-// the live text cannot disagree about models or configuration.
+// Live audio and streaming-model batch jobs use online recognizers. Offline
+// transducer models use the separate offline API in bounded file chunks.
 package native
 
 /*
@@ -200,6 +199,96 @@ func (s *Stream) Result() (text string, tokens []string, timestamps []float64) {
 func (s *Stream) Destroy() {
 	if s != nil && s.h != nil {
 		C.sherpa_online_stream_destroy(s.h)
+		s.h = nil
+	}
+}
+
+// OfflineRecognizer owns one non-streaming recognizer used for file jobs.
+type OfflineRecognizer struct{ h unsafe.Pointer }
+
+func NewOfflineRecognizer(tokens, encoder, decoder, joiner string, threads int) (*OfflineRecognizer, error) {
+	if !loaded {
+		return nil, ErrUnavailable
+	}
+	var h unsafe.Pointer
+	withCString(tokens, func(ct *C.char) {
+		withCString(encoder, func(ce *C.char) {
+			withCString(decoder, func(cd *C.char) {
+				withCString(joiner, func(cj *C.char) {
+					h = C.sherpa_offline_create(ct, ce, cd, cj, C.int32_t(threads))
+				})
+			})
+		})
+	})
+	if h == nil {
+		return nil, ErrNoRecognizer
+	}
+	return &OfflineRecognizer{h: h}, nil
+}
+
+func (r *OfflineRecognizer) Destroy() {
+	if r != nil && r.h != nil {
+		C.sherpa_offline_destroy(r.h)
+		r.h = nil
+	}
+}
+
+// OfflineStream is one complete utterance in an OfflineRecognizer.
+type OfflineStream struct {
+	r *OfflineRecognizer
+	h unsafe.Pointer
+}
+
+func (r *OfflineRecognizer) Stream() *OfflineStream {
+	return &OfflineStream{r: r, h: C.sherpa_offline_stream_create(r.h)}
+}
+
+func (s *OfflineStream) Accept(rate int, samples []float32) {
+	if s == nil || s.h == nil || len(samples) == 0 {
+		return
+	}
+	C.sherpa_offline_stream_accept(s.h, C.int32_t(rate),
+		(*C.float)(unsafe.Pointer(&samples[0])), C.int32_t(len(samples)))
+}
+
+func (s *OfflineStream) Decode() { C.sherpa_offline_stream_decode(s.r.h, s.h) }
+
+func (s *OfflineStream) Result() (text string, tokens []string, timestamps []float64) {
+	buf := make([]byte, 256)
+	for {
+		var arr **C.char
+		var stamps *C.float
+		var count C.int32_t
+		need := C.sherpa_offline_result(s.h, (*C.char)(unsafe.Pointer(&buf[0])),
+			C.int32_t(len(buf)), &arr, &stamps, &count)
+		if int(need) >= len(buf) {
+			buf = make([]byte, need+1)
+			continue
+		}
+		text = string(buf[:need])
+		if arr != nil && count > 0 {
+			defer C.sherpa_free(unsafe.Pointer(arr))
+			tokens = make([]string, count)
+			timestamps = make([]float64, count)
+			strs := unsafe.Slice(arr, int(count))
+			for i := range tokens {
+				tokens[i] = C.GoString(strs[i])
+			}
+			if stamps != nil {
+				defer C.sherpa_free(unsafe.Pointer(stamps))
+				ts := unsafe.Slice(stamps, int(count))
+				for i := range timestamps {
+					timestamps[i] = float64(ts[i])
+				}
+			}
+		}
+		return text, tokens, timestamps
+	}
+}
+
+func (s *OfflineStream) Destroy() {
+	if s != nil && s.h != nil {
+		C.sherpa_offline_stream_destroy(s.h)
 		s.h = nil
 	}
 }

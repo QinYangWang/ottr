@@ -71,8 +71,8 @@ func newTestApp(t *testing.T) (*App, int64) {
 // transcript, which its tabs switch away from and back to.
 func TestWindowShowsTranscript(t *testing.T) {
 	a, id := newTestApp(t)
-	tt := ui.NewTester(a.libraryView, 1100, 720)
-	// The grid lists the file; its card opens the media's page.
+	tt := ui.NewTester(a.view, 1100, 720)
+	// The list shows the file; its row opens the media's page.
 	if !tt.HasText("standup") {
 		t.Fatalf("the library does not list the recording: %q", tt.Texts())
 	}
@@ -84,6 +84,20 @@ func TestWindowShowsTranscript(t *testing.T) {
 	}
 	if !tt.HasText("first line") || !tt.HasText("second line") {
 		t.Fatalf("the transcript did not show: %q", tt.Texts())
+	}
+	search, searchOK := tt.Find("Search the subtitles")
+	language, languageOK := tt.Find("Spoken language")
+	again, againOK := tt.Find("Transcribe again")
+	if !searchOK || !languageOK || !againOK || !(search.X < language.X && language.Y <= again.Y) {
+		t.Errorf("language selector is not between search and re-transcribe: %+v %+v %+v", search, language, again)
+	}
+	a.trans.Segments = []translate.TranslationSegment{{SegmentID: a.segs[0].ID, TranslatedText: "translated first line"}}
+	if err := tt.Click("Translate"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("translated first line") {
+		t.Fatalf("the translation switch did not merge translated rows: %q", tt.Texts())
 	}
 	// The other tabs ask for what they need rather than showing nothing.
 	if err := tt.Click("Summary"); err != nil {
@@ -103,11 +117,61 @@ func TestWindowShowsTranscript(t *testing.T) {
 	}
 }
 
+func TestPlaybackSliderSeeksOnRelease(t *testing.T) {
+	video := testVideo(t)
+	a, id := newTestApp(t)
+	m, _ := a.byID(id)
+	m.Path, m.Width, m.Height, m.DurationMs = video, 640, 360, 10000
+	a.media[0] = m
+	a.openDetail(id)
+	tt := ui.NewTester(a.view, 1100, 720)
+	tt.Frame()
+	slider, ok := tt.Find("Playback position")
+	if !ok {
+		t.Fatalf("no playback slider: %q", tt.Texts())
+	}
+	y := slider.Y + slider.H/2
+	tt.Press(slider.X+slider.W*0.2, y)
+	tt.Move(slider.X+slider.W*0.7, y)
+	tt.Release(slider.X+slider.W*0.7, y)
+	if a.playback.seekSeconds < 6.8 || a.playback.seekSeconds > 7.2 {
+		t.Fatalf("slider value after drag = %v", a.playback.seekSeconds)
+	}
+	if delta := a.playback.offset - 7*time.Second; delta < -100*time.Millisecond || delta > 100*time.Millisecond {
+		t.Fatalf("release did not seek: %v", a.playback.offset)
+	}
+	a.closePlayback()
+}
+
+func TestRenameMedia(t *testing.T) {
+	a, id := newTestApp(t)
+	a.openDetail(id)
+	tt := ui.NewTester(a.view, 1100, 720)
+	tt.Frame()
+	if err := tt.Click("Rename"); err != nil {
+		t.Fatal(err)
+	}
+	a.renameText = "renamed recording"
+	if err := tt.Click("Save"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 40 && a.media[0].Name != "renamed recording"; i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if a.media[0].Name != "renamed recording" {
+		t.Fatalf("media was not renamed: %+v", a.media[0])
+	}
+	if a.media[0].Path != "/tmp/standup.mp4" {
+		t.Fatalf("rename moved the media file: %q", a.media[0].Path)
+	}
+}
+
 // Searching the library keeps the file listed while it matches, and says so
 // when nothing does.
 func TestSearchFilters(t *testing.T) {
 	a, _ := newTestApp(t)
-	tt := ui.NewTester(a.libraryView, 1100, 720)
+	tt := ui.NewTester(a.view, 1100, 720)
 	a.query = "nothing-like-this"
 	a.reload()
 	tt.Frame()
@@ -125,7 +189,7 @@ func TestSearchFilters(t *testing.T) {
 // Deleting a record leaves the library empty, and the window says so.
 func TestDeleteMedia(t *testing.T) {
 	a, id := newTestApp(t)
-	tt := ui.NewTester(a.libraryView, 1100, 720)
+	tt := ui.NewTester(a.view, 1100, 720)
 	a.removeMedia(id, false)
 	for i := 0; i < 20 && len(a.media) > 0; i++ {
 		time.Sleep(10 * time.Millisecond)
@@ -167,7 +231,7 @@ func TestCancelStopsTheSummaryJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tt := ui.NewTester(a.libraryView, 1100, 720)
+	tt := ui.NewTester(a.view, 1100, 720)
 	tt.Frame()
 	a.openDetail(id)
 	tt.Frame()
@@ -268,7 +332,7 @@ func TestOrphanNoticeAndDelete(t *testing.T) {
 	}
 	a.reload()
 
-	tt := ui.NewTester(a.libraryView, 1100, 720)
+	tt := ui.NewTester(a.view, 1100, 720)
 	tt.Frame()
 	if !tt.HasText("1 recording file is not in the library.") {
 		t.Fatalf("the window says %q", tt.Texts())
@@ -338,10 +402,6 @@ func TestSettingsChooseAModel(t *testing.T) {
 	if !tt.HasText("missing tokens.txt") {
 		t.Errorf("the unusable folder does not say why: %q", tt.Texts())
 	}
-	if !tt.HasText("the sherpa-onnx library is not in") {
-		t.Errorf("the page does not say the runtime is missing: %q", tt.Texts())
-	}
-
 	// Without a choice the first valid model is the one in use; the other is
 	// offered.
 	if a.modelInUse != filepath.Join(base, "aaa-model") {
@@ -373,6 +433,8 @@ func TestSourceCardsAndPicker(t *testing.T) {
 	a, _ := newTestApp(t)
 	a.sources = []capture.Source{
 		{ID: "screen", Kind: "screen", Name: "Full screen"},
+		{ID: "display:0", Kind: "display", Name: "Display 1"},
+		{ID: "display:1", Kind: "display", Name: "Display 2"},
 		{ID: "window:Alpha — Editor", Kind: "window", Name: "Alpha — Editor", Detail: "1560x992"},
 		{ID: "window:Beta", Kind: "window", Name: "Beta", Detail: "800x600"},
 	}
@@ -380,8 +442,8 @@ func TestSourceCardsAndPicker(t *testing.T) {
 	a.speakers = []capture.AudioDevice{{ID: "speaker-1", Name: "Speakers 1"}, {ID: "speaker-2", Name: "Speakers 2"}}
 	a.speaker = a.speakers[0]
 	a.microphones = []capture.AudioDevice{{ID: "mic-1", Name: "Microphone 1"}}
-	if a.sourceID != "screen" {
-		t.Fatalf("the whole screen is not chosen by default: %q", a.sourceID)
+	if a.sourceID != "display:0" {
+		t.Fatalf("the first display is not chosen by default: %q", a.sourceID)
 	}
 
 	tt := ui.NewTester(a.view, 1100, 720)
@@ -392,24 +454,31 @@ func TestSourceCardsAndPicker(t *testing.T) {
 	if !tt.HasText("Full screen") || !tt.HasText("Window") || !tt.HasText("Microphone") {
 		t.Fatalf("the cards are not there: %q", tt.Texts())
 	}
-	if tt.HasText("Choose a window") || tt.HasText("Not yet") {
-		t.Errorf("source cards still have detail lines: %q", tt.Texts())
+	if tt.HasText("Area") || tt.HasText("Camera only") || tt.HasText("Not yet") {
+		t.Errorf("unsupported source cards are still shown: %q", tt.Texts())
 	}
 	if err := tt.Click("System audio device"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(250 * time.Millisecond)
 	tt.Frame()
 	if err := tt.Click("Speakers 2"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
 	if a.speaker.ID != "speaker-2" {
 		t.Errorf("the dropdown chose %q", a.speaker.ID)
 	}
 
-	// A window is chosen in the dropdown under the cards.
+	// The Window card switches the dropdown to window selection.
 	if err := tt.Click("Window"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
+	if err := tt.Click("Choose a window"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
 	tt.Frame()
 	if !tt.HasText("Alpha — Editor") || !tt.HasText("Beta") {
 		t.Fatalf("the windows are not listed: %q", tt.Texts())
@@ -417,6 +486,7 @@ func TestSourceCardsAndPicker(t *testing.T) {
 	if err := tt.Click("Beta"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
 	if a.sourceID != "window:Beta" {
 		t.Errorf("the dropdown chose source %q", a.sourceID)
 	}
@@ -425,6 +495,49 @@ func TestSourceCardsAndPicker(t *testing.T) {
 	tt.Frame()
 	if !tt.HasText("Beta") {
 		t.Errorf("the dropdown does not say what is chosen: %q", tt.Texts())
+	}
+	if err := tt.Click("Full screen"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Choose a display"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	tt.Frame()
+	if err := tt.Click("Display 2"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.sourceID != "display:1" {
+		t.Errorf("the display dropdown chose source %q", a.sourceID)
+	}
+}
+
+func TestCompactRecordingShowsTimerOnce(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.recording = true
+	a.startedAt = time.Now().Add(-23 * time.Second)
+	tt := ui.NewTester(func(c *ui.Context) {
+		t := a.applyTheme(c)
+		ui.Column(c).Fill().Children(func() {
+			a.titleBar(c, t)
+			a.recorderPage(c, t)
+		})
+	}, CompactWidth, CompactHeight)
+	tt.Frame()
+	count := 0
+	for _, text := range tt.Texts() {
+		if text == "0:23" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("recording timer appears %d times: %q", count, tt.Texts())
+	}
+	preview, ok := tt.Find("Recording preview")
+	if !ok || preview.H < 150 || preview.H > 260 {
+		t.Fatalf("compact preview did not keep a useful aspect-sized height: %+v", preview)
 	}
 }
 
@@ -450,7 +563,7 @@ func TestTitleBarKeepsClearOfTheWindowControls(t *testing.T) {
 
 func TestSecondaryWindowsUseImmersiveTitleBars(t *testing.T) {
 	a, _ := newTestApp(t)
-	for name, view := range map[string]func(*ui.Context){"Library": a.libraryView, "Settings": a.settingsView} {
+	for name, view := range map[string]func(*ui.Context){"Settings": a.settingsView} {
 		tt := ui.NewTester(view, WideWidth, WideHeight)
 		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 		tt.Frame()
@@ -464,9 +577,9 @@ func TestSecondaryWindowsUseImmersiveTitleBars(t *testing.T) {
 	}
 }
 
-// The main window keeps the recording form; media and details live in the
-// separate Library view rather than expanding beside it.
-func TestMainWindowKeepsLibrarySeparate(t *testing.T) {
+// The recorder opens alone, gains a list-shaped library when there is room,
+// and opens details in the same window.
+func TestMainWindowExpandsLibrary(t *testing.T) {
 	a, _ := newTestApp(t)
 	a.sources = []capture.Source{{ID: "screen", Kind: "screen", Name: "Full screen"}}
 	a.pickSource()
@@ -476,45 +589,84 @@ func TestMainWindowKeepsLibrarySeparate(t *testing.T) {
 	if !tt.HasText("Choose a capture source") || !tt.HasText("Library") || !tt.HasText("Settings") {
 		t.Fatalf("the main window says %q", tt.Texts())
 	}
-	if tt.HasText("standup") || tt.HasText("Transcript") {
-		t.Errorf("the library is still in the main window: %q", tt.Texts())
+	if tt.HasText("standup") {
+		t.Fatalf("the compact window opened the library: %q", tt.Texts())
 	}
-	if err := tt.Click("Dark theme"); err != nil {
+	if err := tt.Click("Library"); err != nil {
+		t.Fatal(err)
+	}
+	tt.SetSize(libraryAutoMinWidth, CompactHeight) // the real window is widened on toggle
+	tt.Frame()
+	if !tt.HasText("standup") || tt.HasText("New recording") {
+		t.Fatalf("the library panel says %q", tt.Texts())
+	}
+	if !tt.HasText("Choose a capture source") {
+		t.Fatal("expanding the library replaced the recorder")
+	}
+
+	a.librarySet = false
+	tt.SetSize(WideWidth, WideHeight)
+	tt.Frame()
+	if !tt.HasText("standup") || !tt.HasText("Choose a capture source") {
+		t.Fatalf("the wide window did not show both panes: %q", tt.Texts())
+	}
+	if err := tt.Click("Library"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.theme != "dark" {
-		t.Errorf("the footer theme button kept %q", a.theme)
+	if tt.HasText("standup") {
+		t.Fatal("the automatic wide library could not be closed")
 	}
-	if _, ok := tt.Find("Light theme"); !ok {
-		t.Error("the theme button did not switch its icon")
-	}
-
-	lt := ui.NewTester(a.libraryView, WideWidth, WideHeight)
-	lt.Frame()
-	if !lt.HasText("standup") {
-		t.Fatalf("Library does not list the media: %q", lt.Texts())
-	}
-	if _, ok := lt.Find("Import"); !ok {
-		t.Errorf("Library has no import button: %q", lt.Texts())
-	}
-	// A card opens the media's page in place of the grid.
-	id := a.media[0].ID
-	a.openDetail(id)
-	for i := 0; i < 20 && !lt.HasText("Transcript"); i++ {
-		time.Sleep(5 * time.Millisecond)
-		lt.Frame()
-	}
-	if !lt.HasText("Transcript") {
-		t.Fatalf("opening a card did not show its details: %q", lt.Texts())
-	}
-	// Back returns to the grid, the library itself.
-	if err := lt.Click("Back"); err != nil {
+	if err := tt.Click("Library"); err != nil {
 		t.Fatal(err)
 	}
-	lt.Frame()
-	if lt.HasText("Transcript") || !lt.HasText("standup") {
-		t.Errorf("back did not return to the grid: %q", lt.Texts())
+	tt.Frame()
+	id := a.media[0].ID
+	a.openDetail(id)
+	for i := 0; i < 20 && !tt.HasText("Transcript"); i++ {
+		time.Sleep(5 * time.Millisecond)
+		tt.Frame()
+	}
+	if !tt.HasText("Transcript") {
+		t.Fatalf("opening a row did not show its details: %q", tt.Texts())
+	}
+	if err := tt.Click("Back"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if tt.HasText("Transcript") || !tt.HasText("standup") {
+		t.Errorf("back did not return to the library: %q", tt.Texts())
+	}
+}
+
+func TestDefaultFont(t *testing.T) {
+	a := &App{}
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Text(c, a.applyTheme(c).Font)
+	}, 200, 60)
+	tt.Frame()
+	if !tt.HasText("Noto Sans") {
+		t.Fatalf("default font = %q", tt.Texts())
+	}
+}
+
+func TestInterfaceLanguageAndFont(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.setInterfaceLanguage("zh")
+	a.font = "Microsoft YaHei"
+	tt := ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
+	tt.Frame()
+	for _, text := range []string{"界面语言", "显示字体", "跟随系统", "浅色", "深色"} {
+		if !tt.HasText(text) {
+			t.Fatalf("Chinese appearance settings do not show %q: %q", text, tt.Texts())
+		}
+	}
+	if got := a.tr("Library"); got != "媒体库" {
+		t.Fatalf("Library translation = %q", got)
+	}
+	a.setInterfaceLanguage("en")
+	if got := a.tr("Library"); got != "Library" {
+		t.Fatalf("English translation = %q", got)
 	}
 }
 

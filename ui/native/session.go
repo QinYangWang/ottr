@@ -2,7 +2,9 @@ package native
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -15,8 +17,8 @@ import (
 
 var langs = []struct{ code, name string }{
 	{"en", "English"},
-	{"zh", "Chinese"},
-	{"ja", "Japanese"},
+	{"zh", "中文"},
+	{"ja", "日本語"},
 }
 
 func langName(code string) string {
@@ -30,8 +32,8 @@ func langName(code string) string {
 
 // langChoices are the spoken languages the user can set, in the order the
 // select shows them: what was detected first, then the ones this app knows.
-func langChoices() (names, codes []string) {
-	names = append(names, "Detected")
+func (a *App) langChoices() (names, codes []string) {
+	names = append(names, a.tr("Detected"))
 	codes = append(codes, asr.DefaultLanguage)
 	for _, l := range langs {
 		names = append(names, l.name)
@@ -40,17 +42,29 @@ func langChoices() (names, codes []string) {
 	return names, codes
 }
 
-func langLabel(code string) string {
+func (a *App) langLabel(code string) string {
 	if code == "" || code == asr.DefaultLanguage {
-		return "Detected"
+		return a.tr("Detected")
 	}
 	return langName(code)
 }
 
-// sessionPage is one media's page: the still of the file and what it is on the
-// left, its tabs on the right — the same page the prototype opens in place of
-// the grid.
+// sessionPage is one media's page. Wide windows put the player and tabs side
+// by side; compact windows stack them so both remain readable.
 func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
+	width, _ := c.Size()
+	if width < 900 {
+		ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+			ui.Column(c).Padding(t.Space(3), t.Space(4), 0, t.Space(4)).Gap(t.Space(3)).Children(func() {
+				a.sessionHead(c, t, m)
+				a.playerStage(c, t, m)
+			})
+			ui.Column(c).Grow(1).MinHeight(0).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
+				a.tabs(c, t, m)
+			})
+		})
+		return
+	}
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		ui.Scroll(c).Grow(1).MinWidth(0).Children(func() {
 			ui.Column(c).Padding(t.Space(4), t.Space(5), t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
@@ -66,7 +80,7 @@ func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 }
 
-// sideWidth is the column the tabs take beside a media, as the prototype does.
+// sideWidth is the column the tabs take beside a media.
 const sideWidth = 356
 
 // sessionHead names the media and holds the two things to do with its file: an
@@ -77,8 +91,27 @@ func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
 		if a.backButton(c, t, "") {
 			a.closeDetail()
 		}
-		ui.Text(c, m.Name).FontSize(t.FontSize + 3).Bold().Grow(1).MinWidth(0).SingleLine()
-		btn := ui.ButtonBase(c).Label("Show file").Tooltip("Show the file in its folder").
+		if a.renameID == m.ID {
+			input := ui.TextInput(c, &a.renameText).Label(a.tr("Media name")).Grow(1).MinWidth(0)
+			if input.Submitted() {
+				a.saveRename(m.ID)
+			}
+			if ui.Button(c, a.tr("Save")).Clicked() {
+				a.saveRename(m.ID)
+			}
+			if ui.Button(c, a.tr("Cancel")).Clicked() {
+				a.renameID, a.renameText = 0, ""
+			}
+			return
+		}
+		title := ui.ButtonBase(c).Label(a.tr("Rename")).Tooltip(a.tr("Rename this media")).Grow(1).MinWidth(0)
+		title.Children(func() {
+			ui.Text(c, m.Name).FontSize(t.FontSize + 3).Bold().SingleLine().MinWidth(0)
+		})
+		if title.Clicked() {
+			a.renameID, a.renameText = m.ID, m.Name
+		}
+		btn := ui.ButtonBase(c).Label(a.tr("Show file")).Tooltip(a.tr("Show the file in its folder")).
 			Padding(t.Space(1.5)).Radius(t.Radius).Border(1, t.Border).TextColor(t.TextMuted)
 		btn.Children(func() { ui.Icon(c, iconFolder).FontSize(t.FontSize + 2) })
 		if btn.Hovered() {
@@ -87,12 +120,12 @@ func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
 		if btn.Clicked() {
 			mygo.Shell.ShowItemInFolder(m.Path)
 		}
-		del := ui.ButtonBase(c).Label("Delete").Tooltip("Delete this media from the library").
+		del := ui.ButtonBase(c).Label(a.tr("Delete")).Tooltip(a.tr("Delete this media from the library")).
 			Padding(t.Space(1.5), t.Space(2.5)).Radius(t.Radius).TextColor(t.Danger)
 		del.Children(func() {
 			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
-				ui.Text(c, "Delete").FontSize(t.FontSize - 1).Bold()
+				ui.Text(c, a.tr("Delete")).FontSize(t.FontSize - 1).Bold()
 			})
 		})
 		if del.Hovered() {
@@ -104,62 +137,36 @@ func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 }
 
-// playerStage is the dark ground the media sits on, with its controls in a
-// strip below. There is no decoder in the window yet (see
-// docs/native-playback.md), so the picture is the badge of what the file is and
-// Play hands it to the system's player.
+func (a *App) saveRename(id int64) {
+	name := strings.TrimSpace(a.renameText)
+	if name == "" {
+		a.setError(fmt.Errorf("media name cannot be empty"))
+		return
+	}
+	go func() {
+		if err := a.Lib.Rename(id, name); err != nil {
+			a.update(func() { a.setError(err) })
+			return
+		}
+		a.update(func() {
+			a.renameID, a.renameText = 0, ""
+			a.reload()
+		})
+	}()
+}
+
+// playerStage presents finished media with MyGo's in-window player.
 func (a *App) playerStage(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Column(c).FillWidth().Radius(t.Radius + 2).Clip().
-		BorderWidth(1).BorderColor(t.Border).Children(func() {
-		from, to := mediaBackdrop(t.Dark)
-		stage := ui.Column(c).FillWidth().AspectRatio(16.0/9.0).Gradient(from, to, 90).Center()
-		stage.Children(func() {
-			if m.HasVideo || m.Source == "screenshot" {
-				play := ui.ButtonBase(c).Label("Play").Tooltip("Open the media in your player").
-					Padding(t.Space(4)).Radius(t.Space(10)).Background(ui.RGBA(255, 255, 255, 0.12))
-				play.Children(func() {
-					icon := iconPlay
-					if m.Source == "screenshot" {
-						icon = iconScreen
-					}
-					ui.Icon(c, icon).FontSize(t.FontSize + 12).TextColor(onMedia())
-				})
-				if play.Hovered() {
-					play.Background(ui.RGBA(255, 255, 255, 0.2))
-				}
-				if play.Clicked() && m.Source != "screenshot" {
-					mygo.Shell.OpenPath(m.Path)
-				}
-				return
-			}
-			ui.Icon(c, iconMic).FontSize(t.FontSize + 14).TextColor(onMedia()).Opacity(0.7)
-		})
-		ui.Row(c).Padding(t.Space(2), t.Space(3)).Gap(t.Space(3)).AlignItems(ui.Center).
-			Background(playerBar(t)).Children(func() {
-			icon := iconPlay
-			if m.Source == "screenshot" {
-				icon = iconScreen
-			}
-			ui.Icon(c, icon).FontSize(t.FontSize + 1).TextColor(onMedia()).Opacity(0.9)
-			ui.Text(c, fmtDuration(m.DurationMs)+" / "+fmtDuration(m.DurationMs)).
-				FontSize(t.FontSize - 2).TextColor(onMedia()).Opacity(0.75).FontFeatures("tnum")
-			ui.Spacer(c)
-			note := "Opens in your player"
-			if m.Source == "screenshot" {
-				note = "Still image"
-			}
-			ui.Text(c, note).FontSize(t.FontSize - 3).TextColor(onMedia()).Opacity(0.6)
-		})
-	})
+	a.nativePlayerStage(c, t, m)
 }
 
 // factStrip is the four facts of a media, in one row divided by hairlines.
 func (a *App) factStrip(c *ui.Context, t *ui.Theme, m library.Media) {
 	facts := [][2]string{
-		{"Source", mediaSourceLabel(m)},
-		{"Duration", durationOrDash(m)},
-		{"Created", m.CreatedAt.Local().Format("Jan 2, 15:04")},
-		{"Status", mediaStatus(m)},
+		{a.tr("Source"), a.mediaSourceLabel(m)},
+		{a.tr("Duration"), durationOrDash(m)},
+		{a.tr("Created"), a.dateTime(m.CreatedAt)},
+		{a.tr("Status"), a.mediaStatus(m)},
 	}
 	ui.Row(c).FillWidth().Radius(t.Radius).Border(1, t.Border).Clip().
 		AlignItems(ui.Stretch).Children(func() {
@@ -168,7 +175,7 @@ func (a *App) factStrip(c *ui.Context, t *ui.Theme, m library.Media) {
 				ui.Column(c).Width(1).Shrink(0).Background(t.Border)
 			}
 			ui.Column(c).Grow(1).MinWidth(0).Padding(t.Space(2.5), t.Space(3.5)).Gap(t.Space(1)).Children(func() {
-				ui.Text(c, strings.ToUpper(fact[0])).FontSize(t.FontSize - 4).Bold().
+				ui.Text(c, fact[0]).FontSize(t.FontSize - 3).Bold().
 					TextColor(t.TextMuted).SingleLine()
 				ui.Text(c, fact[1]).FontSize(t.FontSize - 1).Bold().SingleLine()
 			})
@@ -176,14 +183,14 @@ func (a *App) factStrip(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 }
 
-func mediaSourceLabel(m library.Media) string {
+func (a *App) mediaSourceLabel(m library.Media) string {
 	switch m.Source {
 	case "screenshot":
-		return "Screenshot"
+		return a.tr("Screenshot")
 	case "import":
-		return "Imported"
+		return a.tr("Imported")
 	default:
-		return "Recorded"
+		return a.tr("Recorded")
 	}
 }
 
@@ -195,20 +202,20 @@ func durationOrDash(m library.Media) string {
 }
 
 // mediaStatus says what has been made of the media, in words.
-func mediaStatus(m library.Media) string {
+func (a *App) mediaStatus(m library.Media) string {
 	var parts []string
 	switch m.TranscriptStatus {
 	case "done":
-		parts = append(parts, "Transcribed")
+		parts = append(parts, a.tr("Transcribed"))
 	case "pending":
-		parts = append(parts, "Transcribing")
+		parts = append(parts, a.tr("Transcribing"))
 	case "error":
-		parts = append(parts, "Transcription failed")
+		parts = append(parts, a.tr("Transcription failed"))
 	default:
-		parts = append(parts, "No transcript")
+		parts = append(parts, a.tr("No transcript"))
 	}
 	if m.SummaryStatus == "done" {
-		parts = append(parts, "Summarized")
+		parts = append(parts, a.tr("Summarized"))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -219,14 +226,12 @@ func (a *App) tabs(c *ui.Context, t *ui.Theme, m library.Media) {
 	ui.Column(c).Fill().Children(func() {
 		ui.Row(c).Padding(t.Space(4), t.Space(4), 0, t.Space(4)).Gap(t.Space(2)).
 			AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			ui.Tabs(c, &a.tab, "Transcript", "Translate", "Summary").Grow(1)
+			ui.Tabs(c, &a.tab, a.tr("Transcript"), a.tr("Summary")).Grow(1)
 			a.exportButton(c, t, m)
 		})
 		ui.Column(c).Grow(1).MinHeight(0).Padding(t.Space(3), t.Space(4)).Children(func() {
 			switch a.tab {
 			case 1:
-				a.translateTab(c, t, m)
-			case 2:
 				a.summaryTab(c, t, m)
 			default:
 				a.transcriptTab(c, t, m)
@@ -242,6 +247,7 @@ func (a *App) exportButton(c *ui.Context, t *ui.Theme, m library.Media) {
 	if len(exports) == 0 {
 		return
 	}
+	label = a.tr(label)
 	btn := ui.ButtonBase(c).Label(label).Tooltip(label).Padding(t.Space(1.5)).
 		Radius(t.Radius).TextColor(t.TextMuted).Border(1, t.Border)
 	btn.Children(func() { ui.Icon(c, iconDownload).FontSize(t.FontSize + 1) })
@@ -267,17 +273,6 @@ type exportItem struct {
 func (a *App) exportsFor(m library.Media) ([]exportItem, string) {
 	switch a.tab {
 	case 1:
-		if len(a.trans.Segments) == 0 {
-			return nil, ""
-		}
-		id := m.ID
-		return []exportItem{
-			{"Bilingual SRT", func() { a.exportTranslation(id, "bilingual_srt") }},
-			{"SRT", func() { a.exportTranslation(id, "srt") }},
-			{"WebVTT", func() { a.exportTranslation(id, "vtt") }},
-			{"Text", func() { a.exportTranslation(id, "txt") }},
-		}, "Export the translation"
-	case 2:
 		if a.sum.ContentMarkdown == "" {
 			return nil, ""
 		}
@@ -286,6 +281,15 @@ func (a *App) exportsFor(m library.Media) ([]exportItem, string) {
 			{"Markdown", func() { a.exportSummary(id) }},
 		}, "Export the summary"
 	default:
+		if a.showTranslation && len(a.trans.Segments) > 0 {
+			id := m.ID
+			return []exportItem{
+				{"Bilingual SRT", func() { a.exportTranslation(id, "bilingual_srt") }},
+				{"SRT", func() { a.exportTranslation(id, "srt") }},
+				{"WebVTT", func() { a.exportTranslation(id, "vtt") }},
+				{"Text", func() { a.exportTranslation(id, "txt") }},
+			}, "Export the translation"
+		}
 		if len(a.segs) == 0 {
 			return nil, ""
 		}
@@ -326,51 +330,107 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 		return
 	}
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
-		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.SearchField(c, &a.segQuery).Label("Search the subtitles").Grow(1)
-			if ui.Button(c, "Transcribe again").Clicked() {
+		ui.Row(c).Wrap().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).Grow(1).MinWidth(120)
+			a.spokenLanguageSelect(c, t, m)
+			if ui.Button(c, a.tr("Transcribe again")).Clicked() {
 				a.startTranscribe(m.ID)
 			}
+			if ui.Switch(c, &a.showTranslation).Label(a.tr("Translate")).Tooltip(a.tr("Translate")).Changed() {
+				a.setTranslationVisible(m, a.showTranslation)
+			}
 		})
-		a.spokenLanguageRow(c, t, m)
+		if a.showTranslation {
+			a.translationControls(c, t, m)
+		}
 		rows := a.filteredSegments()
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Gap(1).Children(func() {
 				if len(rows) == 0 {
-					ui.Text(c, "Nothing matches that search.").TextColor(t.TextMuted)
+					ui.Text(c, a.tr("Nothing matches that search.")).TextColor(t.TextMuted)
+				}
+				translated := map[int64]string{}
+				if a.showTranslation {
+					for _, seg := range a.trans.Segments {
+						translated[seg.SegmentID] = seg.TranslatedText
+					}
 				}
 				for _, seg := range rows {
-					line := ui.Row(c.Key(seg.ID)).Gap(t.Space(3)).Padding(t.Space(2), t.Space(2.5)).
-						Radius(t.Space(2))
+					at := fmtDuration(seg.StartMs)
+					line := ui.ButtonBase(c.Key(seg.ID)).Label(a.tr("Seek to ")+at).Tooltip(a.tr("Seek to ")+at).
+						FillWidth().Padding(t.Space(2), t.Space(2.5)).Radius(t.Space(2)).Cursor(ui.CursorPointer)
 					if line.Hovered() {
 						line.Background(t.SurfaceHover)
 					}
 					line.Children(func() {
-						ui.Text(c, fmtDuration(seg.StartMs)).FontSize(t.FontSize - 3).
-							TextColor(t.TextMuted).FontFeatures("tnum").Width(44).Shrink(0)
-						ui.Text(c, seg.Text).Grow(1).MinWidth(0).Selectable()
+						ui.Row(c).FillWidth().Gap(t.Space(3)).AlignItems(ui.Start).Children(func() {
+							ui.Text(c, at).FontSize(t.FontSize - 3).
+								TextColor(t.TextMuted).FontFeatures("tnum").Width(44).Shrink(0)
+							ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
+								ui.Text(c, seg.Text).Selectable()
+								if text := translated[seg.ID]; text != "" {
+									ui.Text(c, text).TextColor(t.TextMuted).Selectable()
+								}
+							})
+						})
 					})
+					if line.Clicked() {
+						a.seekPlayback(m, time.Duration(seg.StartMs)*time.Millisecond)
+					}
 				}
 			})
 		})
 	})
 }
 
-// spokenLanguageRow says what language the subtitles are in, which
-// translation takes as its source, and lets the user overrule the guess.
-func (a *App) spokenLanguageRow(c *ui.Context, t *ui.Theme, m library.Media) {
+func (a *App) setTranslationVisible(m library.Media, visible bool) {
+	a.showTranslation = visible
+	if !visible {
+		return
+	}
+	if a.transLang != a.trLang {
+		a.transLang = a.trLang
+		a.loadTranslation()
+		return
+	}
+	if len(a.trans.Segments) == 0 && !a.transLoading && !a.jobRunning(jobs.KindTranslate) {
+		a.startTranslate(m.ID)
+	}
+}
+
+func (a *App) translationControls(c *ui.Context, t *ui.Theme, m library.Media) {
 	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "Spoken language").FontSize(t.FontSize - 3).TextColor(t.TextMuted)
-		names, codes := langChoices()
-		lang := langLabel(a.lang)
-		ui.Select(c, &lang, names).Label("Spoken language").Width(130).Changed()
-		for i, name := range names {
-			if name == lang && codes[i] != a.lang {
-				a.setLanguage(m.ID, codes[i])
+		ui.Icon(c, iconLanguages).FontSize(t.FontSize + 2).TextColor(t.TextMuted)
+		name := langName(a.trLang)
+		ui.Select(c, &name, langNames()).Label(a.tr("Translate into")).Width(130).Changed()
+		for _, l := range langs {
+			if l.name == name && l.code != a.trLang {
+				a.trLang = l.code
+				a.trans = translate.Translation{}
+				a.loadTranslation()
 			}
 		}
-		ui.Spacer(c)
+		if a.transLoading || a.jobRunning(jobs.KindTranslate) {
+			ui.Spinner(c).Label(a.tr("Translating"))
+		} else if len(a.trans.Segments) > 0 {
+			if ui.Button(c, a.tr("Translate again")).Clicked() {
+				a.startTranslate(m.ID)
+			}
+		}
 	})
+}
+
+// spokenLanguageSelect overrules the detected language without adding a
+// second toolbar or a visible label.
+func (a *App) spokenLanguageSelect(c *ui.Context, t *ui.Theme, m library.Media) {
+	names, codes := a.langChoices()
+	lang := a.langLabel(a.lang)
+	ui.Select(c, &lang, names).Label(a.tr("Spoken language")).Width(120).Shrink(0).Changed()
+	for i, name := range names {
+		if name == lang && codes[i] != a.lang {
+			a.setLanguage(m.ID, codes[i])
+		}
+	}
 }
 
 func (a *App) filteredSegments() []asr.Segment {
@@ -417,66 +477,6 @@ func (a *App) exportTranscript(id int64, format string) {
 
 // -------------------------------------------------------------- translate
 
-func (a *App) translateTab(c *ui.Context, t *ui.Theme, m library.Media) {
-	if m.TranscriptStatus != "done" {
-		a.emptyTab(c, t, "A transcript comes first",
-			"Translate the subtitles of this file once it has been transcribed.",
-			[]action{{"Go to Transcript", true, func() { a.tab = 0 }}})
-		return
-	}
-	if a.transLang != a.trLang {
-		a.transLang = a.trLang
-		a.loadTranslation()
-	}
-	if a.jobRunning(jobs.KindTranslate) {
-		a.working(c, t, "Translating", "Sending the subtitles to the provider.")
-		return
-	}
-	has := len(a.trans.Segments) > 0
-	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
-		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Translation").FontSize(t.FontSize - 3).TextColor(t.TextMuted).Shrink(0)
-			name := langName(a.trLang)
-			ui.Select(c, &name, langNames()).Label("Translate into").Width(150).Changed()
-			for _, l := range langs {
-				if l.name == name {
-					if l.code != a.trLang {
-						a.trLang = l.code
-						a.trans = translate.Translation{}
-						a.loadTranslation()
-					}
-				}
-			}
-			ui.Spacer(c)
-			if has {
-				if ui.Button(c, "Translate again").Clicked() {
-					a.startTranslate(m.ID)
-				}
-			}
-		})
-		if !has {
-			a.emptyTab(c, t, "Not translated yet",
-				"Translate the subtitles into "+langName(a.trLang)+" with the online provider.",
-				[]action{{"Translate", true, func() { a.startTranslate(m.ID) }}})
-			return
-		}
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Gap(1).Children(func() {
-				for _, seg := range a.trans.Segments {
-					ui.Row(c.Key(seg.ID)).Gap(t.Space(3)).Padding(t.Space(2), t.Space(3)).Children(func() {
-						ui.Text(c, fmtDuration(seg.StartMs)).FontSize(t.FontSize - 2).
-							TextColor(t.TextMuted).FontFeatures("tnum").Width(56)
-						ui.Column(c).Grow(1).Gap(1).Children(func() {
-							ui.Text(c, seg.TranslatedText)
-							ui.Text(c, seg.OriginalText).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-						})
-					})
-				}
-			})
-		})
-	})
-}
-
 func langNames() []string {
 	out := make([]string, len(langs))
 	for i, l := range langs {
@@ -487,17 +487,22 @@ func langNames() []string {
 
 func (a *App) loadTranslation() {
 	id, lang := a.sel, a.trLang
+	a.transLoading = true
 	go func() {
 		tr, err := a.Trans.Get(id, lang)
 		a.update(func() {
 			if id != a.sel || lang != a.trLang {
 				return
 			}
+			a.transLoading = false
 			if err != nil {
 				a.setError(err)
 				return
 			}
 			a.trans = tr
+			if a.showTranslation && len(tr.Segments) == 0 && !a.jobRunning(jobs.KindTranslate) {
+				a.startTranslate(id)
+			}
 		})
 	}()
 }
@@ -539,10 +544,10 @@ func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	has := a.sum.ContentMarkdown != ""
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, modelName(a.sum.Model, m.SummaryStatus)).FontSize(t.FontSize - 2).
+			ui.Text(c, a.modelName(a.sum.Model, m.SummaryStatus)).FontSize(t.FontSize - 2).
 				TextColor(t.TextMuted).Grow(1).SingleLine()
 			if has {
-				if ui.Button(c, "Generate again").Clicked() {
+				if ui.Button(c, a.tr("Generate again")).Clicked() {
 					a.startSummary(m.ID)
 				}
 			}
@@ -556,23 +561,23 @@ func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Gap(t.Space(4)).Children(func() {
 				if a.sum.Overview != "" {
-					section(c, t, "Overview")
+					a.section(c, t, "Overview")
 					ui.Text(c, a.sum.Overview).Selectable()
 				}
 				if len(a.sum.KeyPoints) > 0 {
-					section(c, t, "Key points")
+					a.section(c, t, "Key points")
 					for _, p := range a.sum.KeyPoints {
 						bullet(c, t, "•", p)
 					}
 				}
 				if len(a.sum.ActionItems) > 0 {
-					section(c, t, "Action items")
+					a.section(c, t, "Action items")
 					for _, p := range a.sum.ActionItems {
 						bullet(c, t, "☐", p)
 					}
 				}
 				if len(a.sum.Chapters) > 0 {
-					section(c, t, "Chapters")
+					a.section(c, t, "Chapters")
 					for _, ch := range a.sum.Chapters {
 						ui.Row(c).Gap(t.Space(3)).Padding(t.Space(1), 0).Children(func() {
 							ui.Text(c, fmtDuration(ch.StartMs)).FontSize(t.FontSize - 2).
@@ -587,7 +592,7 @@ func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
 					}
 				}
 				if len(a.sum.Highlights) > 0 {
-					section(c, t, "Highlights")
+					a.section(c, t, "Highlights")
 					for _, h := range a.sum.Highlights {
 						ui.Row(c).Gap(t.Space(3)).Padding(t.Space(1), 0).Children(func() {
 							ui.Text(c, fmtDuration(h.StartMs)).FontSize(t.FontSize - 2).
@@ -601,19 +606,19 @@ func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 }
 
-func modelName(model, status string) string {
+func (a *App) modelName(model, status string) string {
 	if model != "" {
 		return model
 	}
 	if status == "error" {
-		return "the last attempt failed"
+		return a.tr("the last attempt failed")
 	}
-	return "not generated"
+	return a.tr("not generated")
 }
 
-func section(c *ui.Context, t *ui.Theme, title string) {
-	ui.Text(c, strings.ToUpper(title)).FontSize(t.FontSize - 3).Bold().
-		TextColor(t.TextMuted).LetterSpacing(0.6)
+func (a *App) section(c *ui.Context, t *ui.Theme, title string) {
+	ui.Text(c, a.tr(title)).FontSize(t.FontSize - 3).Bold().
+		TextColor(t.TextMuted)
 }
 
 func bullet(c *ui.Context, t *ui.Theme, glyph, text string) {
@@ -667,14 +672,14 @@ type action struct {
 // emptyTab says why a tab has nothing, and offers what would fill it.
 func (a *App) emptyTab(c *ui.Context, t *ui.Theme, title, detail string, actions []action) {
 	ui.Column(c).Fill().Center().Gap(t.Space(2)).Children(func() {
-		ui.Text(c, title).FontSize(t.FontSize + 4).Bold()
-		ui.Text(c, detail).TextColor(t.TextMuted).MaxWidth(460).TextAlign(ui.Center)
+		ui.Text(c, a.tr(title)).FontSize(t.FontSize + 4).Bold()
+		ui.Text(c, a.tr(detail)).TextColor(t.TextMuted).MaxWidth(460).TextAlign(ui.Center)
 		ui.Row(c).Gap(t.Space(2)).Children(func() {
 			for _, act := range actions {
 				if !act.enabled {
 					continue
 				}
-				if ui.PrimaryButton(c, act.label).Clicked() {
+				if ui.PrimaryButton(c, a.tr(act.label)).Clicked() {
 					act.onChoose()
 				}
 			}
@@ -686,9 +691,9 @@ func (a *App) emptyTab(c *ui.Context, t *ui.Theme, title, detail string, actions
 // stop it.
 func (a *App) working(c *ui.Context, t *ui.Theme, title, detail string) {
 	ui.Column(c).Fill().Center().Gap(t.Space(2)).Children(func() {
-		ui.Spinner(c).Label(title)
-		ui.Text(c, title+"…").Bold()
-		ui.Text(c, detail).TextColor(t.TextMuted).MaxWidth(420).TextAlign(ui.Center)
+		ui.Spinner(c).Label(a.tr(title))
+		ui.Text(c, a.tr(title)+"…").Bold()
+		ui.Text(c, a.tr(detail)).TextColor(t.TextMuted).MaxWidth(420).TextAlign(ui.Center)
 		if !a.job.Running() {
 			return
 		}
@@ -699,7 +704,7 @@ func (a *App) working(c *ui.Context, t *ui.Theme, title, detail string) {
 			value = -1
 		}
 		ui.Progress(c, value).Width(240)
-		if ui.Button(c, "Cancel").Label("Stop this job").Clicked() {
+		if ui.Button(c, a.tr("Cancel")).Label(a.tr("Stop this job")).Clicked() {
 			a.cancelJob()
 		}
 	})

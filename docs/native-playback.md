@@ -1,9 +1,10 @@
 # In-window native playback implementation plan
 
-Status: **proposal, not implemented**. This defines the replacement for opening
-finished media in the system player. It depends on native demux/decode from
-[Native capture and media redesign](native-capture.md), not on FFmpeg, a webview,
-an embedded browser or a third-party player executable.
+Status: **basic playback implemented**. MyGo v0.7.4 displays video and plays
+audio inside the Library item page, with play, pause, replay, slider/subtitle
+seeking and cleanup on media switch/delete. The current decoder is Ottr's
+existing FFmpeg invoked in process-bound pipes, never the system player.
+Volume, native demux/decode and the A/V-clock work below remain future phases.
 
 The interaction target is the
 [three-window HTML prototype](prototypes/native-ui.html): compact recorder,

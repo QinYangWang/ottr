@@ -12,12 +12,12 @@ import (
 	"golang.org/x/image/draw"
 )
 
-// previewFPS is how often the preview refreshes its picture, and how wide it
-// is: five frames a second of a 960-pixel-wide JPEG is all a window shows.
+// previewFPS is how often the preview refreshes its picture. The 1600-pixel
+// source keeps text readable when a large desktop fits in the window.
 const (
 	previewFPS     = 5
-	previewWidth   = 960
-	previewQuality = 78
+	previewWidth   = 1600
+	previewQuality = 90
 )
 
 // preview keeps the newest raw frame of a capture and encodes a JPEG from it at
@@ -246,9 +246,9 @@ func encodePreview(f Frame) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// scaleFrame converts BGRA to RGBA and scales it to at most maxWidth, averaging
-// the pixels each destination pixel covers so that text stays readable. It
-// never enlarges: a small source is copied as it is.
+// scaleFrame converts BGRA to RGBA and scales it to at most maxWidth with a
+// high-quality filter so text stays readable. It never enlarges: a small
+// source is copied as it is.
 func scaleFrame(f Frame, maxWidth int) image.Image {
 	src := rgbaOf(f)
 	if f.Width <= maxWidth {
@@ -256,6 +256,6 @@ func scaleFrame(f Frame, maxWidth int) image.Image {
 	}
 	height := f.Height * maxWidth / f.Width
 	dst := image.NewRGBA(image.Rect(0, 0, maxWidth, height))
-	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
+	draw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
 	return dst
 }

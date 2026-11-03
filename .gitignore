@@ -1,4 +1,6 @@
 .preview/
+DESIGN.md
+examples/
 /ottr.exe
 /bin/ottr.exe
 /dist/

@@ -1,7 +1,6 @@
 package native
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/egoist/mygo"
@@ -9,7 +8,7 @@ import (
 
 	"ottr/internal/models"
 	"ottr/internal/settings"
-	"ottr/internal/tools"
+	"ottr/ui/native/kit"
 )
 
 const (
@@ -35,9 +34,9 @@ func (a *App) openSettings() {
 
 func themeBackground() string {
 	if mygo.Theme.IsDark() {
-		return "#101014"
+		return "#141414"
 	}
-	return "#f6f6f8"
+	return "#ffffff"
 }
 
 // settingsView draws sections on the left and the chosen one on the right.
@@ -50,23 +49,23 @@ func (a *App) settingsView(c *ui.Context) {
 			ui.Column(c).Width(200).Shrink(0).FillHeight().Padding(t.Space(3)).
 				Gap(t.Space(1)).Background(t.Background).BorderWidth(0, 1, 0, 0).
 				BorderColor(t.Border).Children(func() {
-				ui.Text(c, "Settings").FontSize(t.FontSize+1).Bold().TextColor(t.TextMuted).
+				ui.Text(c, a.tr("Settings")).FontSize(t.FontSize+1).Bold().TextColor(t.TextMuted).
 					Padding(t.Space(1), t.Space(2), t.Space(2), t.Space(2))
 				for i, item := range []struct {
 					label string
 					icon  *ui.SVG
 				}{
-					{"Appearance", iconSliders},
-					{"Transcription", iconMic},
-					{"Translation", iconLanguages},
-					{"Summary", iconSummary},
+					{a.tr("Appearance"), iconSliders},
+					{a.tr("Transcription"), iconMic},
+					{a.tr("Translation"), iconLanguages},
+					{a.tr("Summary"), iconSummary},
 				} {
 					a.settingsNav(c, t, i, item.label, item.icon)
 				}
 			})
 			ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
 				ui.Row(c).Padding(t.Space(5), t.Space(5), t.Space(2), t.Space(5)).Children(func() {
-					ui.Text(c, []string{"Appearance", "Transcription", "Translation", "Summary"}[a.settingsTab]).
+					ui.Text(c, []string{a.tr("Appearance"), a.tr("Transcription"), a.tr("Translation"), a.tr("Summary")}[a.settingsTab]).
 						FontSize(t.FontSize + 5).Bold()
 				})
 				a.settingsPage(c, t)
@@ -82,7 +81,7 @@ func (a *App) settingsNav(c *ui.Context, t *ui.Theme, tab int, label string, ico
 	nav := ui.ButtonBase(c).Label(label).FillWidth().Padding(t.Space(2), t.Space(2.5)).
 		Radius(t.Space(2)).Cursor(ui.CursorPointer)
 	if a.settingsTab == tab {
-		nav.Background(t.Surface).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.06))
+		nav.Background(t.Surface)
 	} else {
 		nav.TextColor(t.TextMuted)
 	}
@@ -122,19 +121,39 @@ func (a *App) settingsPage(c *ui.Context, t *ui.Theme) {
 
 // appearanceSettings picks the look: the desktop's, or a fixed one.
 func (a *App) appearanceSettings(c *ui.Context, t *ui.Theme) {
-	ui.Text(c, "Match the desktop, or pick a fixed look.").
+	a.settingRow(c, t, "Language", "Choose the language of the interface.", func() {
+		language := langName(a.language)
+		if language == "" {
+			language = "English"
+		}
+		ui.Select(c, &language, []string{"English", "中文"}).Label(a.tr("Language")).Width(160).Changed()
+		locale := "en"
+		if language == "中文" {
+			locale = "zh"
+		}
+		if locale != a.language && !(locale == "en" && a.language == "") {
+			a.setInterfaceLanguage(locale)
+		}
+	})
+	a.settingRow(c, t, "Display font", "Enter an installed font family, or leave empty for Noto Sans.", func() {
+		ui.TextInput(c, &a.font).Placeholder("Noto Sans").Width(220).Label(a.tr("Display font"))
+		if ui.Button(c, a.tr("Apply")).Clicked() {
+			a.saveFont()
+		}
+	})
+	ui.Text(c, a.tr("Match the desktop, or pick a fixed look.")).
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 	ui.Row(c).Gap(t.Space(3)).Children(func() {
 		for _, choice := range []struct{ source, label string }{
-			{"system", "System"},
-			{"light", "Light"},
-			{"dark", "Dark"},
+			{"system", a.tr("System")},
+			{"light", a.tr("Light")},
+			{"dark", a.tr("Dark")},
 		} {
 			a.themeCard(c, t, choice.source, choice.label)
 		}
 		ui.Spacer(c)
 	})
-	ui.Text(c, "The window redraws at once, and remembers the choice.").
+	ui.Text(c, a.tr("The window redraws at once, and remembers the choice.")).
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 }
 
@@ -203,7 +222,7 @@ func (a *App) setTheme(source string) {
 		mygo.Theme.SetSource(mygo.ThemeSource(source))
 		a.win.SetBackgroundColor(themeBackground())
 	}
-	for _, win := range []*mygo.Window{a.libraryWin, a.settingsWin} {
+	for _, win := range []*mygo.Window{a.settingsWin} {
 		if win != nil {
 			win.SetBackgroundColor(themeBackground())
 		}
@@ -214,26 +233,32 @@ func (a *App) setTheme(source string) {
 	}
 }
 
+func (a *App) setInterfaceLanguage(language string) {
+	a.language = language
+	if a.Prefs != nil {
+		prefs := a.Prefs
+		go prefs.Set(settings.Language, language)
+	}
+}
+
+func (a *App) saveFont() {
+	if a.Prefs != nil {
+		prefs, font := a.Prefs, a.font
+		go prefs.Set(settings.Font, font)
+	}
+}
+
 // settingRow is one setting: what it is, what it does, and its control on the
 // right.
-func settingRow(c *ui.Context, t *ui.Theme, title, detail string, control func()) {
-	ui.Row(c).Gap(t.Space(3)).Padding(t.Space(2.5), t.Space(3)).Radius(t.Radius).
-		BorderWidth(1).BorderColor(t.Border).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, title).FontSize(t.FontSize - 1).Bold().SingleLine()
-			if detail != "" {
-				ui.Text(c, detail).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
-			}
-		})
-		control()
-	})
+func (a *App) settingRow(c *ui.Context, t *ui.Theme, title, detail string, control func()) {
+	kit.SettingRow(c, t, a.tr(title), a.tr(detail), control)
 }
 
 // ------------------------------------------------------------ transcription
 
 func (a *App) transcriptionSettings(c *ui.Context, t *ui.Theme) {
 	if a.MM == nil {
-		ui.Text(c, "No model manager is configured.").TextColor(t.TextMuted)
+		ui.Text(c, a.tr("No model manager is configured.")).TextColor(t.TextMuted)
 		return
 	}
 	if !a.modelLoaded {
@@ -241,56 +266,40 @@ func (a *App) transcriptionSettings(c *ui.Context, t *ui.Theme) {
 	}
 	ui.Row(c).AlignItems(ui.Center).Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, "Speech recognition model").Bold()
-			ui.Text(c, "Transcription runs offline, with the model chosen here.").
+			ui.Text(c, a.tr("Speech recognition model")).Bold()
+			ui.Text(c, a.tr("Transcription runs offline, with the model chosen here.")).
 				FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 		})
-		if ui.Button(c, "Open folder").Tooltip("Open the folder models are installed in").Clicked() {
+		if ui.Button(c, a.tr("Open folder")).Tooltip(a.tr("Open the folder models are installed in")).Clicked() {
 			mygo.Shell.OpenPath(a.MM.ModelsDir())
 		}
-		if ui.Button(c, "Re-check").Tooltip("Look for models again").Clicked() {
+		if ui.Button(c, a.tr("Re-check")).Tooltip(a.tr("Look for models again")).Clicked() {
 			a.loadModels()
 		}
 	})
 	if a.modelLoading {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Spinner(c).Label("Looking for models")
-			ui.Text(c, "Looking for models…").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+			ui.Spinner(c).Label(a.tr("Looking for models"))
+			ui.Text(c, a.tr("Looking for models…")).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		})
 	} else if len(a.modelList) == 0 {
-		ui.Text(c, fmt.Sprintf("No models in %s yet.", a.MM.ModelsDir())).
+		ui.Text(c, a.trf("No models in %s yet.", a.MM.ModelsDir())).
 			TextColor(t.TextMuted).Selectable()
-		ui.Text(c, "Install a streaming zipformer model there — tokens.txt with encoder, decoder and joiner ONNX files — then Re-check.").
+		ui.Text(c, a.tr("Install a streaming zipformer or offline transducer model — tokens.txt with encoder, decoder and joiner ONNX files — then Re-check.")).
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 	}
 	for _, info := range a.modelList {
 		a.modelRow(c, t, info)
 	}
-	ui.Column(c).Gap(1).Children(func() {
-		ui.Text(c, "Recognizer runtime").FontSize(t.FontSize - 1).Bold()
-		ui.Text(c, a.sherpaNote()).FontSize(t.FontSize - 3).TextColor(t.TextMuted).Selectable()
-	})
-	ui.Row(c).AlignItems(ui.Center).Gap(t.Space(3)).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, "FFmpeg and ffprobe").FontSize(t.FontSize - 1).Bold()
-			ui.Text(c, a.ffmpegNote).FontSize(t.FontSize - 3).TextColor(t.TextMuted).Selectable()
-		})
-		if ui.Button(c, "Choose…").Tooltip("Point Ottr at ffmpeg.exe").Clicked() {
-			a.pickFFmpeg()
-		}
-		if ui.Button(c, "Re-check").Clicked() {
-			a.loadModels()
-		}
-	})
 }
 
 func (a *App) modelRow(c *ui.Context, t *ui.Theme, info models.Info) {
-	settingRow(c, t, info.Name, modelDetail(info), func() {
+	a.settingRow(c, t, info.Name, modelDetail(info), func() {
 		if info.Path == a.modelInUse {
-			ui.Badge(c, "In use")
+			ui.Badge(c, a.tr("In use"))
 			return
 		}
-		if info.Installed && ui.Button(c, "Use").Label("Use this model").Clicked() {
+		if info.Installed && ui.Button(c, a.tr("Use")).Label(a.tr("Use this model")).Clicked() {
 			a.useModel(info)
 		}
 	})
@@ -301,17 +310,6 @@ func modelDetail(info models.Info) string {
 		return info.Error
 	}
 	return fmtSize(info.SizeBytes)
-}
-
-// sherpaNote says which native ASR runtime loaded, or why none did.
-func (a *App) sherpaNote() string {
-	if a.modelBinErr != "" {
-		return a.modelBinErr
-	}
-	if a.modelBin == "" {
-		return "Looking for the sherpa-onnx library…"
-	}
-	return "sherpa-onnx " + a.modelBin
 }
 
 // loadModels reads the models on disk, and which one transcription would use.
@@ -327,26 +325,11 @@ func (a *App) loadModels() {
 		if mdl != nil {
 			inUse = mdl.Dir
 		}
-		ffmpeg, ffmpegErr := tools.FFmpeg()
-		_, probeErr := tools.FFprobe()
 		a.update(func() {
 			if err != nil {
 				a.setError(err)
 			}
 			a.modelList, a.modelInUse, a.modelLoading = list, inUse, false
-			a.modelBin, a.modelBinErr = "", ""
-			if rt := a.ASR.RuntimeStatus(); rt.OK() {
-				a.modelBin = rt.Version
-			} else {
-				a.modelBinErr = rt.Err
-			}
-			a.ffmpeg, a.ffmpegNote = ffmpeg, "Found at "+ffmpeg
-			switch {
-			case ffmpegErr != nil:
-				a.ffmpeg, a.ffmpegNote = "", ffmpegErr.Error()
-			case probeErr != nil:
-				a.ffmpegNote = "Found at " + ffmpeg + ", but ffprobe is missing"
-			}
 		})
 	}()
 }
@@ -363,34 +346,6 @@ func (a *App) useModel(info models.Info) {
 			a.modelLoaded = false // read the list again with the choice applied
 		})
 	}()
-}
-
-// pickFFmpeg lets the user point at the program when Ottr cannot find it — an
-// FFmpeg installed while the app runs is not on its PATH.
-func (a *App) pickFFmpeg() {
-	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent: mygo.CallerWindow(context.Background()),
-			Title:  "Choose ffmpeg.exe",
-			Filters: []mygo.FileFilter{
-				{Name: "ffmpeg", Extensions: []string{"exe"}},
-			},
-		})
-		if err != nil || len(paths) == 0 {
-			return
-		}
-		a.update(func() { a.useFFmpeg(paths[0]) })
-	}()
-}
-
-// useFFmpeg points the app at a program or a folder, and remembers it.
-func (a *App) useFFmpeg(path string) {
-	tools.SetChosen(path)
-	if a.Prefs != nil {
-		prefs := a.Prefs
-		go prefs.Set(settings.FFmpegPath, path)
-	}
-	a.loadModels() // reads the programs again, so the page shows the result
 }
 
 func fmtSize(bytes int64) string {
@@ -411,20 +366,20 @@ func fmtSize(bytes int64) string {
 func (a *App) translationSettings(c *ui.Context, t *ui.Theme) {
 	if !a.loadedTrans {
 		a.loadTransSettings()
-		ui.Text(c, "Loading…").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+		ui.Text(c, a.tr("Loading…")).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		return
 	}
-	ui.Text(c, "Translation provider").Bold()
-	ui.Text(c, "Subtitles are translated online, one target language at a time.").
+	ui.Text(c, a.tr("Translation provider")).Bold()
+	ui.Text(c, a.tr("Subtitles are translated online, one target language at a time.")).
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 
-	providers := []string{"Free online", "Custom AI model"}
+	providers := []string{a.tr("Free online"), a.tr("Custom AI model")}
 	chosen := 0
 	if a.transCfg.Provider == "custom" {
 		chosen = 1
 	}
 	ui.Row(c).Children(func() {
-		ui.Segmented(c, &chosen, providers...).Label("Translation provider").Width(300).Changed()
+		ui.Segmented(c, &chosen, providers...).Label(a.tr("Translation provider")).Width(300).Changed()
 		ui.Spacer(c)
 	})
 	if chosen == 1 {
@@ -433,19 +388,19 @@ func (a *App) translationSettings(c *ui.Context, t *ui.Theme) {
 		a.transCfg.Provider = "mymemory"
 	}
 	if a.transCfg.Provider == "custom" {
-		settingRow(c, t, "API base URL", "Any OpenAI-compatible chat endpoint.", func() {
+		a.settingRow(c, t, "API base URL", "Any OpenAI-compatible chat endpoint.", func() {
 			ui.TextInput(c, &a.transCfg.BaseURL).Placeholder("https://api.deepseek.com/v1").Grow(1).Label("API base URL")
 		})
-		settingRow(c, t, "API key", "Kept in the database on this computer.", func() {
+		a.settingRow(c, t, "API key", "Kept in the database on this computer.", func() {
 			ui.TextInput(c, &a.transCfg.APIKey).Password().Grow(1).Label("API key")
 		})
-		settingRow(c, t, "Model", "For example deepseek-chat.", func() {
+		a.settingRow(c, t, "Model", "For example deepseek-chat.", func() {
 			ui.TextInput(c, &a.transCfg.Model).Placeholder("deepseek-chat").Grow(1).Label("Model")
 		})
 	}
-	settingRow(c, t, "Translate + summarize imports",
+	a.settingRow(c, t, "Translate + summarize imports",
 		"Imported files are translated into the tab's language and summarized too, as one job. Off by default: it spends the provider's quota.",
-		func() { ui.Switch(c, &a.importChain).Label("Translate and summarize imports") })
+		func() { ui.Switch(c, &a.importChain).Label(a.tr("Translate and summarize imports")) })
 	a.saveRow(c, t, func() { a.saveTransSettings() })
 }
 
@@ -454,19 +409,19 @@ func (a *App) translationSettings(c *ui.Context, t *ui.Theme) {
 func (a *App) summarySettings(c *ui.Context, t *ui.Theme) {
 	if !a.loadedSum {
 		a.loadSumSettings()
-		ui.Text(c, "Loading…").FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+		ui.Text(c, a.tr("Loading…")).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		return
 	}
-	ui.Text(c, "AI model").Bold()
-	ui.Text(c, "Summaries are written by a remote OpenAI-compatible model.").
+	ui.Text(c, a.tr("AI model")).Bold()
+	ui.Text(c, a.tr("Summaries are written by a remote OpenAI-compatible model.")).
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)
-	settingRow(c, t, "API base URL", "DeepSeek, OpenAI, SiliconFlow or a local Ollama.", func() {
+	a.settingRow(c, t, "API base URL", "DeepSeek, OpenAI, SiliconFlow or a local Ollama.", func() {
 		ui.TextInput(c, &a.sumCfg.BaseURL).Placeholder("https://api.deepseek.com/v1").Grow(1).Label("API base URL")
 	})
-	settingRow(c, t, "API key", "Kept in the database on this computer.", func() {
+	a.settingRow(c, t, "API key", "Kept in the database on this computer.", func() {
 		ui.TextInput(c, &a.sumCfg.APIKey).Password().Grow(1).Label("API key")
 	})
-	settingRow(c, t, "Model", "For example deepseek-chat.", func() {
+	a.settingRow(c, t, "Model", "For example deepseek-chat.", func() {
 		ui.TextInput(c, &a.sumCfg.Model).Placeholder("deepseek-chat").Grow(1).Label("Model")
 	})
 	a.saveRow(c, t, func() { a.saveSumSettings() })
@@ -475,7 +430,7 @@ func (a *App) summarySettings(c *ui.Context, t *ui.Theme) {
 // saveRow is the one button that stores what the section above holds.
 func (a *App) saveRow(c *ui.Context, t *ui.Theme, save func()) {
 	ui.Row(c).Justify(ui.End).Children(func() {
-		if ui.PrimaryButton(c, "Save").Clicked() {
+		if ui.PrimaryButton(c, a.tr("Save")).Clicked() {
 			save()
 		}
 	})

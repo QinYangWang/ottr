@@ -13,6 +13,10 @@ import (
 const (
 	// Theme is "system", "light" or "dark".
 	Theme = "ui_theme"
+	// Language is the interface locale: "en" or "zh".
+	Language = "ui_language"
+	// Font is an installed font family, or "" for the system default.
+	Font = "ui_font"
 	// FFmpegPath is a folder, or the ffmpeg program itself, chosen in the
 	// settings when Ottr could not find FFmpeg on its own.
 	FFmpegPath = "ffmpeg_path"

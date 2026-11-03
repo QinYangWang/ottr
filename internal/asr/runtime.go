@@ -82,7 +82,10 @@ func (s *Service) ready() error {
 func (s *Service) libraryCandidates() ([]string, string) {
 	var dirs []string
 	if res, err := mygo.App.Path(mygo.PathResources); err == nil {
-		dirs = append(dirs, filepath.Join(res, "bin"))
+		dirs = append(dirs,
+			filepath.Join(res, "bin"),
+			filepath.Join(res, runtime.GOOS+"-"+runtime.GOARCH, "bin"),
+		)
 	}
 	if dir := s.models.BinDir(); dir != "" {
 		dirs = append(dirs, dir)

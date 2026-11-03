@@ -48,6 +48,20 @@ typedef struct {
                               const SherpaOnnxOnlineStream *);
   void (*online_stream_finish)(const SherpaOnnxOnlineStream *);
 
+  const SherpaOnnxOfflineRecognizer *(*offline_create)(
+      const SherpaOnnxOfflineRecognizerConfig *);
+  void (*offline_destroy)(const SherpaOnnxOfflineRecognizer *);
+  const SherpaOnnxOfflineStream *(*offline_stream_create)(
+      const SherpaOnnxOfflineRecognizer *);
+  void (*offline_stream_destroy)(const SherpaOnnxOfflineStream *);
+  void (*offline_stream_accept)(const SherpaOnnxOfflineStream *, int32_t,
+                                const float *, int32_t);
+  void (*offline_stream_decode)(const SherpaOnnxOfflineRecognizer *,
+                                const SherpaOnnxOfflineStream *);
+  const SherpaOnnxOfflineRecognizerResult *(*offline_stream_result)(
+      const SherpaOnnxOfflineStream *);
+  void (*offline_result_destroy)(const SherpaOnnxOfflineRecognizerResult *);
+
 } api_t;
 
 static api_t *g_api;
@@ -127,6 +141,14 @@ const api_t *sherpa_api_load(const char *path) {
   RESOLVE(online_stream_endpoint, "SherpaOnnxOnlineStreamIsEndpoint");
   RESOLVE(online_stream_reset, "SherpaOnnxOnlineStreamReset");
   RESOLVE(online_stream_finish, "SherpaOnnxOnlineStreamInputFinished");
+  RESOLVE(offline_create, "SherpaOnnxCreateOfflineRecognizer");
+  RESOLVE(offline_destroy, "SherpaOnnxDestroyOfflineRecognizer");
+  RESOLVE(offline_stream_create, "SherpaOnnxCreateOfflineStream");
+  RESOLVE(offline_stream_destroy, "SherpaOnnxDestroyOfflineStream");
+  RESOLVE(offline_stream_accept, "SherpaOnnxAcceptWaveformOffline");
+  RESOLVE(offline_stream_decode, "SherpaOnnxDecodeOfflineStream");
+  RESOLVE(offline_stream_result, "SherpaOnnxGetOfflineStreamResult");
+  RESOLVE(offline_result_destroy, "SherpaOnnxDestroyOfflineRecognizerResult");
 #undef RESOLVE
   g_api = a;
   return g_api;
@@ -213,12 +235,12 @@ void sherpa_online_stream_finish(const void *s) {
 // visible) and, when tokens is not NULL, the tokens and timestamps into
 // malloc'd blocks freed with sherpa_free. The native result is destroyed here,
 // so no pointer into library memory reaches Go.
-int32_t sherpa_online_result(const void *r, const void *s, char *text,
-                             int32_t text_len, char ***tokens, float **stamps,
-                             int32_t *count) {
-  const SherpaOnnxOnlineRecognizerResult *res;
-  const char *src;
-  int32_t i, n, need;
+static int32_t copy_result(const char *src, int32_t n,
+                           const char *const *token_strings,
+                           const float *timestamps, char *text,
+                           int32_t text_len, char ***tokens, float **stamps,
+                           int32_t *count) {
+  int32_t i, need;
   size_t blobs = 0, off = 0, slot;
   char **out;
   char *data;
@@ -226,29 +248,23 @@ int32_t sherpa_online_result(const void *r, const void *s, char *text,
   if (stamps) *stamps = NULL;
   if (count) *count = 0;
   if (text && text_len > 0) text[0] = 0;
-  if (!g_api || !r || !s) return 0;
-  res = g_api->online_stream_result(r, s);
-  if (!res) return 0;
-  src = res->text ? res->text : "";
+  if (!src) src = "";
   need = (int32_t)strlen(src);
   if (text && text_len > 0) {
     strncpy(text, src, (size_t)text_len - 1);
     text[text_len - 1] = 0;
   }
-  n = res->count;
   if (tokens) {
     slot = (size_t)(n > 0 ? n : 1);
     for (i = 0; i < n; i++) {
-      const char *tok =
-          res->tokens_arr && res->tokens_arr[i] ? res->tokens_arr[i] : "";
+      const char *tok = token_strings && token_strings[i] ? token_strings[i] : "";
       blobs += strlen(tok) + 1;
     }
     out = (char **)malloc(sizeof(char *) * slot + blobs);
     if (out) {
       data = (char *)(out + slot);
       for (i = 0; i < n; i++) {
-        const char *tok =
-            res->tokens_arr && res->tokens_arr[i] ? res->tokens_arr[i] : "";
+        const char *tok = token_strings && token_strings[i] ? token_strings[i] : "";
         size_t len = strlen(tok) + 1;
         memcpy(data + off, tok, len);
         out[i] = data + off;
@@ -256,16 +272,85 @@ int32_t sherpa_online_result(const void *r, const void *s, char *text,
       }
       *tokens = out;
     }
-    if (n > 0 && res->timestamps && stamps) {
+    if (n > 0 && timestamps && stamps) {
       float *ts = (float *)malloc(sizeof(float) * (size_t)n);
       if (ts) {
-        memcpy(ts, res->timestamps, sizeof(float) * (size_t)n);
+        memcpy(ts, timestamps, sizeof(float) * (size_t)n);
         *stamps = ts;
       }
     }
     if (count) *count = n;
   }
+  return need;
+}
+
+int32_t sherpa_online_result(const void *r, const void *s, char *text,
+                             int32_t text_len, char ***tokens, float **stamps,
+                             int32_t *count) {
+  const SherpaOnnxOnlineRecognizerResult *res;
+  int32_t need;
+  if (!g_api || !r || !s) return 0;
+  res = g_api->online_stream_result(r, s);
+  if (!res) return 0;
+  need = copy_result(res->text, res->count, res->tokens_arr, res->timestamps,
+                     text, text_len, tokens, stamps, count);
   g_api->online_result_destroy(res);
+  return need;
+}
+
+// ------------------------------------------------------------------ offline
+
+const void *sherpa_offline_create(const char *tokens, const char *encoder,
+                                  const char *decoder, const char *joiner,
+                                  int32_t threads) {
+  SherpaOnnxOfflineRecognizerConfig c;
+  if (!g_api) return NULL;
+  memset(&c, 0, sizeof(c));
+  c.feat_config.sample_rate = 16000;
+  c.feat_config.feature_dim = 80;
+  c.model_config.transducer.encoder = encoder;
+  c.model_config.transducer.decoder = decoder;
+  c.model_config.transducer.joiner = joiner;
+  c.model_config.tokens = tokens;
+  c.model_config.num_threads = threads;
+  c.model_config.provider = "cpu";
+  c.decoding_method = "greedy_search";
+  c.max_active_paths = 4;
+  return g_api->offline_create(&c);
+}
+
+void sherpa_offline_destroy(const void *r) {
+  if (g_api && r) g_api->offline_destroy(r);
+}
+
+const void *sherpa_offline_stream_create(const void *r) {
+  if (!g_api || !r) return NULL;
+  return g_api->offline_stream_create(r);
+}
+
+void sherpa_offline_stream_destroy(const void *s) {
+  if (g_api && s) g_api->offline_stream_destroy(s);
+}
+
+void sherpa_offline_stream_accept(const void *s, int32_t sample_rate,
+                                  const float *samples, int32_t n) {
+  if (g_api && s) g_api->offline_stream_accept(s, sample_rate, samples, n);
+}
+
+void sherpa_offline_stream_decode(const void *r, const void *s) {
+  if (g_api && r && s) g_api->offline_stream_decode(r, s);
+}
+
+int32_t sherpa_offline_result(const void *s, char *text, int32_t text_len,
+                              char ***tokens, float **stamps, int32_t *count) {
+  const SherpaOnnxOfflineRecognizerResult *res;
+  int32_t need;
+  if (!g_api || !s) return 0;
+  res = g_api->offline_stream_result(s);
+  if (!res) return 0;
+  need = copy_result(res->text, res->count, res->tokens_arr, res->timestamps,
+                     text, text_len, tokens, stamps, count);
+  g_api->offline_result_destroy(res);
   return need;
 }
 

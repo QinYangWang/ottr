@@ -299,6 +299,23 @@ func (s *Service) Remove(id int64, withFile bool) error {
 	return nil
 }
 
+// Rename changes the display name without moving or renaming the media file.
+func (s *Service) Rename(id int64, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("media name cannot be empty")
+	}
+	db, err := s.store()
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec(`UPDATE media SET name = ? WHERE id = ?`, name, id); err != nil {
+		return err
+	}
+	Changed.Broadcast(struct{}{})
+	return nil
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }
