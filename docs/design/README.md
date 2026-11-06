@@ -102,7 +102,11 @@ The three settings pages override the 660px shell height so the full page is cap
 | --- | --- |
 | Recorder, recording, library panel | [`recorder.go`](../../internal/native/recorder.go) |
 | Playback, transcript, player controls | [`session.go`](../../internal/native/session.go), [`player.go`](../../internal/native/player.go) |
-| Library list/grid, thumbnails | [`library.go`](../../internal/native/library.go), [`thumbnail.go`](../../internal/native/thumbnail.go) |
+| Library list/grid, empty first run, thumbnails | [`library.go`](../../internal/native/library.go), [`thumbnail.go`](../../internal/native/thumbnail.go) |
+| Recorder details card, day groups | [`details.go`](../../internal/native/details.go) |
+| Transcribing after Stop | [`transcribing.go`](../../internal/native/transcribing.go) |
+| Playback · Summary | [`session.go`](../../internal/native/session.go) (`summaryTab`) |
+| Dialogs: delete, export, transcription failed | [`dialogs.go`](../../internal/native/dialogs.go) |
 | Settings pages | [`settings.go`](../../internal/native/settings.go) |
 | Settings menu | [`settings_menu.go`](../../internal/native/settings_menu.go) |
 | Shared controls (select, switch, rows) | [`kit/kit.go`](../../internal/native/kit/kit.go) |

@@ -286,6 +286,19 @@ What it still does not do:
 
 ---
 
+## 16. Canvas items the code does not do yet — `open`
+
+The Doop frames of 2026-11-06 show two things with no code behind them:
+
+- **A global recording shortcut** (Ctrl + Shift + R in the details card and the
+  empty library). Ottr registers no system-wide hotkey, so the row is left out.
+- **Retry from the timestamp a transcription stopped at.** Recognition keeps no
+  partial transcript, so the failure dialog offers a full retry.
+- The details card's "about N h of 1080p" estimate: recordings are encoded at
+  constant quality, so there is no fixed bitrate to divide the free space by.
+
+---
+
 ## Non-goals
 
 Explicitly out of scope, per the product definition: timeline editing, effects,
