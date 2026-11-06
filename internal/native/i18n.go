@@ -97,6 +97,7 @@ var zhCN = map[string]string{
 	"They were recorded here but no record in the library holds them. Deleting them cannot be undone.": "这些文件由 Ottr 录制，但媒体库中没有对应记录。删除后无法撤销。",
 	"Keep files":              "保留文件",
 	"Keep the file on disk":   "保留磁盘上的文件",
+	"Recording to disk":       "正在写入磁盘",
 	"Recording":               "正在录制",
 	"Recording preview":       "录制预览",
 	"Stop":                    "停止",

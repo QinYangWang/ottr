@@ -256,12 +256,19 @@ func (a *App) toggleLibrary(width float32) {
 			a.win.SetMinimumSize(libraryAutoMinWidth, 560)
 			a.win.SetSize(libraryAutoMinWidth, height)
 		}
-	} else if a.libraryResized {
-		a.libraryResized = false
-		if a.win != nil {
-			_, height := a.win.Size()
-			a.win.SetMinimumSize(380, 560)
-			a.win.SetSize(CompactWidth, height)
+	} else {
+		// Collapsing the panel is a normal-window action: a maximized window
+		// would keep the wide layout the panel left behind.
+		if a.win != nil && a.win.IsMaximized() {
+			a.win.Unmaximize()
+		}
+		if a.libraryResized {
+			a.libraryResized = false
+			if a.win != nil {
+				_, height := a.win.Size()
+				a.win.SetMinimumSize(380, 560)
+				a.win.SetSize(CompactWidth, height)
+			}
 		}
 	}
 }

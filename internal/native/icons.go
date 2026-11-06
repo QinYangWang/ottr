@@ -64,6 +64,7 @@ var (
 	iconPanelClose = loadIcon("panel-left-close")
 	// languages and file-text: the two tabs outside Settings' own pages.
 	iconLanguages = loadIcon("languages")
+	iconEarth     = loadIcon("earth")
 	iconSummary   = loadIcon("file-text")
 	// server and users: Settings' provider and speaker sections.
 	iconProvider = loadIcon("server")

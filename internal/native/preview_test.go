@@ -327,6 +327,15 @@ func TestPreviewRecording(t *testing.T) {
 	}, CompactWidth, CompactHeight)
 	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
 	shot("15-recording-compact")
+	tt = ui.NewTester(func(c *ui.Context) {
+		t := a.applyTheme(c)
+		ui.Column(c).Fill().Children(func() {
+			a.titleBar(c, t)
+			a.recorderPage(c, t)
+		})
+	}, WideWidth, WideHeight)
+	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
+	shot("22-recording-wide")
 }
 
 // The title bar as it looks while a recording runs, which the window shows

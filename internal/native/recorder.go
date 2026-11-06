@@ -3,9 +3,10 @@ package native
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"ottr/internal/native/kit"
 )
 
 // recorderPage uses the same structure as sessionPage: title and media on the
@@ -29,6 +30,7 @@ func (a *App) recorderPage(c *ui.Context, t *ui.Theme) {
 			ui.Column(c).Padding(t.Space(4), t.Space(5), t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
 				a.recordingHead(c, t)
 				a.recordingStage(c, t, false)
+				a.recordingFacts(c, t)
 			})
 		})
 		ui.Column(c).Width(sideWidth).Shrink(0).FillHeight().MinWidth(0).
@@ -38,11 +40,55 @@ func (a *App) recorderPage(c *ui.Context, t *ui.Theme) {
 	})
 }
 
+// recordingFacts is the strip under the preview: where the recording comes
+// from, what it hears, and which model is writing it.
+func (a *App) recordingFacts(c *ui.Context, t *ui.Theme) {
+	source := a.sourceName()
+	if detail := a.sourceDetail(); detail != "" {
+		source += " · " + detail
+	}
+	systemAudio := a.tr("Off")
+	if a.speaker.Name != "" {
+		systemAudio = a.speaker.Name
+	}
+	microphone := a.tr("Off")
+	if a.microphone.Name != "" {
+		microphone = a.microphone.Name
+	}
+	model := ""
+	if a.MM != nil {
+		model = a.MM.CurrentName()
+	}
+	facts := [][2]string{
+		{a.tr("Source"), source},
+		{a.tr("System audio"), systemAudio},
+		{a.tr("Microphone"), microphone},
+		{a.tr("Model"), model},
+	}
+	ui.Row(c).FillWidth().Radius(t.Radius).Border(1, t.Border).Clip().
+		AlignItems(ui.Stretch).Children(func() {
+		for i, fact := range facts {
+			if i > 0 {
+				ui.Column(c).Width(1).Shrink(0).Background(t.Border)
+			}
+			ui.Column(c).Grow(1).MinWidth(0).Padding(t.Space(2.5), t.Space(3.5)).Gap(t.Space(1)).Children(func() {
+				ui.Text(c, fact[0]).FontSize(t.FontSize - 3).Bold().TextColor(t.TextMuted).SingleLine()
+				ui.Text(c, fact[1]).FontSize(t.FontSize - 1).Bold().SingleLine()
+			})
+		}
+	})
+}
+
+// recordingHead is the title, the running clock and the two transport buttons.
 func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
-	ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Center).Children(func() {
-		dot := ui.Box(c).Size(10, 10).Radius(5).Background(t.Danger)
-		dot.Opacity(float32(0.35 + 0.65*dot.Loop("pulse", 1100*time.Millisecond, ui.EaseInOut)))
-		ui.Text(c, a.tr("Recording")).FontSize(t.FontSize + 3).Bold().Grow(1)
+	ui.Row(c).Gap(t.Space(2.5)).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, a.tr("Recording")).FontSize(t.FontSize + 3).Bold()
+		ui.Column(c).Padding(t.Space(0.5), t.Space(2)).Radius(9999).
+			Background(t.Danger.Alpha(0.12)).Children(func() {
+			ui.Text(c, fmtDuration(a.recordingElapsed().Milliseconds())).FontSize(t.FontSize - 3).
+				Bold().TextColor(t.Danger).FontFeatures("tnum")
+		})
+		ui.Spacer(c)
 		if a.busy {
 			ui.Spinner(c).Label(a.tr("Finishing"))
 		}
@@ -53,7 +99,7 @@ func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
 		if ui.Button(c, pauseLabel).Disabled(a.busy).Clicked() {
 			a.Rec.SetPaused(!a.recordingPaused)
 		}
-		if ui.PrimaryButton(c, a.tr("Stop")).Disabled(a.busy).Clicked() {
+		if kit.DangerButton(c, t, a.tr("Stop")).Disabled(a.busy).Clicked() {
 			a.stopRecording(false)
 		}
 	})
@@ -67,8 +113,8 @@ func (a *App) recordingStage(c *ui.Context, t *ui.Theme, fitWidth bool) {
 		ui.Row(c).Padding(t.Space(2), t.Space(3)).Gap(t.Space(3)).AlignItems(ui.Center).
 			Background(playerBar(t)).Children(func() {
 			ui.Spacer(c)
-			ui.Text(c, fmtDuration(a.recordingElapsed().Milliseconds())).FontSize(t.FontSize - 2).
-				TextColor(onMedia()).Opacity(0.9).FontFeatures("tnum").SingleLine().Shrink(0)
+			ui.Text(c, a.tr("Recording to disk")).FontSize(t.FontSize - 2).
+				TextColor(onMedia()).Opacity(0.9).SingleLine().Shrink(0)
 		})
 	})
 }
@@ -122,6 +168,10 @@ func (a *App) recordingTranscript(c *ui.Context, t *ui.Theme) {
 
 func (a *App) livePane(c *ui.Context, t *ui.Theme) {
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
+		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			a.transcriptSearchButton(c, t)
+			a.liveLanguageSelect(c, t)
+		})
 		ui.Text(c, a.tr("Provisional: start transcription after the recording stops.")).
 			FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 		if a.liveTranslate {
@@ -129,13 +179,20 @@ func (a *App) livePane(c *ui.Context, t *ui.Theme) {
 		}
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Gap(t.Space(2.5)).Children(func() {
+				shown := 0
+				for _, line := range a.late {
+					if !a.liveMatches(line.text) {
+						continue
+					}
+					shown++
+					a.subtitleContent(c, t, 0, fmtDuration(line.at), line.text, a.liveTrans[line.utterance].translated)
+				}
 				if len(a.late) == 0 {
 					ui.Text(c, a.tr("Listening for audio…")).TextColor(t.TextMuted).
 						FontSize(t.FontSize - 1)
-					return
-				}
-				for _, line := range a.late {
-					a.subtitleContent(c, t, 0, fmtDuration(line.at), line.text, a.liveTrans[line.utterance].translated)
+				} else if shown == 0 {
+					ui.Text(c, a.tr("Nothing matches that search.")).TextColor(t.TextMuted).
+						FontSize(t.FontSize - 1)
 				}
 				if a.liveWarn != "" {
 					ui.Text(c, a.liveWarn).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
@@ -148,6 +205,30 @@ func (a *App) livePane(c *ui.Context, t *ui.Theme) {
 	})
 }
 
+// liveLanguageSelect sets the spoken language of the recording in progress, as
+// the same control does on a saved transcript.
+func (a *App) liveLanguageSelect(c *ui.Context, t *ui.Theme) {
+	names, codes := a.langChoices()
+	lang := a.langLabel(a.defaultLanguage)
+	options := make([]kit.SelectOption[string], len(names))
+	for i, name := range names {
+		options[i] = kit.SelectOption[string]{Value: name, Label: name}
+	}
+	kit.CompactSelect(c, t, &lang, options, a.tr("Spoken language"), 120, iconEarth, func(choice string) {
+		for i, name := range names {
+			if name == choice && codes[i] != a.defaultLanguage {
+				a.setDefaultLanguage(codes[i], nil)
+			}
+		}
+	})
+}
+
+// liveMatches filters live text by the transcript search query.
+func (a *App) liveMatches(text string) bool {
+	q := strings.ToLower(strings.TrimSpace(a.segQuery))
+	return q == "" || strings.Contains(strings.ToLower(text), q)
+}
+
 // canTranslateLive reports whether a provider is there to translate with.
 func (a *App) canTranslateLive() bool {
 	return a.liveTranslator != nil || a.Trans != nil
@@ -157,15 +238,20 @@ func (a *App) canTranslateLive() bool {
 // the same target the saved transcript uses, so switching one switches both.
 func (a *App) liveTranslationControls(c *ui.Context, t *ui.Theme) {
 	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-		ui.Icon(c, iconLanguages).FontSize(t.FontSize + 2).TextColor(t.TextMuted)
+		ui.Icon(c, iconEarth).FontSize(t.FontSize + 2).TextColor(t.TextMuted)
 		name := langName(a.trLang)
-		ui.Select(c, &name, langNames()).Label(a.tr("Translate into")).Width(130).Changed()
-		for _, l := range langs {
-			if l.name == name && l.code != a.trLang {
-				a.trLang = l.code
-				a.restartLiveTranslation()
-			}
+		options := make([]kit.SelectOption[string], len(langs))
+		for i, l := range langs {
+			options[i] = kit.SelectOption[string]{Value: l.name, Label: l.name}
 		}
+		kit.CompactSelect(c, t, &name, options, a.tr("Translate into"), 130, nil, func(choice string) {
+			for _, l := range langs {
+				if l.name == choice && l.code != a.trLang {
+					a.trLang = l.code
+					a.restartLiveTranslation()
+				}
+			}
+		})
 		if len(a.liveTransBusy) > 0 {
 			ui.Spinner(c).Label(a.tr("Translating"))
 		}

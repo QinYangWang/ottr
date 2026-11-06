@@ -334,18 +334,9 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	}
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			kit.IconButton(c, t, iconSearch, a.tr("Search the subtitles"), func() { a.segSearchOpen = true })
+			a.transcriptSearchButton(c, t)
 			a.spokenLanguageSelect(c, t, m)
 			a.translationTargetSelect(c, t, m)
-			if a.segSearchOpen {
-				// The field floats over the selects, as the design shows it; it
-				// closes on Escape or when the media changes.
-				field := ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).
-					Absolute().Left(t.Space(10)).Right(0).Top(0).Height(32).Background(t.Background).Radius(t.Space(2)).AutoFocus()
-				if field.Shortcut(0, ui.KeyEscape) {
-					a.segSearchOpen, a.segQuery = false, ""
-				}
-			}
 			if a.transLoading || a.jobRunning(jobs.KindTranslate) {
 				ui.Spinner(c).Label(a.tr("Translating"))
 			}
@@ -400,19 +391,24 @@ func (a *App) setTranslationVisible(m library.Media, visible bool) {
 // in the transcript toolbar, beside the spoken language.
 func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme, m library.Media) {
 	name := langName(a.trLang)
-	ui.Select(c, &name, langNames()).Label(a.tr("Translate into")).Width(130).Shrink(0).Changed()
-	for _, l := range langs {
-		if l.name == name && l.code != a.trLang {
-			a.trLang = l.code
-			a.trans = translate.Translation{}
-			if !a.showTranslation {
-				// Picking a language is an explicit request to see it.
-				a.setTranslationVisible(m, true)
-				return
-			}
-			a.loadTranslation()
-		}
+	options := make([]kit.SelectOption[string], len(langs))
+	for i, l := range langs {
+		options[i] = kit.SelectOption[string]{Value: l.name, Label: l.name}
 	}
+	kit.CompactSelect(c, t, &name, options, a.tr("Translate into"), 130, nil, func(choice string) {
+		for _, l := range langs {
+			if l.name == choice && l.code != a.trLang {
+				a.trLang = l.code
+				a.trans = translate.Translation{}
+				if !a.showTranslation {
+					// Picking a language is an explicit request to see it.
+					a.setTranslationVisible(m, true)
+					return
+				}
+				a.loadTranslation()
+			}
+		}
+	})
 }
 
 // subtitleContent is shared by saved and live transcript rows: speaker, time and
@@ -517,17 +513,46 @@ func (a *App) saveSpeakerName(id int) {
 	}()
 }
 
+// transcriptSearchButton is the magnifier that unfolds into the search field
+// over the controls to its right, shared by the live and saved transcripts.
+func (a *App) transcriptSearchButton(c *ui.Context, t *ui.Theme) {
+	btn := ui.ButtonBase(c).Label(a.tr("Search the subtitles")).Tooltip(a.tr("Search the subtitles")).
+		Size(t.Space(8), t.Space(8)).Radius(t.Space(2)).Border(1, t.Border).
+		Background(t.Surface).Center().TextColor(t.TextMuted).Cursor(ui.CursorPointer)
+	if btn.Hovered() {
+		btn.Background(t.SurfaceHover).TextColor(t.Text)
+	}
+	btn.Children(func() { ui.Icon(c, iconSearch).FontSize(t.FontSize + 1) })
+	if btn.Clicked() {
+		a.segSearchOpen = true
+	}
+	if !a.segSearchOpen {
+		return
+	}
+	field := ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).
+		Absolute().Left(t.Space(10)).Right(0).Top(0).Height(32).
+		Background(t.Background).Radius(t.Space(2)).AutoFocus()
+	if field.Shortcut(0, ui.KeyEscape) {
+		a.segSearchOpen, a.segQuery = false, ""
+	}
+}
+
 // spokenLanguageSelect overrules the detected language without adding a
 // second toolbar or a visible label.
 func (a *App) spokenLanguageSelect(c *ui.Context, t *ui.Theme, m library.Media) {
 	names, codes := a.langChoices()
 	lang := a.langLabel(a.lang)
-	ui.Select(c, &lang, names).Label(a.tr("Spoken language")).Width(120).Shrink(0).Changed()
+	options := make([]kit.SelectOption[string], len(names))
 	for i, name := range names {
-		if name == lang && codes[i] != a.lang {
-			a.setLanguage(m.ID, codes[i])
-		}
+		options[i] = kit.SelectOption[string]{Value: name, Label: name}
 	}
+	kit.CompactSelect(c, t, &lang, options, a.tr("Spoken language"), 120, iconEarth, func(choice string) {
+		for i, name := range names {
+			if name == choice && codes[i] != a.lang {
+				a.setLanguage(m.ID, codes[i])
+			}
+		}
+	})
 }
 
 func (a *App) filteredSegments() []asr.Segment {

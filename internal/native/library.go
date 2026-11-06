@@ -354,11 +354,11 @@ func (a *App) windowSource() capture.Source {
 // libraryTools are the list's search field and import button.
 func (a *App) libraryTools(c *ui.Context, t *ui.Theme) {
 	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Grow(1).MinWidth(0).Children(func() {
-		if ui.SearchField(c, &a.query).Label(a.tr("Search the library")).Grow(1).MinWidth(0).Changed() {
+		if ui.SearchField(c, &a.query).Label(a.tr("Search the library")).Height(t.Space(8)).Grow(1).MinWidth(0).Changed() {
 			a.reload()
 		}
 		imp := ui.ButtonBase(c).Label(a.tr("Import")).Tooltip(a.tr("Add a media file to the library")).
-			Disabled(a.recording).Padding(t.Space(1.5)).Radius(t.Radius).TextColor(t.TextMuted)
+			Disabled(a.recording).Size(t.Space(8), t.Space(8)).Radius(t.Radius).Center().TextColor(t.TextMuted)
 		imp.Children(func() { ui.Icon(c, iconImport).FontSize(t.FontSize + 4) })
 		if imp.Hovered() && !a.recording {
 			imp.Background(t.SurfaceHover)

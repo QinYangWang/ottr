@@ -10,7 +10,7 @@ import (
 // IconButton is an icon-only button with an accessible name and tooltip.
 func IconButton(c *ui.Context, t *ui.Theme, icon *ui.SVG, label string, onClick func()) {
 	btn := ui.ButtonBase(c).Label(label).Tooltip(label).TextColor(t.TextMuted).
-		Padding(t.Space(1.5)).Radius(t.Radius)
+		Size(t.Space(8), t.Space(8)).Radius(t.Radius).Center()
 	btn.Children(func() { ui.Icon(c, icon).FontSize(t.FontSize + 3) })
 	if btn.Hovered() {
 		btn.Background(t.SurfaceHover)
@@ -98,7 +98,7 @@ func Select[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []Sel
 		}
 		ui.PopoverBase(c, root, open, func(panel ui.Element) {
 			panel.Width(root.Bounds().W).Padding(t.Space(1)).Radius(0, 0, t.Radius, t.Radius).
-				Background(t.Surface).BorderWidth(0, 1, 1, 1).BorderColor(t.Border).Clip()
+				Background(t.Background).BorderWidth(0, 1, 1, 1).BorderColor(t.Border).Clip()
 			panel.Shadow(0, 8, 40, 0, ui.RGBA(0, 0, 0, 0.05)).Shadow(0, 12, 32, -16, ui.RGBA(0, 0, 0, 0.15))
 			ui.Scroll(c).MaxHeight(280).Children(func() {
 				ui.Column(c).Role(ui.RoleRadioGroup).Label(accessibility).Children(func() {
@@ -114,7 +114,7 @@ func Select[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []Sel
 					for i, option := range options {
 						item := ui.ButtonBase(c).Role(ui.RoleRadio).Label(option.Label).Tooltip(option.Label).
 							Checked(option.Value == *selected).FillWidth().Height(40).Padding(0, t.Space(3)).
-							Radius(9999).AlignItems(ui.Center)
+							Radius(t.Space(1.5)).AlignItems(ui.Center)
 						items[i] = item
 						if option.Value == *selected {
 							item.Background(t.Surface)
@@ -169,19 +169,38 @@ func RoundButton(c *ui.Context, t *ui.Theme, icon *ui.SVG, label string, onClick
 // SelectBox is the white, bordered select Settings uses: the value on the left,
 // a chevron on the right, and no inline label.
 func SelectBox[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []SelectOption[T], accessibility string, width float32, onChoose func(T)) {
-	border := ui.RGBA(0, 0, 0, 0.15)
-	if t.Dark {
-		border = ui.RGBA(255, 255, 255, 0.17)
+	selectBox(c, t, selected, options, accessibility, width, 38, 10, nil, onChoose)
+}
+
+// CompactSelect is the 32px filled select of a toolbar, optionally with a
+// leading icon: the shape the design uses for languages.
+func CompactSelect[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []SelectOption[T], accessibility string, width float32, icon *ui.SVG, onChoose func(T)) {
+	selectBox(c, t, selected, options, accessibility, width, 32, 8, icon, onChoose)
+}
+
+// selectBox is the shared body of the boxed selects. The popup is opaque and
+// its items take the panel's inner radius, so the two corners agree.
+func selectBox[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []SelectOption[T], accessibility string, width, height, radius float32, icon *ui.SVG, onChoose func(T)) {
+	white := height >= 38
+	border, fill := t.Border, t.Surface
+	if white {
+		border, fill = ui.RGBA(0, 0, 0, 0.15), t.Background
+		if t.Dark {
+			border = ui.RGBA(255, 255, 255, 0.17)
+		}
 	}
 	sel := ui.SelectBase(c, selected)
-	trigger := sel.Trigger.Label(accessibility).Width(width).Height(38).Shrink(0).Padding(0, t.Space(3)).
-		Radius(t.Space(2.5)).Border(1, border).Background(t.Background).
+	trigger := sel.Trigger.Label(accessibility).Width(width).Height(height).Shrink(0).
+		Padding(0, t.Space(2.5)).Radius(radius).Border(1, border).Background(fill).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if sel.Trigger.Hovered() {
-		trigger.Background(t.Surface)
+		trigger.Background(t.SurfaceHover)
 	}
 	sel.Trigger.Children(func() {
-		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).FillWidth().Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
+			if icon != nil {
+				ui.Icon(c, icon).FontSize(t.FontSize + 1).Shrink(0).TextColor(t.TextMuted)
+			}
 			name := ""
 			for _, option := range options {
 				if option.Value == *selected {
@@ -194,14 +213,14 @@ func SelectBox[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []
 		})
 	})
 	sel.Popup(func(panel ui.Element) {
-		panel.Width(width).Padding(t.Space(1)).Radius(t.Space(3)).
+		panel.Width(max(width, 180)).Padding(t.Space(1.5)).Radius(t.Space(3)).
 			Background(t.Background).Border(1, border).Clip()
 		panel.Shadow(0, 8, 40, 0, ui.RGBA(0, 0, 0, 0.05)).
 			Shadow(0, 12, 32, -16, ui.RGBA(0, 0, 0, 0.15))
 		ui.Scroll(c).MaxHeight(320).Children(func() {
-			ui.Column(c).Gap(1).Children(func() {
+			ui.Column(c).Children(func() {
 				for _, option := range options {
-					item := sel.Item(option.Value).Height(36).Padding(0, t.Space(2.5)).
+					item := sel.Item(option.Value).Height(36).Padding(0, t.Space(2)).
 						Radius(t.Space(1.5)).AlignItems(ui.Center)
 					switch {
 					case item.Highlighted():
@@ -219,4 +238,16 @@ func SelectBox[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []
 			})
 		})
 	})
+}
+
+// DangerButton is the filled red action: Stop while recording.
+func DangerButton(c *ui.Context, t *ui.Theme, label string) ui.Element {
+	btn := ui.ButtonBase(c).Label(label).Height(t.Space(10)).Padding(0, t.Space(4)).
+		Radius(9999).Background(t.Danger).TextColor(ui.RGBA(255, 255, 255, 1)).
+		Cursor(ui.CursorPointer)
+	if btn.Hovered() {
+		btn.Background(t.Danger.Alpha(0.88))
+	}
+	btn.Children(func() { ui.Text(c, label).FontSize(t.FontSize - 2).Bold() })
+	return btn
 }
