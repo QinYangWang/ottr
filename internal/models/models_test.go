@@ -29,7 +29,7 @@ func TestManagerDetectsModel(t *testing.T) {
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"tokens.txt", "encoder-test.onnx", "decoder-test.onnx", "joiner-test.onnx"} {
+	for _, f := range []string{"tokens.txt", "model.int8.onnx"} {
 		if err := os.WriteFile(filepath.Join(modelDir, f), []byte("dummy-data"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -42,6 +42,9 @@ func TestManagerDetectsModel(t *testing.T) {
 	if len(list) != 1 || !list[0].Installed {
 		t.Fatalf("expected 1 installed model, got %+v", list)
 	}
+	if list[0].Name != "SenseVoice" {
+		t.Errorf("display name = %q", list[0].Name)
+	}
 	mdl, err := m.FindASRModel()
 	if err != nil {
 		t.Fatal(err)
@@ -49,11 +52,11 @@ func TestManagerDetectsModel(t *testing.T) {
 	if mdl.Dir != modelDir {
 		t.Errorf("wrong dir: %s", mdl.Dir)
 	}
-	if mdl.Size != int64(len("dummy-data")*4) {
+	if mdl.Size != int64(len("dummy-data")*2) {
 		t.Errorf("wrong size: %d", mdl.Size)
 	}
-	if !mdl.Streaming {
-		t.Error("a streaming model directory was not detected")
+	if mdl.Kind != KindSenseVoice {
+		t.Errorf("model kind = %q", mdl.Kind)
 	}
 }
 
@@ -72,7 +75,7 @@ func TestSelectedModelIsUsedAndRemembered(t *testing.T) {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		for _, f := range []string{"tokens.txt", "encoder.onnx", "decoder.onnx", "joiner.onnx"} {
+		for _, f := range []string{"tokens.txt", "model.int8.onnx"} {
 			if err := os.WriteFile(filepath.Join(dir, f), []byte("dummy"), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -103,7 +106,7 @@ func TestSelectedModelIsUsedAndRemembered(t *testing.T) {
 
 	// A chosen model that is no longer valid says so instead of quietly
 	// transcribing with something else.
-	if err := os.Remove(filepath.Join(second, "joiner.onnx")); err != nil {
+	if err := os.Remove(filepath.Join(second, "model.int8.onnx")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reopened.FindASRModel(); err == nil {

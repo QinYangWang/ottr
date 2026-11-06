@@ -20,6 +20,8 @@ import (
 	"errors"
 	"sync"
 	"unsafe"
+
+	"ottr/internal/models"
 )
 
 // Available reports whether this build can use native ASR: false in a
@@ -206,20 +208,28 @@ func (s *Stream) Destroy() {
 // OfflineRecognizer owns one non-streaming recognizer used for file jobs.
 type OfflineRecognizer struct{ h unsafe.Pointer }
 
-func NewOfflineRecognizer(tokens, encoder, decoder, joiner string, threads int) (*OfflineRecognizer, error) {
+func NewOfflineRecognizer(m models.ASRModel, threads int) (*OfflineRecognizer, error) {
 	if !loaded {
 		return nil, ErrUnavailable
 	}
-	var h unsafe.Pointer
-	withCString(tokens, func(ct *C.char) {
-		withCString(encoder, func(ce *C.char) {
-			withCString(decoder, func(cd *C.char) {
-				withCString(joiner, func(cj *C.char) {
-					h = C.sherpa_offline_create(ct, ce, cd, cj, C.int32_t(threads))
-				})
-			})
-		})
-	})
+	kind := int32(-1)
+	switch m.Kind {
+	case models.KindSenseVoice:
+		kind = 0
+	case models.KindFunASRNano:
+		kind = 1
+	case models.KindQwen3ASR:
+		kind = 2
+	default:
+		return nil, ErrNoRecognizer
+	}
+	values := []string{m.Tokens, m.Model, m.EncoderAdaptor, m.LLM, m.Embedding, m.Tokenizer, m.ConvFrontend, m.Encoder, m.Decoder}
+	paths := make([]*C.char, len(values))
+	for i, value := range values {
+		paths[i] = C.CString(value)
+		defer C.free(unsafe.Pointer(paths[i]))
+	}
+	h := C.sherpa_offline_create(C.int32_t(kind), &paths[0], C.int32_t(threads))
 	if h == nil {
 		return nil, ErrNoRecognizer
 	}

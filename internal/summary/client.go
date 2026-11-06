@@ -71,7 +71,7 @@ func generateSummary(ctx context.Context, cfg Settings, mediaName string, tr asr
 
 	chunks := chunkSegments(tr.Segments, maxChunkChars)
 	if len(chunks) == 1 {
-		content, err := ai.chat(ctx, summarySystemPrompt, summaryUserPrompt(mediaName, formatSegments(chunks[0])))
+		content, err := ai.chat(ctx, summarySystemPrompt, ai.userPrompt(mediaName, formatSegments(chunks[0]), tr.Language))
 		if err != nil {
 			return nil, err
 		}
@@ -83,8 +83,10 @@ func generateSummary(ctx context.Context, cfg Settings, mediaName string, tr asr
 
 	parts := make([]*llmSummaryResponse, len(chunks))
 	for i, chunk := range chunks {
-		user := fmt.Sprintf("Title: %s\n\nThis is part %d of %d of the transcript, with timestamps:\n%s\n\nSummarize only this part. Use the same JSON structure; chapters and highlights must keep the timestamps shown above.",
-			mediaName, i+1, len(chunks), formatSegments(chunk))
+		user := ai.userPrompt(mediaName, formatSegments(chunk), tr.Language) +
+			fmt.Sprintf("\n\nThis is part %d of %d of the transcript: summarize only this part. "+
+				"Use the same JSON structure; chapters and highlights must keep the timestamps shown above.",
+				i+1, len(chunks))
 		content, err := ai.chat(ctx, summarySystemPrompt, user)
 		if err != nil {
 			return nil, fmt.Errorf("summary part %d of %d: %w", i+1, len(chunks), err)
@@ -119,9 +121,10 @@ func generateSummary(ctx context.Context, cfg Settings, mediaName string, tr asr
 
 // completer is what one chat request needs: where to send it, and what to say.
 type completer struct {
-	url   string
-	key   string
-	model string
+	url    string
+	key    string
+	model  string
+	prompt string
 }
 
 func newCompleter(cfg Settings) (*completer, error) {
@@ -133,7 +136,7 @@ func newCompleter(cfg Settings) (*completer, error) {
 		baseURL += "/v1"
 	}
 	if cfg.APIKey == "" && !strings.Contains(baseURL, "localhost") && !strings.Contains(baseURL, "127.0.0.1") {
-		return nil, errors.New("API Key not configured. Please click ⚙ Config to configure your AI API Key (DeepSeek, OpenAI, SiliconFlow, or Ollama)")
+		return nil, errors.New("API Key not configured. Please set your AI API key in Settings ▸ Provider (DeepSeek, OpenAI, SiliconFlow, or Ollama)")
 	}
 	model := cfg.Model
 	if model == "" {
@@ -143,7 +146,36 @@ func newCompleter(cfg Settings) (*completer, error) {
 			model = "gpt-4o-mini"
 		}
 	}
-	return &completer{url: baseURL + "/chat/completions", key: cfg.APIKey, model: model}, nil
+	prompt := cfg.Prompt
+	if prompt == "" {
+		prompt = DefaultPrompt
+	}
+	return &completer{url: baseURL + "/chat/completions", key: cfg.APIKey, model: model, prompt: prompt}, nil
+}
+
+// userPrompt fills the instruction's variables and puts the transcript after
+// it, unless the instruction already says where the transcript goes.
+func (c *completer) userPrompt(mediaName, transcriptText, language string) string {
+	template := c.prompt
+	if !strings.Contains(template, "{transcript}") {
+		template += "\n\n{transcript}"
+	}
+	template = strings.ReplaceAll(template, "{language}", languageName(language))
+	body := fmt.Sprintf("Title: %s\n\nTranscript with timestamps:\n%s", mediaName, transcriptText)
+	return strings.ReplaceAll(template, "{transcript}", body)
+}
+
+// languageName turns the transcript's language code into the word a prompt
+// can use; nothing known means the model keeps the original language.
+func languageName(code string) string {
+	names := map[string]string{
+		"en": "English", "zh": "Chinese", "ja": "Japanese", "ko": "Korean",
+		"yue": "Cantonese", "es": "Spanish", "fr": "French", "de": "German",
+	}
+	if name, ok := names[code]; ok {
+		return name
+	}
+	return "the language of the transcript"
 }
 
 // chat asks the model one question and returns its text.
@@ -217,10 +249,6 @@ Output ONLY valid JSON, without markdown fences, containing:
   "key_points": ["The main takeaways of the whole recording, without repetition"],
   "action_items": ["Every action item or to-do the parts mention"]
 }`
-
-func summaryUserPrompt(mediaName, transcriptText string) string {
-	return fmt.Sprintf("Title: %s\n\nTranscript with timestamps:\n%s\n\nProduce the structured JSON summary.", mediaName, transcriptText)
-}
 
 // rollupUserPrompt asks for the one summary of many parts, from what each part
 // said, which is far shorter than the transcript it came from.

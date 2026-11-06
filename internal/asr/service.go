@@ -27,11 +27,12 @@ var LiveEvent = mygo.NewEvent[LiveSubtitle]("transcript:live")
 
 // Service manages speech recognition and transcripts.
 type Service struct {
-	mu     sync.Mutex
-	db     *sql.DB
-	lib    *library.Service
-	models *models.Manager
-	jobs   *jobs.Service
+	mu        sync.Mutex
+	db        *sql.DB
+	lib       *library.Service
+	models    *models.Manager
+	jobs      *jobs.Service
+	speakerMu sync.Mutex
 }
 
 // NewService creates a transcription service.
@@ -71,7 +72,7 @@ func (s *Service) Get(mediaID int64) (Transcript, error) {
 		return Transcript{}, err
 	}
 
-	rows, err := db.Query(`SELECT id, idx, start_ms, end_ms, text FROM segment WHERE transcript_id = ? ORDER BY idx ASC`, tr.ID)
+	rows, err := db.Query(`SELECT id, idx, start_ms, end_ms, text, speaker FROM segment WHERE transcript_id = ? ORDER BY idx ASC`, tr.ID)
 	if err != nil {
 		return Transcript{}, err
 	}
@@ -79,12 +80,16 @@ func (s *Service) Get(mediaID int64) (Transcript, error) {
 
 	for rows.Next() {
 		var seg Segment
-		if err := rows.Scan(&seg.ID, &seg.Idx, &seg.StartMs, &seg.EndMs, &seg.Text); err != nil {
+		if err := rows.Scan(&seg.ID, &seg.Idx, &seg.StartMs, &seg.EndMs, &seg.Text, &seg.Speaker); err != nil {
 			return Transcript{}, err
 		}
 		tr.Segments = append(tr.Segments, seg)
 	}
-	return tr, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Transcript{}, err
+	}
+	tr.SpeakerNames, err = s.speakerNames()
+	return tr, err
 }
 
 // Search searches for segments containing query text.
@@ -98,7 +103,7 @@ func (s *Service) Search(mediaID int64, query string) ([]Segment, error) {
 		tr, err := s.Get(mediaID)
 		return tr.Segments, err
 	}
-	rows, err := db.Query(`SELECT s.id, s.idx, s.start_ms, s.end_ms, s.text
+	rows, err := db.Query(`SELECT s.id, s.idx, s.start_ms, s.end_ms, s.text, s.speaker
 		FROM segment s
 		JOIN transcript t ON s.transcript_id = t.id
 		WHERE t.media_id = ? AND s.text LIKE ?
@@ -111,7 +116,7 @@ func (s *Service) Search(mediaID int64, query string) ([]Segment, error) {
 	var list []Segment
 	for rows.Next() {
 		var seg Segment
-		if err := rows.Scan(&seg.ID, &seg.Idx, &seg.StartMs, &seg.EndMs, &seg.Text); err != nil {
+		if err := rows.Scan(&seg.ID, &seg.Idx, &seg.StartMs, &seg.EndMs, &seg.Text, &seg.Speaker); err != nil {
 			return nil, err
 		}
 		list = append(list, seg)
@@ -198,6 +203,10 @@ func (s *Service) recognize(ctx context.Context, r recognition, progress func(fl
 	if err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
 	}
+	segments, err = s.assignSpeakers(tmpWav, segments)
+	if err != nil {
+		return s.endFailed(r.mediaID, ctx, err)
+	}
 	progress(0.9)
 	if err := s.saveTranscript(r.mediaID, segments); err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
@@ -255,14 +264,14 @@ func (s *Service) saveTranscript(mediaID int64, segments []Segment) error {
 		return err
 	}
 
-	stmt, err := tx.Prepare(`INSERT INTO segment (transcript_id, idx, start_ms, end_ms, text) VALUES (?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT INTO segment (transcript_id, idx, start_ms, end_ms, text, speaker) VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
 	for i, seg := range segments {
-		if _, err := stmt.Exec(trID, i+1, seg.StartMs, seg.EndMs, seg.Text); err != nil {
+		if _, err := stmt.Exec(trID, i+1, seg.StartMs, seg.EndMs, seg.Text, seg.Speaker); err != nil {
 			return err
 		}
 	}

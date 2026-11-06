@@ -25,6 +25,12 @@ typedef void *shim_lib;
 #include "sherpa_c_api_v2.0.1.h"
 
 typedef struct {
+  float start;
+  float end;
+  int32_t speaker;
+} OttrDiarizationSegment;
+
+typedef struct {
   const char *(*version)(void);
 
   const SherpaOnnxOnlineRecognizer *(*online_create)(
@@ -61,6 +67,34 @@ typedef struct {
   const SherpaOnnxOfflineRecognizerResult *(*offline_stream_result)(
       const SherpaOnnxOfflineStream *);
   void (*offline_result_destroy)(const SherpaOnnxOfflineRecognizerResult *);
+
+  const SherpaOnnxOfflineSpeakerDiarization *(*diarization_create)(
+      const SherpaOnnxOfflineSpeakerDiarizationConfig *);
+  void (*diarization_destroy)(const SherpaOnnxOfflineSpeakerDiarization *);
+  const SherpaOnnxOfflineSpeakerDiarizationResult *(*diarization_process)(
+      const SherpaOnnxOfflineSpeakerDiarization *, const float *, int32_t);
+  int32_t (*diarization_num_speakers)(
+      const SherpaOnnxOfflineSpeakerDiarizationResult *);
+  int32_t (*diarization_num_segments)(
+      const SherpaOnnxOfflineSpeakerDiarizationResult *);
+  const SherpaOnnxOfflineSpeakerDiarizationSegment *(*diarization_sorted)(
+      const SherpaOnnxOfflineSpeakerDiarizationResult *);
+  void (*diarization_destroy_result)(
+      const SherpaOnnxOfflineSpeakerDiarizationResult *);
+  void (*diarization_destroy_segments)(
+      const SherpaOnnxOfflineSpeakerDiarizationSegment *);
+
+  const SherpaOnnxSpeakerEmbeddingExtractor *(*embedding_create)(
+      const SherpaOnnxSpeakerEmbeddingExtractorConfig *);
+  void (*embedding_destroy)(const SherpaOnnxSpeakerEmbeddingExtractor *);
+  int32_t (*embedding_dim)(const SherpaOnnxSpeakerEmbeddingExtractor *);
+  const SherpaOnnxOnlineStream *(*embedding_stream)(
+      const SherpaOnnxSpeakerEmbeddingExtractor *);
+  int32_t (*embedding_ready)(const SherpaOnnxSpeakerEmbeddingExtractor *,
+                             const SherpaOnnxOnlineStream *);
+  const float *(*embedding_compute)(const SherpaOnnxSpeakerEmbeddingExtractor *,
+                                    const SherpaOnnxOnlineStream *);
+  void (*embedding_free)(const float *);
 
 } api_t;
 
@@ -149,6 +183,21 @@ const api_t *sherpa_api_load(const char *path) {
   RESOLVE(offline_stream_decode, "SherpaOnnxDecodeOfflineStream");
   RESOLVE(offline_stream_result, "SherpaOnnxGetOfflineStreamResult");
   RESOLVE(offline_result_destroy, "SherpaOnnxDestroyOfflineRecognizerResult");
+  RESOLVE(diarization_create, "SherpaOnnxCreateOfflineSpeakerDiarization");
+  RESOLVE(diarization_destroy, "SherpaOnnxDestroyOfflineSpeakerDiarization");
+  RESOLVE(diarization_process, "SherpaOnnxOfflineSpeakerDiarizationProcess");
+  RESOLVE(diarization_num_speakers, "SherpaOnnxOfflineSpeakerDiarizationResultGetNumSpeakers");
+  RESOLVE(diarization_num_segments, "SherpaOnnxOfflineSpeakerDiarizationResultGetNumSegments");
+  RESOLVE(diarization_sorted, "SherpaOnnxOfflineSpeakerDiarizationResultSortByStartTime");
+  RESOLVE(diarization_destroy_result, "SherpaOnnxOfflineSpeakerDiarizationDestroyResult");
+  RESOLVE(diarization_destroy_segments, "SherpaOnnxOfflineSpeakerDiarizationDestroySegment");
+  RESOLVE(embedding_create, "SherpaOnnxCreateSpeakerEmbeddingExtractor");
+  RESOLVE(embedding_destroy, "SherpaOnnxDestroySpeakerEmbeddingExtractor");
+  RESOLVE(embedding_dim, "SherpaOnnxSpeakerEmbeddingExtractorDim");
+  RESOLVE(embedding_stream, "SherpaOnnxSpeakerEmbeddingExtractorCreateStream");
+  RESOLVE(embedding_ready, "SherpaOnnxSpeakerEmbeddingExtractorIsReady");
+  RESOLVE(embedding_compute, "SherpaOnnxSpeakerEmbeddingExtractorComputeEmbedding");
+  RESOLVE(embedding_free, "SherpaOnnxSpeakerEmbeddingExtractorDestroyEmbedding");
 #undef RESOLVE
   g_api = a;
   return g_api;
@@ -300,22 +349,50 @@ int32_t sherpa_online_result(const void *r, const void *s, char *text,
 
 // ------------------------------------------------------------------ offline
 
-const void *sherpa_offline_create(const char *tokens, const char *encoder,
-                                  const char *decoder, const char *joiner,
+const void *sherpa_offline_create(int32_t kind, const char **p,
                                   int32_t threads) {
   SherpaOnnxOfflineRecognizerConfig c;
-  if (!g_api) return NULL;
+  if (!g_api || !p) return NULL;
   memset(&c, 0, sizeof(c));
   c.feat_config.sample_rate = 16000;
   c.feat_config.feature_dim = 80;
-  c.model_config.transducer.encoder = encoder;
-  c.model_config.transducer.decoder = decoder;
-  c.model_config.transducer.joiner = joiner;
-  c.model_config.tokens = tokens;
   c.model_config.num_threads = threads;
   c.model_config.provider = "cpu";
   c.decoding_method = "greedy_search";
   c.max_active_paths = 4;
+  switch (kind) {
+  case 0:
+    c.model_config.tokens = p[0];
+    c.model_config.sense_voice.model = p[1];
+    c.model_config.sense_voice.language = "auto";
+    c.model_config.sense_voice.use_itn = 1;
+    break;
+  case 1:
+    c.model_config.funasr_nano.encoder_adaptor = p[2];
+    c.model_config.funasr_nano.llm = p[3];
+    c.model_config.funasr_nano.embedding = p[4];
+    c.model_config.funasr_nano.tokenizer = p[5];
+    c.model_config.funasr_nano.max_new_tokens = 256;
+    c.model_config.funasr_nano.temperature = 0.2f;
+    c.model_config.funasr_nano.top_p = 0.8f;
+    c.model_config.funasr_nano.seed = 42;
+    c.model_config.funasr_nano.language = "auto";
+    c.model_config.funasr_nano.itn = 1;
+    break;
+  case 2:
+    c.model_config.qwen3_asr.conv_frontend = p[6];
+    c.model_config.qwen3_asr.encoder = p[7];
+    c.model_config.qwen3_asr.decoder = p[8];
+    c.model_config.qwen3_asr.tokenizer = p[5];
+    c.model_config.qwen3_asr.max_total_len = 32768;
+    c.model_config.qwen3_asr.max_new_tokens = 256;
+    c.model_config.qwen3_asr.temperature = 0.2f;
+    c.model_config.qwen3_asr.top_p = 0.8f;
+    c.model_config.qwen3_asr.seed = 42;
+    break;
+  default:
+    return NULL;
+  }
   return g_api->offline_create(&c);
 }
 
@@ -352,6 +429,97 @@ int32_t sherpa_offline_result(const void *s, char *text, int32_t text_len,
                      text, text_len, tokens, stamps, count);
   g_api->offline_result_destroy(res);
   return need;
+}
+
+// sherpa_diarization_process returns a malloc'd, start-time-sorted segment
+// array. The caller reads it once and frees it with sherpa_free.
+const void *sherpa_diarization_process(const char *segmentation,
+                                       const char *embedding,
+                                       const float *samples, int32_t n,
+                                       int32_t *out_count) {
+  SherpaOnnxOfflineSpeakerDiarizationConfig c;
+  const SherpaOnnxOfflineSpeakerDiarization *sd;
+  const SherpaOnnxOfflineSpeakerDiarizationResult *res;
+  const SherpaOnnxOfflineSpeakerDiarizationSegment *segments;
+  OttrDiarizationSegment *out;
+  int32_t i, count;
+  if (out_count) *out_count = 0;
+  if (!g_api || !samples || n <= 0) return NULL;
+  memset(&c, 0, sizeof(c));
+  c.segmentation.pyannote.model = segmentation;
+  c.segmentation.num_threads = 2;
+  c.segmentation.provider = "cpu";
+  c.embedding.model = embedding;
+  c.embedding.num_threads = 2;
+  c.embedding.provider = "cpu";
+  c.clustering.num_clusters = 0;
+  c.clustering.threshold = 0.5f;
+  c.min_duration_on = 0.3f;
+  c.min_duration_off = 0.5f;
+  sd = g_api->diarization_create(&c);
+  if (!sd) return NULL;
+  res = g_api->diarization_process(sd, samples, n);
+  if (!res) {
+    g_api->diarization_destroy(sd);
+    return NULL;
+  }
+  count = g_api->diarization_num_segments(res);
+  segments = g_api->diarization_sorted(res);
+  out = (OttrDiarizationSegment *)malloc(sizeof(OttrDiarizationSegment) * (size_t)(count > 0 ? count : 1));
+  if (out) {
+    for (i = 0; i < count; i++) {
+      out[i].start = segments[i].start;
+      out[i].end = segments[i].end;
+      out[i].speaker = segments[i].speaker;
+    }
+  }
+  if (segments) g_api->diarization_destroy_segments(segments);
+  if (out_count) *out_count = out ? count : 0;
+  g_api->diarization_destroy_result(res);
+  g_api->diarization_destroy(sd);
+  return out;
+}
+
+const float *sherpa_speaker_embedding(const char *model,
+                                      const float *samples, int32_t n,
+                                      int32_t *out_dim) {
+  SherpaOnnxSpeakerEmbeddingExtractorConfig c;
+  const SherpaOnnxSpeakerEmbeddingExtractor *ex;
+  const SherpaOnnxOnlineStream *stream;
+  const float *computed;
+  float *out;
+  int32_t dim;
+  if (out_dim) *out_dim = 0;
+  if (!g_api || !samples || n <= 0) return NULL;
+  memset(&c, 0, sizeof(c));
+  c.model = model;
+  c.num_threads = 2;
+  c.provider = "cpu";
+  ex = g_api->embedding_create(&c);
+  if (!ex) return NULL;
+  stream = g_api->embedding_stream(ex);
+  if (!stream) {
+    g_api->embedding_destroy(ex);
+    return NULL;
+  }
+  g_api->online_stream_accept(stream, 16000, samples, n);
+  g_api->online_stream_finish(stream);
+  computed = NULL;
+  if (g_api->embedding_ready(ex, stream))
+    computed = g_api->embedding_compute(ex, stream);
+  dim = g_api->embedding_dim(ex);
+  out = NULL;
+  if (computed && dim > 0) {
+    out = (float *)malloc(sizeof(float) * (size_t)dim);
+    if (out) {
+      memcpy(out, computed, sizeof(float) * (size_t)dim);
+      if (out_dim) *out_dim = dim;
+    }
+  }
+  if (computed) g_api->embedding_free(computed);
+  g_api->online_stream_destroy(stream);
+  g_api->embedding_destroy(ex);
+  return out;
 }
 
 void sherpa_free(void *p) { free(p); }

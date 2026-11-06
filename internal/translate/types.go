@@ -27,4 +27,11 @@ type Settings struct {
 	BaseURL  string `json:"baseUrl"`
 	APIKey   string `json:"apiKey"`
 	Model    string `json:"model"`
+	// Prompt is the instruction the AI translator starts from; {source} and
+	// {target} are filled in. Empty means DefaultPrompt.
+	Prompt string `json:"prompt"`
 }
+
+// DefaultPrompt is the translation instruction Ottr ships with.
+const DefaultPrompt = "Translate the following subtitles from {source} to {target}. " +
+	"Keep the line numbers and return only the translated lines."

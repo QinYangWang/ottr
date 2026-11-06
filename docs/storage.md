@@ -32,7 +32,8 @@ state and is retried on next start.
 `settings` (`key TEXT PRIMARY KEY, value TEXT`) holds what the user configured:
 `llm_*` for summaries, `trans_*` for translation, `asr_model_dir` for the
 chosen speech recognition model, `ui_theme` for the appearance, and
-`ffmpeg_path` for an FFmpeg the user pointed at. It was created lazily by the two services that
+`ffmpeg_path` for an FFmpeg the user pointed at. The `*_prompt` keys hold the
+instruction templates Settings ▸ Provider shows. It was created lazily by the two services that
 wrote it; `0006` makes it the migration chain's business, so a schema change
 lives in one file.
 

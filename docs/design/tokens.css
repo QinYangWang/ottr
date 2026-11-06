@@ -1,0 +1,96 @@
+/* Ottr UI tokens — Interfere design system
+ * Source: https://design.interfere.com/colors, /radius, /shadows
+ * Hex alpha uses #RRGGBBAA. Import this file first; components.css builds on it. */
+
+:root,
+.light,
+[data-theme="light"] {
+  --color-page: #ffffff;
+  --color-shell: oklch(97.3% 0 0);
+  --color-container: #ffffff;
+  --color-card: #00000006;
+  --color-sunken: #0000000d;
+  --color-modal: #ffffff;
+  --color-component: #0000000f;
+  --color-component-hover: #00000017;
+  --color-component-active: #0000001f;
+  --color-primary-foreground: #000000df;
+  --color-secondary-foreground: #0000009b;
+  --color-tertiary-foreground: #00000072;
+  --color-disabled-foreground: #00000044;
+  --color-brand-solid: #0090ff;
+  --color-brand-solid-hover: #0588f0;
+  --color-brand-solid-active: #0d74ce;
+  --color-brand-subtle: #008ff519;
+  --color-brand-foreground: #0090ff;
+  --color-on-brand-solid-foreground: #ffffff;
+  --color-danger-solid: #e54d2e;
+  --color-danger-solid-hover: #dd4425;
+  --color-danger-foreground: #d72400;
+  --color-positive-solid: #30a46c;
+  --color-positive-foreground: #008647;
+  --color-warning-solid: #f76b15;
+  --color-warning-foreground: #cc4e00;
+  --color-border-default: #0000000f;
+  --color-border-subtle: #00000006;
+  --color-border-strong: #00000026;
+  --color-brand-border: #0084e6a1;
+  --color-overlay: #0a0d14aa;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
+  --radius-full: 9999px;
+
+  --shadow-border: 0 0 0 1px #00000012;
+  --shadow-default: 0 0 0 .5px #0000 inset, 0 0 0 .5px #0000000f, 0 1px 1px -1px #0000001a, 0 1px 2px 0 #0000000d;
+  --shadow-large: 0 0 0 .5px #0000000f, 0 2px 3px -2px #0000000f, 0 3px 12px -4px #0000001a, 0 4px 16px -8px #0000000d;
+  --shadow-extra-large: 0 0 0 .5px #0000 inset, 0 0 0 .5px #0000000f, 0 8px 40px 0 #0000000d, 0 12px 32px -16px #00000026;
+
+  --font-sans: Inter, "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.dark,
+[data-theme="dark"] {
+  --color-page: #000000;
+  --color-shell: #000000;
+  --color-container: #111111;
+  --color-card: #ffffff09;
+  --color-sunken: #00000066;
+  --color-modal: #191919;
+  --color-component: #ffffff12;
+  --color-component-hover: #ffffff1b;
+  --color-component-active: #ffffff22;
+  --color-primary-foreground: #ffffffed;
+  --color-secondary-foreground: #ffffffaf;
+  --color-tertiary-foreground: #ffffff64;
+  --color-disabled-foreground: #ffffff55;
+  --color-brand-solid: #0090ff;
+  --color-brand-solid-hover: #3b9eff;
+  --color-brand-solid-active: #70b8ff;
+  --color-brand-subtle: #0077ff3a;
+  --color-brand-foreground: #3b9eff;
+  --color-on-brand-solid-foreground: #ffffff;
+  --color-danger-solid: #e54d2e;
+  --color-danger-solid-hover: #ec6142;
+  --color-danger-foreground: #ff977d;
+  --color-positive-solid: #30a46c;
+  --color-positive-foreground: #43fea4;
+  --color-warning-solid: #f76b15;
+  --color-warning-foreground: #ffa057;
+  --color-border-default: #ffffff12;
+  --color-border-subtle: #ffffff09;
+  --color-border-strong: #ffffff2c;
+  --color-brand-border: #0090ff;
+  --color-overlay: #0a0d14cc;
+
+  --shadow-border: 0 0 0 1px #ffffff12;
+  --shadow-default: 0 0 0 .5px #ffffff12 inset, 0 0 0 .5px #0000, 0 1px 1px -1px #0000, 0 1px 2px 0 #0000;
+  --shadow-large: 0 0 0 1px #ffffff24, 0 2px 3px -2px #00000026, 0 3px 8px -2px #0006, 0 4px 12px -4px #00000080;
+  --shadow-extra-large: 0 0 0 .5px #ffffff12 inset, 0 0 0 .5px #0000, 0 8px 40px 0 #0000000d, 0 12px 32px -16px #00000026;
+}

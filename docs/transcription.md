@@ -1,7 +1,8 @@
 # Transcription
 
-Local, offline speech recognition using sherpa-onnx streaming and offline
-transducer models, called **in process** through its C API. The library is loaded at run time, so
+Local speech recognition using SenseVoice, FunASR Nano and Qwen3 ASR, called
+**in process** through sherpa-onnx's C API. Other model families are not
+accepted. The library is loaded at run time, so
 Ottr starts and works without it; only transcription needs it.
 
 ## Decision: the C API through cgo, not a process
@@ -15,11 +16,8 @@ recognizer. That is gone:
   entry points once; the configuration structs come from the vendored header
   `native/sherpa_c_api_v2.0.1.h`, so their layout is sherpa-onnx's own, never
   guessed.
-- Live text and streaming-model batch jobs use the online recognizer. Offline
-  models such as ReazonSpeech use the offline recognizer in ten-second chunks,
-  which bounds attention memory and merges timestamps onto the file timeline.
-  The same offline model also works for live text: four-second chunks return
-  final lines without entering the incompatible online API.
+- File transcription uses the selected offline recognizer in ten-second chunks.
+  Live text uses the same model in four-second chunks, returning final lines.
 - A `CGO_ENABLED=0` build compiles, does everything except ASR, and answers
   “native ASR is not available in this build”. There is no executable fallback.
 - A packaged app carries the library in its own resources, so an install needs
@@ -76,6 +74,19 @@ to transcripts and segments through foreign keys.
 Re-running transcription replaces the previous transcript for that media inside
 a single transaction, so a partial failure never leaves a half-written result.
 
+## Speakers
+
+`segment.speaker` is an id into `speaker`, the global library of voices. The
+offline pass (`assignSpeakers` in `internal/asr/speaker.go`) runs pyannote
+segmentation and an eres2net embedding through the same C API, assigns each
+segment the diarization cluster it overlaps most, then matches each cluster's
+embedding against the library (cosine, `> 0.65`) and inserts a new
+`Speaker N` row when nothing matches. Names are looked up by id, so renaming
+one in Settings ▸ Speakers (or from a transcript row) changes every recording.
+
+Without the diarization models every segment keeps speaker `0`, and the
+transcript shows a single `Speaker 1`.
+
 ## Language
 
 `transcript.language` is what translation takes as its source, so it is
@@ -103,7 +114,7 @@ bar is coarse and honest rather than invented.
 
 An import runs the same work through `TranscribeNow`, inside its own
 `jobs.KindImport` job, so one progress bar and one Cancel cover the whole import
-chain. See [UI](ui.md#main-window-and-library).
+chain. See [UI](design/README.md).
 
 Errors mark the row `error` and surface the real reason (missing native runtime,
 missing model, FFmpeg failure, sherpa-onnx refusing the model) in the tab that

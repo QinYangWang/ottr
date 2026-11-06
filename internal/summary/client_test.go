@@ -129,3 +129,22 @@ func TestGenerateSummaryRequiresAPIKey(t *testing.T) {
 		t.Fatalf("expected API Key error, got: %v", err)
 	}
 }
+
+// The instruction shown in Settings fills its variables, and a template that
+// asks for {transcript} does not get the transcript twice.
+func TestUserPromptFillsVariables(t *testing.T) {
+	c := &completer{prompt: "Summarize in {language}."}
+	got := c.userPrompt("Demo", "1. hello", "zh")
+	if !strings.Contains(got, "Summarize in Chinese.") {
+		t.Errorf("language variable not filled: %q", got)
+	}
+	if !strings.Contains(got, "1. hello") || strings.Count(got, "1. hello") != 1 {
+		t.Errorf("transcript missing or doubled: %q", got)
+	}
+
+	c = &completer{prompt: "Only this: {transcript}"}
+	got = c.userPrompt("Demo", "1. hello", "en")
+	if strings.Count(got, "1. hello") != 1 {
+		t.Errorf("transcript doubled: %q", got)
+	}
+}

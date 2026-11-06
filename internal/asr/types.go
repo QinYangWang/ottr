@@ -7,15 +7,17 @@ type Segment struct {
 	StartMs int64  `json:"startMs"`
 	EndMs   int64  `json:"endMs"`
 	Text    string `json:"text"`
+	Speaker int    `json:"speaker"`
 }
 
 // Transcript contains all segments for a media file.
 type Transcript struct {
-	ID        int64     `json:"id"`
-	MediaID   int64     `json:"mediaId"`
-	Language  string    `json:"language"`
-	CreatedAt string    `json:"createdAt"`
-	Segments  []Segment `json:"segments"`
+	ID           int64          `json:"id"`
+	MediaID      int64          `json:"mediaId"`
+	Language     string         `json:"language"`
+	CreatedAt    string         `json:"createdAt"`
+	Segments     []Segment      `json:"segments"`
+	SpeakerNames map[int]string `json:"speakerNames,omitempty"`
 }
 
 // LiveSubtitle is one revision of the line being spoken while a recording runs.

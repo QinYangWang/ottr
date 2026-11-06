@@ -7,10 +7,9 @@ existing FFmpeg invoked in process-bound pipes, never the system player.
 Volume, native demux/decode and the A/V-clock work below remain future phases.
 
 The interaction target is the
-[three-window HTML prototype](prototypes/native-ui.html): compact recorder,
-draggable recording strip, a card-grid Library with an item page, and separate
-Settings. The player below belongs on that Library item page, not in a
-separate recording-details window.
+[UI design reference](design/README.md): compact recorder, a card-grid Library
+with an item page, and separate Settings. The player belongs on that Library
+item page, not in a separate recording-details window.
 
 ## Scope
 
@@ -58,14 +57,14 @@ player.Session                  audio.Output
    └──────────── audio/video clock ───┘
                    │
                    ▼ (UI thread only)
-          ui/native player pane + ui.Bitmap
+          internal/native player pane + ui.Bitmap
 ```
 
 Three packages have separate responsibilities:
 
 - `internal/media`: native demux/decode and metadata. No player or UI state.
 - `internal/player`: transport, queues, seeking, A/V sync and audio output.
-- `ui/native`: controls, bitmap presentation and mapping the selected media to
+- `internal/native`: controls, bitmap presentation and mapping the selected media to
   one player session.
 
 Do not import `internal/capture` from the player. If capture and playback share
@@ -219,7 +218,7 @@ internal/player/
     audio_darwin.go       AudioUnit/AVAudioEngine output
     audio_linux.go        PipeWire/PulseAudio output
 
-ui/native/
+internal/native/
     player.go             surface, transport and bitmap presentation
 ```
 

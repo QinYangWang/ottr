@@ -12,15 +12,7 @@ import (
 	"ottr/internal/models"
 )
 
-// batchSamples is how much audio one feed takes. Feeding in pieces lets a
-// cancelled job stop at the next one instead of waiting out the whole file.
-const batchSamples = 16000 // 1 s
-
-// recognizeWav runs a 16 kHz mono 16-bit WAV file through the streaming
-// recognizer and returns its subtitle segments on the file's timeline.
-//
-// The whole file is one utterance chain: an endpoint inside it ends an
-// utterance and starts the next, exactly as when the audio was live.
+// recognizeWav runs a WAV file through the selected offline model family.
 func recognizeWav(ctx context.Context, mdl models.ASRModel, wavPath string) ([]Segment, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -32,47 +24,15 @@ func recognizeWav(ctx context.Context, mdl models.ASRModel, wavPath string) ([]S
 	if rate <= 0 {
 		return nil, fmt.Errorf("read %s: no sample rate", wavPath)
 	}
-	if !mdl.Streaming {
-		return recognizeOffline(ctx, mdl, samples, rate)
-	}
-	st, err := newStreamer(mdl)
-	if err != nil {
-		return nil, err
-	}
-	defer st.close()
-
-	conv := NewConverter(rate, 1)
-	var segments []Segment
-	flush := func() {
-		segments = append(segments, st.result().segments...)
-	}
-	for i := 0; i < len(samples); i += batchSamples {
-		if err := ctx.Err(); err != nil {
-			return nil, err // nothing is freed under an active native call
-		}
-		end := min(i+batchSamples, len(samples))
-		st.feed(conv.Feed(samples[i:end]))
-		if st.endpoint() {
-			flush()
-			st.reset()
-		}
-	}
-	st.feed(conv.Flush())
-	st.finish()
-	flush()
-	for i := range segments {
-		segments[i].Idx = i + 1
-	}
-	return segments, nil
+	return recognizeOffline(ctx, mdl, samples, rate)
 }
 
-// recognizeOffline uses the non-streaming API required by offline transducer
-// models such as ReazonSpeech. It never sends those models to the online API.
+// recognizeOffline uses the selected model family's offline recognizer.
 func recognizeOffline(ctx context.Context, mdl models.ASRModel, samples []float32, rate int) ([]Segment, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	rec, err := native.NewOfflineRecognizer(mdl.Tokens, mdl.Encoder, mdl.Decoder, mdl.Joiner, 2)
+	rec, err := native.NewOfflineRecognizer(mdl, 2)
 	if err != nil {
 		return nil, fmt.Errorf("sherpa-onnx could not load the offline model in %s: %w", mdl.Dir, err)
 	}
@@ -219,7 +179,19 @@ func groupTokens(tokens []string, timestamps []float64, shortGapMs int64) []Segm
 		}
 	}
 	flush(prevTime + 0.3)
-	return mergeShortSegments(segments, shortGapMs)
+	return normalizeSegments(mergeShortSegments(segments, shortGapMs))
+}
+
+func normalizeSegments(segments []Segment) []Segment {
+	for i := range segments {
+		if i > 0 && segments[i].StartMs < segments[i-1].EndMs {
+			segments[i].StartMs = segments[i-1].EndMs
+		}
+		if segments[i].EndMs <= segments[i].StartMs {
+			segments[i].EndMs = segments[i].StartMs + 200
+		}
+	}
+	return segments
 }
 
 // mergeShortSegments keeps isolated characters and other tiny fragments out

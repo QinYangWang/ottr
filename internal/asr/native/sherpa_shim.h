@@ -46,8 +46,10 @@ int32_t sherpa_online_result(const void *recognizer, const void *stream,
                              float **stamps, int32_t *count);
 
 // --- offline recognition, used for non-streaming model batch jobs
-const void *sherpa_offline_create(const char *tokens, const char *encoder,
-                                  const char *decoder, const char *joiner,
+// kind: 0 SenseVoice, 1 FunASR Nano, 2 Qwen3 ASR. p contains tokens,
+// model, encoder_adaptor, llm, embedding, tokenizer, conv_frontend,
+// encoder and decoder, with NULL/empty entries for the other families.
+const void *sherpa_offline_create(int32_t kind, const char **p,
                                   int32_t num_threads);
 void sherpa_offline_destroy(const void *recognizer);
 const void *sherpa_offline_stream_create(const void *recognizer);
@@ -58,6 +60,21 @@ void sherpa_offline_stream_decode(const void *recognizer, const void *stream);
 int32_t sherpa_offline_result(const void *stream, char *text,
                               int32_t text_len, char ***tokens, float **stamps,
                               int32_t *count);
+
+typedef struct OttrDiarizationSegment {
+  float start;
+  float end;
+  int32_t speaker;
+} OttrDiarizationSegment;
+
+const void *sherpa_diarization_process(const char *segmentation,
+                                       const char *embedding,
+                                       const float *samples, int32_t n,
+                                       int32_t *out_count);
+
+const float *sherpa_speaker_embedding(const char *model,
+                                      const float *samples, int32_t n,
+                                      int32_t *out_dim);
 
 void sherpa_free(void *p);
 

@@ -14,8 +14,8 @@ import (
 	"ottr/internal/storage"
 )
 
-// TestVideoTranscribes covers an imported video with the offline ReazonSpeech
-// model. OTTR_TEST_VIDEO opts into a real speech file; no fixture is bundled.
+// TestVideoTranscribes covers an imported video with a supported offline model.
+// OTTR_TEST_VIDEO and OTTR_TEST_OFFLINE_MODEL opt into real local fixtures.
 func TestVideoTranscribes(t *testing.T) {
 	video := os.Getenv("OTTR_TEST_VIDEO")
 	if video == "" {
@@ -23,7 +23,7 @@ func TestVideoTranscribes(t *testing.T) {
 	}
 	modelDir := os.Getenv("OTTR_TEST_OFFLINE_MODEL")
 	if modelDir == "" {
-		modelDir = filepath.Join(os.Getenv("APPDATA"), "Ottr", "models", "sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01")
+		t.Skip("set OTTR_TEST_OFFLINE_MODEL to a supported model directory")
 	}
 	if _, err := os.Stat(modelDir); err != nil {
 		t.Skipf("no offline Japanese model: %v", err)

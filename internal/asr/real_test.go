@@ -5,8 +5,10 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"ottr/internal/asr/native"
 	"ottr/internal/models"
 )
 
@@ -29,9 +31,15 @@ func realASR(t *testing.T) (*Service, models.ASRModel, string) {
 	if err != nil {
 		t.Skipf("no ASR model: %v", err)
 	}
-	wav := filepath.Join(mdl.Dir, "test_wavs", "0.wav")
+	wav := os.Getenv("OTTR_TEST_WAV")
+	if wav == "" {
+		wav = filepath.Join(mdl.Dir, "test_wavs", "0.wav")
+	}
 	if _, err := os.Stat(wav); err != nil {
-		t.Skipf("the model has no test_wavs/0.wav: %v", err)
+		wav = filepath.Join(mdl.Dir, "test_wavs", "ja.wav")
+	}
+	if _, err := os.Stat(wav); err != nil {
+		t.Skipf("the model has no test_wavs/0.wav or ja.wav: %v", err)
 	}
 	return svc, *mdl, wav
 }
@@ -114,9 +122,12 @@ func TestRealLiveStreamKeepsWordsAcrossPieces(t *testing.T) {
 	if !last.Final || last.Text == "" {
 		t.Fatalf("the last revision is not a final one: %+v", last)
 	}
+	// Offline models finalize four-second chunks, so several utterances are
+	// expected. Join their text before comparing with the file result.
+	var live strings.Builder
 	for _, sub := range subs {
-		if sub.Utterance != last.Utterance {
-			t.Errorf("revision %+v belongs to another utterance than the last", sub)
+		if sub.Final {
+			live.WriteString(sub.Text)
 		}
 	}
 
@@ -130,9 +141,53 @@ func TestRealLiveStreamKeepsWordsAcrossPieces(t *testing.T) {
 	for _, seg := range segments {
 		batch += seg.Text
 	}
-	if batch != last.Text {
-		t.Logf("live text %q, batch text %q", last.Text, batch)
+	if batch != live.String() {
+		t.Logf("live text %q, batch text %q", live.String(), batch)
 	}
+}
+
+func TestRealSpeakerEmbedding(t *testing.T) {
+	_, _, wav := realASR(t)
+	samples, _, err := readWav(wav)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := filepath.Join(os.Getenv("APPDATA"), "Ottr", "diarization", "eres2net.onnx")
+	if _, err := os.Stat(model); err != nil {
+		t.Skip(err)
+	}
+	vector, err := native.SpeakerEmbedding(model, samples)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vector) == 0 || math.Abs(cosine(vector, vector)-1) > 0.001 {
+		t.Fatalf("invalid speaker embedding: %d values", len(vector))
+	}
+}
+
+func TestRealSpeakerDiarization(t *testing.T) {
+	_, _, wav := realASR(t)
+	samples, _, err := readWav(wav)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(os.Getenv("APPDATA"), "Ottr", "diarization")
+	segmentation := filepath.Join(root, "pyannote", "model.onnx")
+	embedding := filepath.Join(root, "eres2net.onnx")
+	if _, err := os.Stat(segmentation); err != nil {
+		t.Skip(err)
+	}
+	if _, err := os.Stat(embedding); err != nil {
+		t.Skip(err)
+	}
+	ranges, err := native.Diarize(segmentation, embedding, samples)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ranges) == 0 {
+		t.Fatal("no speaker ranges")
+	}
+	t.Logf("%d ranges: %+v", len(ranges), ranges)
 }
 
 // Creating, feeding and closing a stream many times must not crash, warn or

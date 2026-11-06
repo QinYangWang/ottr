@@ -17,11 +17,21 @@ resources/                   what a packaged app carries (see resources/README.m
   darwin-arm64/bin/
   linux-amd64/bin/
   models/
-    sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/
+    sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/
+      model.int8.onnx
       tokens.txt
-      encoder-epoch-99-avg-1.int8.onnx
-      decoder-epoch-99-avg-1.int8.onnx
-      joiner-epoch-99-avg-1.int8.onnx
+    sherpa-onnx-funasr-nano-int8-2025-12-30/
+      encoder_adaptor.int8.onnx
+      llm.int8.onnx
+      embedding.int8.onnx
+      Qwen3-0.6B/
+        tokenizer.json
+    <qwen3-asr>/
+      conv_frontend.onnx
+      encoder.onnx
+      decoder.onnx
+      Qwen3-0.6B/
+        tokenizer.json
 ```
 
 `models.Manager` is constructed with `(modelsDir, binDir)` and pointed at those
@@ -164,10 +174,12 @@ version's own binaries link against, so a packaged app is self-contained:
 `%APPDATA%\Ottr\models`, then `<exeDir>/models`, then `./models`) and inspects
 each subdirectory with `inspectASRDir`:
 
-- `tokens.txt` must exist and be non-empty.
-- exactly one `encoder*onnx`, `decoder*onnx`, `joiner*onnx` must be resolvable.
-  For each, `.int8.onnx` is preferred over full-precision `.onnx` (lower memory,
-  faster CPU inference); full precision is the fallback.
+- Only SenseVoice, FunASR Nano and Qwen3 ASR are accepted.
+- SenseVoice needs non-empty `tokens.txt` and `model*.onnx`.
+- FunASR Nano needs `encoder_adaptor*.onnx`, `llm*.onnx`, `embedding*.onnx`
+  and a tokenizer directory.
+- Qwen3 ASR needs `conv_frontend*.onnx`, `encoder*.onnx`, `decoder*.onnx`
+  and a tokenizer directory. `.int8.onnx` is preferred where available.
 - total size is summed for display.
 
 A directory missing any file is skipped with the reason recorded, so the final

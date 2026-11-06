@@ -22,8 +22,14 @@ type Translator interface {
 (`localhost`/`127.0.0.1` bases skip the API-key requirement).
 
 Provider selection and credentials live in the `settings` table under
-`trans_provider`, `trans_base_url`, `trans_api_key`, `trans_model`, and are
-loaded on `Open`.
+`trans_provider`, `trans_base_url`, `trans_api_key`, `trans_model`, and
+`trans_prompt`, and are loaded on `Open`. Settings ▸ Provider writes the same
+base URL, key and model into both translation and summaries; the transcript's
+settings menu still picks between the free service and that AI model.
+
+The prompt template (`trans_prompt`) is the instruction the AI translator
+starts from; `{source}` and `{target}` are filled in and the numbered lines are
+appended to it. `translate.DefaultPrompt` is what **Reset to default** restores.
 
 ### MyMemory behavior
 
@@ -34,10 +40,11 @@ aborts the batch.
 
 ### Custom-LLM behavior
 
-All segments go into a single prompt asking for numbered lines, with
-`temperature: 0.2`. The reply is parsed by `parseNumberedTranslations`, which
-tolerates extra prose. Unparsed slots fall back to the original text so the
-result never contains holes.
+All segments go into one prompt: the instruction template with `{source}` and
+`{target}` filled in, then the numbered lines, with `temperature: 0.2`. The
+reply is parsed by `parseNumberedTranslations`, which tolerates extra prose.
+Unparsed slots fall back to the original text so the result never contains
+holes.
 
 ## Alignment and storage
 

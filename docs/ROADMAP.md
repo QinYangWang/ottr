@@ -23,6 +23,9 @@ What it still does not do:
 - Only the first audio stream is transcribed, so system audio plus microphone
   gives live text from one of them.
 - The live pass is provisional by design: the post-recording pass replaces it.
+Finalized lines are translated into the target language as they arrive, but a line
+still being spoken is not sent until it freezes, and live translations are never
+saved — the stored transcript is translated again after the recording stops.
 
 ---
 
@@ -52,11 +55,11 @@ What it still does not do:
 
 `Library.Import` probes and inserts, then the window runs one `import` job per
 file with audio: `asr.TranscribeNow` (the offline pass a recording gets), and,
-when the `Translate + summarize imports` switch in Settings ▸ Translation is
+when the `Translate + summarize imports` switch in Settings ▸ Provider is
 on, translation into the Translate tab's language and a summary, in that order.
 A file already in that language skips translation rather than spending quota on
 it. One job means one progress bar and one Cancel for the whole chain. See
-[UI](ui.md#main-window-and-library).
+[UI](design/README.md).
 
 What it still does not do:
 
@@ -70,9 +73,9 @@ What it still does not do:
 
 ## 4. Model management UI — `done`
 
-The **Models** section of Settings (Transcription tab) lists `ListModels()`
-with sizes and the reason a folder is unusable, marks the model transcription uses, and switches
-with `Use`; `Open folder` and `Re-check` are there too. The choice is
+The model list lives in the **Transcription** section of Settings: `ListModels()`
+with sizes and the reason a folder is unusable, the model transcription uses marked, and `Use`
+to switch. The choice is
 `settings.asr_model_dir`, read by `Manager.Open` and consumed by
 `FindASRModel`. See [Models](models.md#choosing-a-model).
 
@@ -145,9 +148,11 @@ retry loops that look like bypass attempts.
 
 **Requirement:** installers for the three platforms.
 
-**Current state:** there is no `mygo.json`, no `mygo.config.ts`, and only
-`go build` has been exercised. The native `sherpa-onnx-c-api` library and the
-models are not bundled or located relative to a packaged app.
+**Current state:** `mygo.json` names the bundle and `cmd/setup` fetches the pinned
+`sherpa-onnx` runtime for each target into `resources/<os>-<arch>/bin`, which
+`CGO_ENABLED=1 go tool mygo build` merges in; a hand-built `setup.exe` exists but is not
+part of a release pipeline. There is still no signed installer, no notarization, and no
+decision on bundling models or FFmpeg.
 
 **Notes:** `mygo build` produces `.app`/`.dmg`, `.exe` + NSIS installer, and
 `.deb`. Shipping needs decisions on: whether to bundle FFmpeg, whether to bundle
@@ -172,7 +177,7 @@ silently. `Library.Orphans(dir)` lists the media files in the recordings folder
 that no record refers to, the window shows "N recording files are not in the
 library" under the card grid, and `Add back` (`Library.AddFiles`) or
 `Delete files…` (`Library.DeleteFiles`, behind a modal that names the count)
-acts on them. See [UI](ui.md#main-window-and-library).
+acts on them. See [UI](design/README.md).
 
 What it still does not do:
 
@@ -219,42 +224,34 @@ What it still does not do:
 
 ## 12. Higher-fidelity Windows capture — `partial`
 
-Windows.Graphics.Capture now feeds all capture paths
-([Native capture and media redesign](native-capture.md)): displays and windows
-are captured by Windows itself, covered windows included, with the pointer
-optionally drawn in. What is still missing from the item below is Media
-Foundation encoding and the removal of FFmpeg, which is phase 2 of that
-document.
+Windows.Graphics.Capture now feeds every capture path
+([Native capture and media redesign](native-capture.md)): displays and windows are
+captured by Windows itself, covered windows included, with the pointer optionally drawn
+in. `ddagrab` and `gdigrab` are gone from the Windows backend.
 
-`gdigrab` is GDI-based: it cannot capture hardware-accelerated/exclusive
-fullscreen content (some games, DRM surfaces), and its frame pacing is weaker
-than Desktop Duplication.
-
-Screen, display and window capture now go through FFmpeg's `ddagrab`, which is
-Desktop Duplication, and `gdigrab` remains only the fallback for a desktop or
-display when the session will not lend one out. What is still missing is
-talking to DXGI directly: `Windows.Graphics.Capture` would give per-window
-frames without cropping the desktop, so a covered window would record
-uncovered. That needs WinRT interop or a small native bridge.
+What is still missing is phase 2 of that document: Media Foundation encoding and the
+removal of FFmpeg, so capture still hands raw frames to FFmpeg for muxing.
 
 Related smaller gaps:
-- A window is a crop of the desktop, so anything covering it is recorded too.
-- No 5-minute end-to-end recording has been manually verified (automated tests
-  record ~5–11 s).
+- No 5-minute end-to-end recording has been manually verified (automated tests record
+  ~5–11 s).
+- The Windows backend has no automated coverage for a covered window or a display that
+  changes resolution mid-recording.
 
 ---
 
-## 13. In-window playback — `open`
+## 13. In-window playback — `done`
 
-The implementation design is [In-window native playback](native-playback.md).
-It uses native demux/decode and audio output with `ui.Bitmap`, not an external
-player, FFmpeg or a prerequisite custom video element.
+Playback happens inside the Library item page: `internal/player` decodes audio and video
+through FFmpeg pipes into a `ui.VideoPlayer` and `audio.Player` — never the system player
+— with play/pause, seeking from the transport bar, mute, fullscreen, and transcript rows
+that seek the media. See [In-window native playback](native-playback.md).
 
-The window currently shows the live preview of a recording, but not the media
-of a finished file: `Play` hands the file to the system's player, and the
-timestamps in the transcript and summary are therefore not clickable. Native
-container/codec support will be explicit rather than delegated to whatever the
-system player happens to handle.
+What it still does not do:
+- Volume is mute-only (`SetVolume(0|1)`); there is no level control.
+- The decoder is FFmpeg in pipes, not native demux/decode; an A/V clock is FFmpeg's, not
+  Ottr's, so long-term drift is not controlled.
+- Only H.264/AAC MP4 from Ottr's own recorder is expected; other containers are untested.
 
 ---
 
@@ -265,6 +262,27 @@ would use a local MT model; offline summarization would use llama.cpp with a
 GGUF model. The remote paths in `translate/client.go` and `summary/client.go`
 are behind interfaces/thin wrappers, so adding local implementations does not
 require restructuring.
+
+---
+
+## 15. Speaker library — `done`
+
+Diarization names the voices in a recording
+([Transcription](transcription.md#speakers)), and Settings ▸ Speakers is the library they
+accumulate in: name, avatar, how many recordings they were heard on, for how
+long, and when last. **Rename** applies to every transcript; **Remove** forgets
+the voice. `asr.Speakers()` counts once per recording, from `speaker` joined
+through `segment` and `transcript` (migrations `0007_speaker.sql`,
+`0008_global_speakers.sql`).
+
+What it still does not do:
+
+- No **Merge duplicates** and no search, though the design shows both: two rows
+  for one voice can only be fixed by removing one.
+- Removing a speaker leaves its id on the segments, which then fall back to a
+  numbered label; the audio is not reassigned.
+- A row has no embedding, sample or delete-the-audio action, and nothing limits
+  how many voices the library collects.
 
 ---
 

@@ -9,3 +9,4 @@ examples/
 
 # Built setup binary
 /setup.exe
+.doop/

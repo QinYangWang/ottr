@@ -49,10 +49,11 @@ without a window, for tests (see below).
 
 ```
 cmd/studio/main.go      entry point
-internal/               services (see architecture.md)
+internal/               services (see architecture.md) and the window (internal/native)
 migrations/*.sql        embedded migrations
-ui/native/              the window's state and its view
-docs/                   this documentation
+docs/                   documentation; docs/design holds the UI reference
+docs/design/            tokens.css, component examples, page HTML and screenshots
+.agents/skills/             project skills, including the Doop canvas workflow
 ```
 
 ## Data locations
@@ -62,13 +63,14 @@ docs/                   this documentation
 | `%APPDATA%\Ottr\ottr.db` | SQLite database |
 | `%APPDATA%\Ottr\recordings\` | recorded `.mp4` files |
 | `%APPDATA%\Ottr\models\` | ASR model directories |
+| `%APPDATA%\Ottr\diarization\` | Pyannote segmentation and speaker embedding models |
 | `%APPDATA%\Ottr\bin\` | `sherpa-onnx-c-api.dll` + onnxruntime DLLs |
 
 ## Prepare ASR
 
-1. Download a streaming Zipformer model, or an offline transducer model such
-   as Japanese ReazonSpeech, from the sherpa-onnx `asr-models` release. Either
-   model kind works for live and file transcription.
+1. Download SenseVoice, FunASR Nano or Qwen3 ASR from the sherpa-onnx model
+   documentation. Other model families are not supported yet. Each works for
+   live and file transcription through its offline recognizer.
 2. Extract it under `%APPDATA%\Ottr\models\`.
 3. Copy the C API library — `sherpa-onnx-c-api.dll` on Windows,
    `libsherpa-onnx-c-api.dylib` on macOS, `libsherpa-onnx-c-api.so` on Linux —
@@ -97,7 +99,7 @@ Test suites and what they touch:
 | `internal/asr` | real sherpa-onnx library run on a real WAV (skips without it) |
 | `internal/translate` | real HTTP call to MyMemory |
 | `internal/summary` | local `httptest` server exercising the production HTTP path |
-| `ui/native` | the view in `ui.NewTester`, over a real SQLite database |
+| `internal/native` | the view in `ui.NewTester`, over a real SQLite database |
 
 Tests that need an external dependency call `t.Skip` (never `t.Fatal` or a
 fake) when it is missing: no ffprobe, no recorder device, no ASR model, no
@@ -120,7 +122,7 @@ the full run takes ~25 s.
 
 ## Adding a page
 
-1. Add the state it shows to `ui/native.App`, and a `func (a *App) page(c
+1. Add the state it shows to `internal/native.App`, and a `func (a *App) page(c
    *ui.Context)` that draws it.
 2. Wire it into `App.view`, beside the recording and session pages.
 3. If it runs a job, record it with `internal/jobs` (`jobs.Run` returns its
@@ -131,6 +133,6 @@ the full run takes ~25 s.
 4. Test it with `ui.NewTester(a.view, w, h)`: click by label, then `tt.Frame()`
    until the job's result shows.
 5. To look at a page while working on it, run
-   `OTTR_PREVIEW=<folder> go test ./ui/native -run TestPreview`: it writes PNGs
+   `OTTR_PREVIEW=<folder> go test ./internal/native -run TestPreview`: it writes PNGs
    of the main form, Library, the sources page and the settings window into
-   that folder. See `ui/native/preview_test.go`.
+   that folder. See `internal/native/preview_test.go`.

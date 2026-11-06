@@ -38,6 +38,7 @@ func NewService(lib *library.Service, asrSvc *asr.Service, js *jobs.Service) *Se
 		jobs: js,
 		settings: Settings{
 			Provider: "mymemory",
+			Prompt:   DefaultPrompt,
 		},
 	}
 }
@@ -63,14 +64,18 @@ func (s *Service) loadSettingsLocked() {
 	if s.db == nil {
 		return
 	}
-	var provider, baseURL, apiKey, model string
+	var provider, baseURL, apiKey, model, prompt string
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'trans_provider'`).Scan(&provider)
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'trans_base_url'`).Scan(&baseURL)
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'trans_api_key'`).Scan(&apiKey)
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'trans_model'`).Scan(&model)
+	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'trans_prompt'`).Scan(&prompt)
 
 	if provider != "" {
 		s.settings.Provider = provider
+	}
+	if prompt != "" {
+		s.settings.Prompt = prompt
 	}
 	s.settings.BaseURL = baseURL
 	s.settings.APIKey = apiKey
@@ -111,6 +116,9 @@ func (s *Service) SaveSettings(cfg Settings) error {
 		return err
 	}
 	if _, err := tx.Exec(upsert, "trans_model", cfg.Model); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(upsert, "trans_prompt", cfg.Prompt); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -175,17 +183,6 @@ func (s *Service) Translate(ctx context.Context, mediaID int64, targetLang strin
 		return Translation{}, errors.New("no transcript found for this media; please transcribe first")
 	}
 
-	s.mu.Lock()
-	cfg := s.settings
-	s.mu.Unlock()
-
-	var translator Translator
-	if cfg.Provider == "custom" && cfg.BaseURL != "" {
-		translator = NewOpenAICompatibleTranslator(cfg.BaseURL, cfg.APIKey, cfg.Model)
-	} else {
-		translator = NewMyMemoryTranslator()
-	}
-
 	texts := make([]string, len(orig.Segments))
 	for i, s := range orig.Segments {
 		texts[i] = s.Text
@@ -196,7 +193,7 @@ func (s *Service) Translate(ctx context.Context, mediaID int64, targetLang strin
 		srcLang = "auto"
 	}
 
-	translatedTexts, err := translator.Translate(ctx, texts, srcLang, targetLang)
+	translatedTexts, err := s.TranslateTexts(ctx, texts, srcLang, targetLang)
 	if err != nil {
 		return Translation{}, fmt.Errorf("translation failed: %w", err)
 	}
@@ -272,6 +269,35 @@ func (s *Service) Translate(ctx context.Context, mediaID int64, targetLang strin
 	}
 	TranslationReady.Broadcast(result)
 	return result, nil
+}
+
+// TranslateTexts translates plain strings with the provider configured in
+// Settings, without storing anything. Live subtitles use it one line at a time.
+func (s *Service) TranslateTexts(ctx context.Context, texts []string, sourceLang, targetLang string) ([]string, error) {
+	targetLang = strings.ToLower(strings.TrimSpace(targetLang))
+	if targetLang == "" {
+		return nil, errors.New("target language is required")
+	}
+	if len(texts) == 0 {
+		return nil, nil
+	}
+
+	s.mu.Lock()
+	cfg := s.settings
+	s.mu.Unlock()
+
+	var translator Translator
+	if cfg.Provider == "custom" && cfg.BaseURL != "" {
+		translator = NewOpenAICompatibleTranslator(cfg.BaseURL, cfg.APIKey, cfg.Model, cfg.Prompt)
+	} else {
+		translator = NewMyMemoryTranslator()
+	}
+
+	sourceLang = strings.ToLower(strings.TrimSpace(sourceLang))
+	if sourceLang == "" || sourceLang == asr.DefaultLanguage {
+		sourceLang = "auto"
+	}
+	return translator.Translate(ctx, texts, sourceLang, targetLang)
 }
 
 // Export saves the translated subtitles to an SRT, VTT, TXT or bilingual SRT file.

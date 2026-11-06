@@ -3,20 +3,19 @@
 ## Layer boundaries
 
 ```
-cmd/studio/main.go          composition root: opens the database, builds the view, opens the window
-        │
-        ├── ui/native/       the window, drawn by MyGo's toolkit: pages are Go functions of state
+cmd/studio/main.go         composition root: opens the database, builds the view, opens the window
         │
         └── internal/
-              library/       media records, import, remove
-              capture/       capture.Backend + platform backends (cgo), recording session, preview, screenshots
-              media/         ffprobe probing
-              asr/           sherpa-onnx through cgo (native/), PCM conversion, segmentation, export
-              translate/     online translation clients, bilingual alignment, export
-              summary/       remote LLM call, structured summary, Markdown
-              models/        model + binary discovery and validation
-              jobs/          background work: state, progress, error, cancellation
-              storage/       SQLite open + migration runner
+            native/        the window, drawn by MyGo's toolkit: pages are Go functions of state
+            library/       media records, import, remove
+            capture/       capture.Backend + platform backends (cgo), recording session, preview, screenshots
+            media/         ffprobe probing
+            asr/           sherpa-onnx through cgo (native/), PCM conversion, segmentation, export
+            translate/     online translation clients, bilingual alignment, export
+            summary/       remote LLM call, structured summary, Markdown
+            models/        model + binary discovery and validation
+            jobs/          background work: state, progress, error, cancellation
+            storage/       SQLite open + migration runner
 ```
 
 Capture is native: [Native capture and media redesign](native-capture.md)
@@ -27,7 +26,7 @@ it exists today.
 
 Rules the code follows:
 
-- There is no web frontend and no IPC: `ui/native` calls the services directly,
+- There is no web frontend and no IPC: `internal/native` calls the services directly,
   and the services call back into the window with `Window.Update`.
 - The UI layer never touches FFmpeg, WASAPI, or SQL.
 - `capture` does not import `asr`; live recognition arrives through the
@@ -42,7 +41,7 @@ Rules the code follows:
 
 ## The window
 
-`ui/native.App` holds the state the window shows and the `view` function that
+`internal/native.App` holds the state the window shows and the `view` function that
 draws it. MyGo calls the view on the main thread after input and whenever the
 app asks for a frame; the view is a pure function of the state, so there is no
 diffing to get wrong and no JavaScript.
@@ -78,13 +77,13 @@ windows with the same hidden, app-drawn title bar:
 | Library new recording (`recordPage`) | the recording form in place of the grid: a back arrow and `New recording`, the source preview beside the cards, window and audio dropdowns, and Start |
 | Library recording page (`recorderPage`) | the preview frame in the same dark ground, the live transcript in a panel beside it, and Delete/Stop |
 | Library session page (`sessionPage`) | the name with `Show file` and `Delete`, the dark player stage, a four-cell fact strip, and the Transcript/Translate/Summary tabs in a right-hand pane, opened by a card and left by the arrow |
-| Settings window | which model transcribes, and which provider translates and summarizes |
+| Settings window | which model transcribes, the AI endpoint translation and summaries share, the prompt templates, and the speaker library |
 
 The main window is always 420 × 800. Library is 1180 × 800 and Settings is
 920 × 660. Starting a recording opens or focuses Library, which shows the live
 capture in place of the grid and then the finished recording's page.
 
-`ui/native/theme.go` holds the palette all three windows share: it starts from
+`internal/native/theme.go` holds the palette all three windows share: it starts from
 `ui.LightTheme` / `ui.DarkTheme` and substitutes the prototype's surfaces,
 accent, radii and tight type, so widgets the app does not draw itself — buttons,
 fields, tabs, scroll bars — land on the same look.

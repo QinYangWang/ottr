@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ottr UI — component examples</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>
+  .page { max-width: 960px; margin: 0 auto; padding: 48px 32px 64px; }
+  .page > header { margin-bottom: 36px; }
+  .page h1 { font-size: 34px; font-weight: 680; letter-spacing: -.8px; margin-bottom: 8px; }
+  .page > header p { font-size: 13px; line-height: 1.5; color: var(--color-secondary-foreground); max-width: 620px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px 48px; }
+  .sample { display: flex; flex-direction: column; gap: 12px; }
+  .sample h2 { font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--color-secondary-foreground); }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .muted { font-size: 11px; line-height: 1.5; color: var(--color-secondary-foreground); }
+  .stage { position: relative; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Ottr UI kit</h1>
+    <p>Interfere tokens, 8px controls, pill actions and layered shadows. Every control below is interactive: selects open a popover, the search unfolds over its neighbours, switches toggle.</p>
+  </header>
+
+  <div class="grid">
+    <section class="sample">
+      <h2>Actions</h2>
+      <div class="row">
+        <button class="btn btn-primary">Start recording</button>
+        <button class="btn btn-secondary">Use</button>
+      </div>
+      <div class="row">
+        <button class="btn btn-danger">Stop</button>
+        <button class="btn btn-ghost">Cancel</button>
+        <button class="btn btn-secondary btn-sm">Transcribe again</button>
+      </div>
+      <div class="row">
+        <button class="icon-btn" title="Library">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4a1 1 0 0 1 .6-1.2l14-5a1 1 0 0 1 1.2.6z"/><path d="m6.2 5.3 3.1 3.9M12.4 3.7l3.1 3.9M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </button>
+        <button class="icon-btn" title="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="sample">
+      <h2>Selects</h2>
+      <div class="stage">
+        <button class="field select-white" data-select data-options="English (United States)|中文（中国）" data-value="English (United States)">
+          <span class="value">English (United States)</span>
+          <svg class="chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+      <div class="stage">
+        <button class="field select-fill" data-select data-options="Auto|English|中文|日本語" data-value="Auto">
+          <span class="value">Auto</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+      <p class="muted">The popover keeps a 12px radius with 6px padding and 6px items; the row gap stays 4px so the selected and hovered rows never touch.</p>
+    </section>
+
+    <section class="sample">
+      <h2>Search that unfolds</h2>
+      <div class="toolbar" data-toolbar>
+        <button class="search-toggle" title="Search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        </button>
+        <div class="search-panel"><input placeholder="Search transcript"></div>
+        <button class="field select-fill" data-select data-options="Auto|English|中文|日本語" data-value="Auto"><span class="value">Auto</span></button>
+        <button class="field select-fill" data-select data-options="English|中文|日本語" data-value="中文"><span class="value">中文</span></button>
+      </div>
+      <p class="muted">Click the magnifier: the field opens to the right and covers both language selects. Escape closes it.</p>
+    </section>
+
+    <section class="sample">
+      <h2>Rows &amp; states</h2>
+      <div class="setting-row">
+        <div class="label"><b>Translate + summarize imports</b><p>One job after import; off by default.</p></div>
+        <button class="switch" role="switch" aria-checked="false" onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') === 'true' ? 'false' : 'true')"><i></i></button>
+      </div>
+      <div class="speaker">
+        <span class="avatar">CL</span>
+        <div>
+          <div class="name"><b>Chen Ligan</b><time>0:12</time></div>
+          <p>We ship the editor on Thursday, and the recorder follows next week.</p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="badge badge-ok">In use</span>
+        <span class="badge">Not installed</span>
+      </div>
+    </section>
+
+    <section class="sample">
+      <h2>Settings menu</h2>
+      <div class="menu" style="width:100%">
+        <div class="menu-item" aria-expanded="false">Spoken language <span class="value">Auto ›</span></div>
+        <div class="menu-item" aria-expanded="true">Transcription model <span class="value">SenseVoice ›</span></div>
+        <div class="menu-item" aria-expanded="false">Subtitle style <span class="value">14 px ›</span></div>
+      </div>
+      <p class="muted">Rows are 44px tall with 6px radii inside a 14px panel: inner radius + 8px padding = outer radius.</p>
+    </section>
+
+    <section class="sample">
+      <h2>Typography</h2>
+      <div style="font-size:34px;font-weight:680;letter-spacing:-.8px;line-height:1.05">Recording</div>
+      <div style="font-size:20px;font-weight:300;line-height:1.38;color:var(--color-secondary-foreground)">Provisional: start transcription after the recording stops.</div>
+      <p class="muted">Saans is substituted with Inter at weights 680 / 450 / 300. Numbers use tabular figures so timers do not shift.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+  // Select: one popover at a time, escaping or an outside click closes it.
+  var openPop = null;
+  function closePop() { if (openPop) { openPop.remove(); openPop = null; } }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-select]');
+    if (!btn) { if (openPop && !openPop.contains(e.target)) closePop(); return; }
+    e.stopPropagation();
+    closePop();
+    var pop = document.createElement('div');
+    var opts = btn.getAttribute('data-options').split('|');
+    var current = btn.getAttribute('data-value');
+    pop.className = 'popover';
+    opts.forEach(function (o) {
+      var item = document.createElement('button');
+      item.className = 'popover-option';
+      item.textContent = o;
+      item.setAttribute('aria-selected', o === current ? 'true' : 'false');
+      item.onclick = function () {
+        btn.setAttribute('data-value', o);
+        btn.querySelector('.value').textContent = o;
+        closePop();
+      };
+      pop.appendChild(item);
+    });
+    document.body.appendChild(pop);
+    var r = btn.getBoundingClientRect();
+    pop.style.minWidth = Math.max(r.width, 200) + 'px';
+    pop.style.left = r.left + 'px';
+    pop.style.top = (r.bottom + 6) + 'px';
+    openPop = pop;
+  });
+
+  // Search toggle.
+  document.querySelectorAll('[data-toolbar] .search-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var bar = btn.closest('[data-toolbar]');
+      var on = bar.getAttribute('data-searching') !== 'true';
+      bar.setAttribute('data-searching', on ? 'true' : 'false');
+      var input = bar.querySelector('input');
+      if (on) input.focus(); else input.blur();
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    closePop();
+    document.querySelectorAll('[data-toolbar][data-searching="true"]').forEach(function (bar) {
+      bar.setAttribute('data-searching', 'false');
+    });
+  });
+</script>
+</body>
+</html>

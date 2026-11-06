@@ -14,19 +14,23 @@ the model call fails, `Generate` returns the error, sets
 
 ## Configuration
 
-Stored in `settings` under `llm_base_url`, `llm_api_key`, `llm_model`.
+Stored in `settings` under `llm_base_url`, `llm_api_key`, `llm_model` and
+`llm_prompt`, and edited on Settings ▸ Provider, which shares the endpoint with
+translation.
 
 Defaults: `https://api.deepseek.com/v1`, model `deepseek-chat`.
 
 `BaseURL` is normalized to end with `/v1`. If no API key is set and the host is
 not `localhost`/`127.0.0.1`, `GenerateSummary` fails immediately with:
 
-> API Key not configured. Please click ⚙ Config to configure your AI API Key
+> API Key not configured. Please set your AI API key in Settings ▸ Provider
 
 ## Prompt and parsing
 
-The transcript is flattened to `[MM:SS] text` lines and sent with a system
-prompt demanding strict JSON with these keys:
+The transcript is flattened to `[MM:SS] text` lines and sent after the
+instruction template (`llm_prompt`; `{transcript}` and `{language}` are filled
+in, and the transcript is appended when the template does not name it) with a
+system prompt demanding strict JSON with these keys:
 
 ```json
 {
@@ -104,9 +108,11 @@ Summary tab:
 - no summary → "Generate"
 - summary present → Overview / Key Points / Action Items / Chapters / Highlights,
   with chapters and highlights clickable to jump the player
-- **Copy** copies `contentMarkdown` via `navigator.clipboard`
+- **Copy** copies `contentMarkdown` to the clipboard
 - **Export** writes `contentMarkdown` to a `.md` file chosen in a native dialog
-- **⚙ Config** edits base URL / API key / model inline
+- Settings ▸ Provider edits the base URL / API key / model and the instruction
+template (`llm_prompt`, with `{transcript}` and `{language}`, reset by
+`summary.DefaultPrompt`)
 
 ## Timeouts and cancellation
 

@@ -17,7 +17,7 @@ import (
 	"ottr/internal/summary"
 	"ottr/internal/tools"
 	"ottr/internal/translate"
-	"ottr/ui/native"
+	"ottr/internal/native"
 )
 
 func main() {
@@ -85,7 +85,7 @@ func main() {
 		// The look chosen last, before the window exists, so that it starts in
 		// it.
 		mygo.Theme.SetSource(mygo.ThemeSource(prefs.Get(settings.Theme)))
-		background := "#141414"
+		background := "#000000"
 		if !mygo.Theme.IsDark() {
 			background = "#ffffff"
 		}
@@ -93,7 +93,7 @@ func main() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title: "Ottr",
 			// The view draws its own title bar in the strip the window
-			// controls sit in (ui/native.titleBar).
+			// controls sit in (native.titleBar).
 			TitleBarStyle:   mygo.TitleBarHidden,
 			TitleBarHeight:  46,
 			Width:           native.CompactWidth,

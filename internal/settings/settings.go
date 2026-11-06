@@ -17,6 +17,10 @@ const (
 	Language = "ui_language"
 	// Font is an installed font family, or "" for the system default.
 	Font = "ui_font"
+	// TranscriptionLanguage is the default spoken language, or "" for Auto.
+	TranscriptionLanguage = "transcription_language"
+	// SubtitleFontSize is the subtitle text size in DIPs.
+	SubtitleFontSize = "subtitle_font_size"
 	// FFmpegPath is a folder, or the ffmpeg program itself, chosen in the
 	// settings when Ottr could not find FFmpeg on its own.
 	FFmpegPath = "ffmpeg_path"

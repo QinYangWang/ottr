@@ -126,9 +126,10 @@ type OpenAICompatibleTranslator struct {
 	baseURL string
 	apiKey  string
 	model   string
+	prompt  string
 }
 
-func NewOpenAICompatibleTranslator(baseURL, apiKey, model string) *OpenAICompatibleTranslator {
+func NewOpenAICompatibleTranslator(baseURL, apiKey, model, prompt string) *OpenAICompatibleTranslator {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if !strings.HasSuffix(baseURL, "/v1") && !strings.Contains(baseURL, "/v1/") {
 		baseURL += "/v1"
@@ -136,11 +137,15 @@ func NewOpenAICompatibleTranslator(baseURL, apiKey, model string) *OpenAICompati
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
+	if prompt == "" {
+		prompt = DefaultPrompt
+	}
 	return &OpenAICompatibleTranslator{
 		client:  &http.Client{Timeout: 60 * time.Second},
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		model:   model,
+		prompt:  prompt,
 	}
 }
 
@@ -174,9 +179,9 @@ func (o *OpenAICompatibleTranslator) Translate(ctx context.Context, texts []stri
 	if from == "auto" || from == "" {
 		from = "the source language"
 	}
-	prompt := fmt.Sprintf("Translate the following numbered subtitle lines from %s to %s. "+
-		"Preserve the line numbers. Return ONLY the translated lines in the format: 1. Translated text\n\n",
-		from, targetLang)
+	prompt := strings.ReplaceAll(o.prompt, "{source}", from)
+	prompt = strings.ReplaceAll(prompt, "{target}", targetLang)
+	prompt += "\n\n"
 
 	for i, t := range texts {
 		prompt += fmt.Sprintf("%d. %s\n", i+1, t)

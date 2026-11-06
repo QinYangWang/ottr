@@ -4,7 +4,7 @@ Offline-first screen recorder with live transcription, translation, AI summaries
 and a local video knowledge base.
 
 - **Language:** Go 1.27
-- **UI:** [MyGo](https://github.com/egoist/mygo) v0.6.2, native UI written in Go (no webview, no HTML)
+- **UI:** [MyGo](https://github.com/egoist/mygo) v0.7.4, native UI written in Go (no webview, no HTML)
 - **Database:** SQLite via `modernc.org/sqlite` (pure Go, no cgo)
 - **Media:** FFmpeg / ffprobe (system binaries)
 - **Capture:** GDI screen capture + WASAPI audio (Windows)
@@ -17,14 +17,17 @@ and a local video knowledge base.
 | [recording.md](recording.md) | Current Windows capture pipeline, sources, lifecycle |
 | [native-capture.md](native-capture.md) | Native cgo capture (implemented on Windows), target encoding/muxing, screenshots, FFmpeg removal |
 | [asr-cgo.md](asr-cgo.md) | In-process sherpa-onnx batch and streaming recognition (implemented; see transcription.md) |
-| [native-playback.md](native-playback.md) | Proposed in-window native audio/video playback |
+| [native-playback.md](native-playback.md) | In-window video/audio playback |
 | [transcription.md](transcription.md) | sherpa-onnx integration, segmentation, subtitle handling |
 | [translation.md](translation.md) | Online translation providers, bilingual alignment, export |
 | [summary.md](summary.md) | Remote AI summarization, structured output, Markdown |
 | [storage.md](storage.md) | SQLite schema, migrations, cascade behavior |
 | [models.md](models.md) | ASR model discovery and validation |
-| [ui.md](ui.md) | The recording, Library and Settings windows |
+| [design/README.md](design/README.md) | Screen inventory, design tokens, HTML references and component examples |
 | [development.md](development.md) | Running, testing, environment requirements |
+| [../AGENTS.md](../AGENTS.md) | Project overview and the documentation index for agents |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Contribution rules: branches, commits, review |
+| [../code-standards.md](../code-standards.md) | Code style and the acceptance bar for every PR |
 | [ROADMAP.md](ROADMAP.md) | What is not implemented yet |
 
 ## Status at a glance

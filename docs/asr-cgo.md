@@ -67,7 +67,7 @@ capture / native media decoder
 ```
 
 Keep the cgo wrapper package-private inside `internal/asr`. Do not expose C
-types to `capture`, `jobs`, `library` or `ui/native`.
+types to `capture`, `jobs`, `library` or `internal/native`.
 
 ```text
 internal/asr/

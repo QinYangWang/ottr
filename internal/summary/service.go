@@ -38,6 +38,7 @@ func NewService(lib *library.Service, asrSvc *asr.Service, js *jobs.Service) *Se
 		settings: Settings{
 			BaseURL: "https://api.deepseek.com/v1",
 			Model:   "deepseek-chat",
+			Prompt:  DefaultPrompt,
 		},
 	}
 }
@@ -63,10 +64,11 @@ func (s *Service) loadSettingsLocked() {
 	if s.db == nil {
 		return
 	}
-	var baseURL, apiKey, model string
+	var baseURL, apiKey, model, prompt string
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'llm_base_url'`).Scan(&baseURL)
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'llm_api_key'`).Scan(&apiKey)
 	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'llm_model'`).Scan(&model)
+	_ = s.db.QueryRow(`SELECT value FROM settings WHERE key = 'llm_prompt'`).Scan(&prompt)
 
 	if baseURL != "" {
 		s.settings.BaseURL = baseURL
@@ -76,6 +78,9 @@ func (s *Service) loadSettingsLocked() {
 	}
 	if model != "" {
 		s.settings.Model = model
+	}
+	if prompt != "" {
+		s.settings.Prompt = prompt
 	}
 }
 
@@ -110,6 +115,9 @@ func (s *Service) SaveSettings(cfg Settings) error {
 		return err
 	}
 	if _, err := tx.Exec(upsert, "llm_model", cfg.Model); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(upsert, "llm_prompt", cfg.Prompt); err != nil {
 		return err
 	}
 	return tx.Commit()

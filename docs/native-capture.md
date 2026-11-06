@@ -47,7 +47,7 @@ replaced before the dependency can be removed repository-wide.
 ## Target architecture
 
 ```text
-ui/native
+internal/native
    ├── Recorder ───────┐
    ├── Previewer ──────┼── one capture.Backend per process
    └── Screenshotter ──┘             │

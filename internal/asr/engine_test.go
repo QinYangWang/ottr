@@ -4,8 +4,18 @@ import (
 	"strings"
 	"testing"
 
+	"ottr/internal/asr/native"
 	"ottr/internal/models"
 )
+
+func TestSpeakerRangesUseTheLargestOverlap(t *testing.T) {
+	segments := []Segment{{StartMs: 0, EndMs: 1000}, {StartMs: 1000, EndMs: 2000}}
+	ranges := []native.SpeakerSegment{{StartMs: 0, EndMs: 400, Speaker: 2}, {StartMs: 400, EndMs: 1800, Speaker: 4}}
+	segments = speakerRanges(segments, ranges)
+	if segments[0].Speaker != 0 || segments[1].Speaker != 0 {
+		t.Fatalf("speaker assignment = %+v", segments)
+	}
+}
 
 func TestGroupTokens(t *testing.T) {
 	tokens := []string{"你", "好", "世", "界", "，", "天", "气", "真", "好", "。"}
@@ -54,6 +64,20 @@ func TestGroupTokensKeepsSentenceBoundaries(t *testing.T) {
 	segments := GroupTokens(tokens, timestamps)
 	if len(segments) != 2 || segments[0].Text != "好。" || segments[1].Text != "好。" {
 		t.Fatalf("sentence boundaries changed: %+v", segments)
+	}
+}
+
+func TestGroupTokensKeepsSegmentsOrdered(t *testing.T) {
+	tokens := []string{"あ", "。", "い", "。"}
+	timestamps := []float64{4.3, 4.319, 4.32, 4.329}
+	segments := GroupTokens(tokens, timestamps)
+	for i, seg := range segments {
+		if i > 0 && seg.StartMs < segments[i-1].EndMs {
+			t.Fatalf("segments overlap: %+v", segments)
+		}
+		if seg.EndMs <= seg.StartMs {
+			t.Fatalf("invalid segment duration: %+v", seg)
+		}
 	}
 }
 

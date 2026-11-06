@@ -23,15 +23,26 @@ type Info struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// ASRModel holds verified paths to sherpa-onnx zipformer model files.
+const (
+	KindSenseVoice = "sense_voice"
+	KindFunASRNano = "funasr_nano"
+	KindQwen3ASR   = "qwen3_asr"
+)
+
+// ASRModel holds verified paths to one supported model family.
 type ASRModel struct {
-	Dir       string
-	Tokens    string
-	Encoder   string
-	Decoder   string
-	Joiner    string
-	Size      int64
-	Streaming bool
+	Dir            string
+	Kind           string
+	Tokens         string
+	Model          string
+	EncoderAdaptor string
+	LLM            string
+	Embedding      string
+	Tokenizer      string
+	ConvFrontend   string
+	Encoder        string
+	Decoder        string
+	Size           int64
 }
 
 // Manager finds and validates models in configured directories.
@@ -112,6 +123,21 @@ func (m *Manager) BinDir() string {
 	return ""
 }
 
+// DiarizationModels returns the separate speaker segmentation and embedding
+// models, which are not ASR choices and never appear in the model list.
+func (m *Manager) DiarizationModels() (segmentation, embedding string, err error) {
+	m.mu.Lock()
+	dir := m.modelsDir
+	m.mu.Unlock()
+	root := filepath.Join(filepath.Dir(dir), "diarization")
+	segmentation = filepath.Join(root, "pyannote", "model.onnx")
+	embedding = filepath.Join(root, "eres2net.onnx")
+	if !fileNonEmpty(segmentation) || !fileNonEmpty(embedding) {
+		return "", "", errors.New("speaker diarization models are not installed")
+	}
+	return segmentation, embedding, nil
+}
+
 // SetDirs updates the search directories.
 func (m *Manager) SetDirs(modelsDir, binDir string) {
 	m.mu.Lock()
@@ -178,44 +204,62 @@ func (m *Manager) FindASRModel() (*ASRModel, error) {
 	if lastErr != nil {
 		return nil, fmt.Errorf("no valid ASR model found: %w", lastErr)
 	}
-	return nil, fmt.Errorf("no ASR model installed; please place a streaming zipformer model in %s", dir)
+	return nil, fmt.Errorf("no supported ASR model installed; use SenseVoice, FunASR Nano or Qwen3 ASR in %s", dir)
 }
 
 func inspectASRDir(dir string) (*ASRModel, error) {
-	tokens := filepath.Join(dir, "tokens.txt")
-	if st, err := os.Stat(tokens); err != nil || st.Size() == 0 {
-		return nil, errors.New("missing tokens.txt")
-	}
-
-	encoder, err := findOnnx(dir, "encoder")
-	if err != nil {
-		return nil, err
-	}
-	decoder, err := findOnnx(dir, "decoder")
-	if err != nil {
-		return nil, err
-	}
-	joiner, err := findOnnx(dir, "joiner")
-	if err != nil {
-		return nil, err
-	}
-
-	var totalSize int64
-	for _, p := range []string{tokens, encoder, decoder, joiner} {
-		if st, err := os.Stat(p); err == nil {
-			totalSize += st.Size()
+	if tokens := filepath.Join(dir, "tokens.txt"); fileNonEmpty(tokens) {
+		if model, err := findOnnx(dir, "model"); err == nil {
+			return &ASRModel{Dir: dir, Kind: KindSenseVoice, Tokens: tokens, Model: model, Size: fileSizes(tokens, model)}, nil
 		}
 	}
+	if tokenizer := findTokenizer(dir); tokenizer != "" {
+		adaptor, adaptorErr := findOnnx(dir, "encoder_adaptor")
+		llm, llmErr := findOnnx(dir, "llm")
+		embedding, embeddingErr := findOnnx(dir, "embedding")
+		if adaptorErr == nil && llmErr == nil && embeddingErr == nil {
+			return &ASRModel{
+				Dir: dir, Kind: KindFunASRNano, EncoderAdaptor: adaptor, LLM: llm, Embedding: embedding,
+				Tokenizer: tokenizer, Size: fileSizes(adaptor, llm, embedding),
+			}, nil
+		}
+		frontend, frontendErr := findOnnx(dir, "conv_frontend")
+		encoder, encoderErr := findOnnx(dir, "encoder")
+		decoder, decoderErr := findOnnx(dir, "decoder")
+		if frontendErr == nil && encoderErr == nil && decoderErr == nil {
+			return &ASRModel{
+				Dir: dir, Kind: KindQwen3ASR, ConvFrontend: frontend, Encoder: encoder, Decoder: decoder,
+				Tokenizer: tokenizer, Size: fileSizes(frontend, encoder, decoder),
+			}, nil
+		}
+	}
+	return nil, errors.New("not a supported SenseVoice, FunASR Nano or Qwen3 ASR model")
+}
 
-	return &ASRModel{
-		Dir:       dir,
-		Tokens:    tokens,
-		Encoder:   encoder,
-		Decoder:   decoder,
-		Joiner:    joiner,
-		Size:      totalSize,
-		Streaming: strings.Contains(strings.ToLower(filepath.Base(dir)), "streaming"),
-	}, nil
+func fileNonEmpty(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Size() > 0
+}
+
+func fileSizes(paths ...string) int64 {
+	var total int64
+	for _, path := range paths {
+		if st, err := os.Stat(path); err == nil {
+			total += st.Size()
+		}
+	}
+	return total
+}
+
+func findTokenizer(dir string) string {
+	candidate := filepath.Join(dir, "Qwen3-0.6B")
+	if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+		return candidate
+	}
+	if fileNonEmpty(filepath.Join(dir, "tokenizer.json")) {
+		return dir
+	}
+	return ""
 }
 
 func findOnnx(dir, prefix string) (string, error) {
@@ -245,6 +289,29 @@ func findOnnx(dir, prefix string) (string, error) {
 	return "", fmt.Errorf("missing %s ONNX model in %s", prefix, dir)
 }
 
+func modelDisplayName(kind string) string {
+	switch kind {
+	case KindSenseVoice:
+		return "SenseVoice"
+	case KindFunASRNano:
+		return "FunASR Nano"
+	case KindQwen3ASR:
+		return "Qwen3 ASR"
+	default:
+		return kind
+	}
+}
+
+// CurrentName returns the selected model's display name, or an empty string
+// when no supported model is available.
+func (m *Manager) CurrentName() string {
+	mdl, err := m.FindASRModel()
+	if err != nil {
+		return ""
+	}
+	return modelDisplayName(mdl.Kind)
+}
+
 // ListModels enumerates all known models in the models directory.
 func (m *Manager) ListModels() ([]Info, error) {
 	m.mu.Lock()
@@ -260,7 +327,7 @@ func (m *Manager) ListModels() ([]Info, error) {
 		return nil, err
 	}
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || e.Name() == "test_wavs" || e.Name() == "Qwen3-0.6B" {
 			continue
 		}
 		sub := filepath.Join(dir, e.Name())
@@ -272,6 +339,7 @@ func (m *Manager) ListModels() ([]Info, error) {
 		}
 		if mdl, err := inspectASRDir(sub); err == nil {
 			info.Installed = true
+			info.Name = modelDisplayName(mdl.Kind)
 			info.SizeBytes = mdl.Size
 		} else {
 			info.Error = err.Error()

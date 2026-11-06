@@ -32,4 +32,11 @@ type Settings struct {
 	BaseURL string `json:"baseUrl"`
 	APIKey  string `json:"apiKey"`
 	Model   string `json:"model"`
+	// Prompt is the instruction the summarizer starts from; {transcript} and
+	// {language} are filled in. Empty means DefaultPrompt.
+	Prompt string `json:"prompt"`
 }
+
+// DefaultPrompt is the summary instruction Ottr ships with.
+const DefaultPrompt = "Summarize the transcript into an overview, key points, action items, " +
+	"chapters and highlights. Write in {language}."

@@ -2,7 +2,6 @@ package asr
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -229,25 +228,11 @@ type streamer struct {
 
 func newStreamer(mdl models.ASRModel) (*streamer, error) {
 	s := &streamer{}
-	if !mdl.Streaming {
-		rec, err := native.NewOfflineRecognizer(mdl.Tokens, mdl.Encoder, mdl.Decoder, mdl.Joiner, 2)
-		if err != nil {
-			return nil, fmt.Errorf("sherpa-onnx could not load the offline model in %s: %w", mdl.Dir, err)
-		}
-		s.offline = rec
-		s.startUtterance()
-		return s, nil
-	}
-	rec, err := native.NewRecognizer(mdl.Tokens, mdl.Encoder, mdl.Decoder, mdl.Joiner, 2, true, 2.4, 20)
+	rec, err := native.NewOfflineRecognizer(mdl, 2)
 	if err != nil {
 		return nil, fmt.Errorf("sherpa-onnx could not load the model in %s: %w", mdl.Dir, err)
 	}
-	stream := rec.Stream()
-	if stream == nil {
-		rec.Destroy()
-		return nil, errors.New("sherpa-onnx could not open a recognition stream")
-	}
-	s.rec, s.stream = rec, stream
+	s.offline = rec
 	s.startUtterance()
 	return s, nil
 }

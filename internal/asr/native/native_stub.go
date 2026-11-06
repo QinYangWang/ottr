@@ -4,7 +4,11 @@
 // is no native ASR, and every call says so rather than pretending.
 package native
 
-import "errors"
+import (
+	"errors"
+
+	"ottr/internal/models"
+)
 
 // Available reports whether this build can use native ASR.
 var Available = false
@@ -61,7 +65,7 @@ func (s *Stream) Destroy() {}
 
 type OfflineRecognizer struct{}
 
-func NewOfflineRecognizer(tokens, encoder, decoder, joiner string, threads int) (*OfflineRecognizer, error) {
+func NewOfflineRecognizer(m models.ASRModel, threads int) (*OfflineRecognizer, error) {
 	return nil, ErrUnavailable
 }
 
