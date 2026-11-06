@@ -43,6 +43,7 @@ type App struct {
 
 	libraryOpen     bool
 	librarySet      bool // a manual choice overrides the responsive default
+	maxWidthCap     int  // the bound applied while the panel was closed
 	libraryResized  bool // this toggle widened a compact window for both panes
 	libraryGridView bool
 	thumbs          map[int64]*ui.Bitmap
@@ -235,6 +236,9 @@ const (
 	WideHeight          = 800
 	libraryWidth        = 360
 	libraryAutoMinWidth = CompactWidth + libraryWidth + 60
+	// recorderMaxWidth is the widest the window may get while the library is
+	// hidden: dragging the edge must not pull the panel back in.
+	recorderMaxWidth = 820
 )
 
 func (a *App) libraryVisible(width float32) bool {
@@ -247,6 +251,7 @@ func (a *App) libraryVisible(width float32) bool {
 func (a *App) toggleLibrary(width float32) {
 	a.libraryOpen = !a.libraryVisible(width)
 	a.librarySet = true
+	a.capWidthToPanel(width)
 	if a.libraryOpen {
 		a.closeDetail()
 		a.reload()
@@ -259,8 +264,15 @@ func (a *App) toggleLibrary(width float32) {
 	} else {
 		// Collapsing the panel is a normal-window action: a maximized window
 		// would keep the wide layout the panel left behind.
-		if a.win != nil && a.win.IsMaximized() {
-			a.win.Unmaximize()
+		if a.win != nil {
+			if a.win.IsMaximized() {
+				a.win.Unmaximize()
+			}
+			// The recorder-only window keeps a width the panel fits in, so it
+			// cannot be stretched back into the library layout.
+			if width, height := a.win.Size(); width > recorderMaxWidth {
+				a.win.SetSize(recorderMaxWidth, height)
+			}
 		}
 		if a.libraryResized {
 			a.libraryResized = false
@@ -271,6 +283,23 @@ func (a *App) toggleLibrary(width float32) {
 			}
 		}
 	}
+}
+
+// capWidthToPanel bounds the window while the library is closed, and lifts the
+// bound while it is open, so widening cannot bring the panel back on its own.
+func (a *App) capWidthToPanel(width float32) {
+	if a.win == nil {
+		return
+	}
+	limit := recorderMaxWidth
+	if a.libraryVisible(width) {
+		limit = 0
+	}
+	if limit == a.maxWidthCap {
+		return
+	}
+	a.maxWidthCap = limit
+	a.win.SetMaximumSize(limit, 0)
 }
 
 func (a *App) resize() {
@@ -428,6 +457,9 @@ func (a *App) drain() {
 // mirror copies what the recorder and the services did elsewhere into the
 // view's state, and keeps frames coming while something moves.
 func (a *App) mirror(c *ui.Context) {
+	if width, _ := c.Size(); width > 0 {
+		a.capWidthToPanel(width)
+	}
 	st := a.Rec.State()
 	switch {
 	case a.recording && !st.Recording && !a.busy:
