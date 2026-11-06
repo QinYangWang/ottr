@@ -16,7 +16,7 @@ SQLite stores everything; FFmpeg decodes and probes media; sherpa-onnx (cgo) doe
 | [docs/README.md](docs/README.md) | Documentation contents and current status |
 | [docs/architecture.md](docs/architecture.md) | Layer boundaries, data flow, threading rules |
 | [docs/development.md](docs/development.md) | Prerequisites, run commands, tests, adding a page or migration |
-| [docs/design/README.md](docs/design/README.md) | Screens, Interfere tokens, component examples, Go file mapping |
+| [docs/design/README.md](docs/design/README.md) | Screens, breakpoints, "studio console" tokens, Go file mapping |
 | [docs/recording.md](docs/recording.md) | Capture pipeline, sources, lifecycle |
 | [docs/native-capture.md](docs/native-capture.md) | Native cgo capture, preview, screenshots, encoding plan |
 | [docs/native-playback.md](docs/native-playback.md) | In-window video/audio playback |
@@ -50,7 +50,7 @@ internal/native/   the window: App state, pages, theme, i18n, player, kit/
 internal/{capture,asr,media,library,translate,summary,models,jobs,storage,player,tools,settings}/
 migrations/        embedded SQL migrations (append only)
 docs/              documentation; docs/design holds the UI reference
-.agents/skills/        project skills (Doop canvas workflow)
+.agents/skills/        project skills (Doop canvas workflow, Ottr redesign)
 resources/<plat>/  third-party native libraries shipped with the app
 ```
 
@@ -72,9 +72,17 @@ Every screen lives in the Doop canvas. **A UI change starts in Doop, never in Go
 The order is fixed:
 
 1. Change the frame on the canvas and check it with `get_frame_screenshot`.
-2. Run `node .agents/skills/doop-canvas/scripts/build.js --shots` so
-   `docs/design/pages` and `docs/design/screens` match the frame.
+2. Regenerate `docs/design/pages` and `docs/design/screens` from the canvas:
+
+   ```sh
+   DOOP_CLIENT="python3 <path-to>/doop.py" node .agents/skills/doop-canvas/scripts/build.js --shots
+   ```
+
+   `DOOP_CLIENT` is a Doop MCP client taking `call <tool> -` with JSON on stdin;
+   without it `build.js` reads the gitignored `.doop/frames/` cache.
 3. Mirror the frame in `internal/native`; tests and the mapping table follow.
+   Lay the Go window beside the frame with
+   `OTTR_PREVIEW=<dir> OTTR_PREVIEW_CJK=<cjk font> go test ./internal/native -run TestPreview`.
 4. Only then update prose docs.
 
 A PR that changes a screen without the matching Doop frame and regenerated
