@@ -37,7 +37,10 @@ func recognizeOffline(ctx context.Context, mdl models.ASRModel, samples []float3
 		return nil, fmt.Errorf("sherpa-onnx could not load the offline model in %s: %w", mdl.Dir, err)
 	}
 	defer rec.Destroy()
-	const chunkSamples = 16000 * 10 // bound offline attention memory on long files
+	// 30 s keeps the recognizer inside its window while costing a third of the
+	// stream setups a 10 s chunk did; fewer boundaries also means fewer words
+	// cut in half.
+	const chunkSamples = 16000 * 30
 	var segments []Segment
 	for start := 0; start < len(samples); start += chunkSamples {
 		if err := ctx.Err(); err != nil {

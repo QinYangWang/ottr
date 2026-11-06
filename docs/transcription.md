@@ -16,8 +16,13 @@ recognizer. That is gone:
   entry points once; the configuration structs come from the vendored header
   `native/sherpa_c_api_v2.0.1.h`, so their layout is sherpa-onnx's own, never
   guessed.
-- File transcription uses the selected offline recognizer in ten-second chunks.
-  Live text uses the same model in four-second chunks, returning final lines.
+- File transcription uses the selected offline recognizer in thirty-second
+  chunks; live text uses the same model in four-second chunks, returning final
+  lines.
+- Diarization runs alongside recognition on the same decoded samples, so the
+  wall time is the slower of the two rather than their sum. A diarizer that
+  cannot label the audio leaves the transcript unlabeled instead of failing the
+  job.
 - A `CGO_ENABLED=0` build compiles, does everything except ASR, and answers
   “native ASR is not available in this build”. There is no executable fallback.
 - A packaged app carries the library in its own resources, so an install needs

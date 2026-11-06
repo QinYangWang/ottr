@@ -9,24 +9,33 @@ import (
 	"ottr/internal/asr/native"
 )
 
-// assignSpeakers labels subtitles locally, then maps each cluster to the
-// persistent speaker library using its embedding.
-func (s *Service) assignSpeakers(wav string, segments []Segment) ([]Segment, error) {
-	if len(segments) == 0 {
-		return segments, nil
-	}
+// diarization is what the diarizer found and which model made its vectors.
+type diarization struct {
+	ranges    []native.SpeakerSegment
+	embedding string
+}
+
+// diarizeFor runs the local diarizer over the samples. Missing models mean no
+// speaker labels, which is not an error.
+func (s *Service) diarizeFor(samples []float32) (diarization, error) {
 	segmentation, embedding, err := s.models.DiarizationModels()
 	if err != nil {
-		return segments, nil
-	}
-	samples, _, err := readWav(wav)
-	if err != nil {
-		return nil, err
+		return diarization{}, nil
 	}
 	ranges, err := native.Diarize(segmentation, embedding, samples)
 	if err != nil {
-		return nil, err
+		return diarization{}, err
 	}
+	return diarization{ranges: ranges, embedding: embedding}, nil
+}
+
+// assignSpeakers labels subtitles locally, then maps each cluster to the
+// persistent speaker library using its embedding.
+func (s *Service) assignSpeakers(samples []float32, d diarization, segments []Segment) ([]Segment, error) {
+	if len(segments) == 0 || len(d.ranges) == 0 {
+		return segments, nil
+	}
+	ranges := d.ranges
 	segments = speakerRanges(segments, ranges)
 	s.speakerMu.Lock()
 	defer s.speakerMu.Unlock()
@@ -41,7 +50,7 @@ func (s *Service) assignSpeakers(wav string, segments []Segment) ([]Segment, err
 			continue
 		}
 		seen[local] = true
-		vector, err := speakerVector(embedding, samples, ranges, local)
+		vector, err := speakerVector(d.embedding, samples, ranges, local)
 		if err != nil {
 			return nil, err
 		}

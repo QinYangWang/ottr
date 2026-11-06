@@ -198,14 +198,33 @@ func (s *Service) recognize(ctx context.Context, r recognition, progress func(fl
 	if err := ExtractWav(ctx, r.path, tmpWav); err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
 	}
-	progress(0.15) // extraction done; sherpa-onnx then runs the file in one go
-	segments, err := recognizeWav(ctx, r.model, tmpWav)
+	samples, rate, err := readWav(tmpWav)
 	if err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
 	}
-	segments, err = s.assignSpeakers(tmpWav, segments)
+	if rate <= 0 {
+		return s.endFailed(r.mediaID, ctx, fmt.Errorf("read %s: no sample rate", tmpWav))
+	}
+	progress(0.15)
+	// Diarization and recognition both read the same samples and neither needs
+	// the other's result: run them side by side so the wall time is the longer
+	// of the two, not their sum.
+	diar := make(chan diarization, 1)
+	go func() {
+		found, _ := s.diarizeFor(samples)
+		diar <- found
+	}()
+	segments, err := recognizeOffline(ctx, r.model, samples, rate)
 	if err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
+	}
+	progress(0.7)
+	if found := <-diar; len(found.ranges) > 0 {
+		// Speaker labels enrich the transcript; failing to place them must not
+		// throw the recognized text away.
+		if labeled, err := s.assignSpeakers(samples, found, segments); err == nil {
+			segments = labeled
+		}
 	}
 	progress(0.9)
 	if err := s.saveTranscript(r.mediaID, segments); err != nil {
