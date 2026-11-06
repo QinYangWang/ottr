@@ -13,12 +13,6 @@ import (
 	"github.com/Microsoft/go-winio"
 )
 
-// recordFPS is the rate a recording is written at. Native capture delivers a
-// frame only when the screen changes, so the sink repeats the newest frame to
-// keep the encoder's input fixed-rate: a still screen still records, and audio
-// stays on the same clock.
-const recordFPS = 30
-
 var videoSeq atomic.Int64
 
 // videoInput is a named pipe carrying raw BGRA frames of one fixed size into
