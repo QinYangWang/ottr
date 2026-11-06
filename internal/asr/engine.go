@@ -24,11 +24,13 @@ func recognizeWav(ctx context.Context, mdl models.ASRModel, wavPath string) ([]S
 	if rate <= 0 {
 		return nil, fmt.Errorf("read %s: no sample rate", wavPath)
 	}
-	return recognizeOffline(ctx, mdl, samples, rate)
+	return recognizeOffline(ctx, mdl, samples, rate, nil)
 }
 
 // recognizeOffline uses the selected model family's offline recognizer.
-func recognizeOffline(ctx context.Context, mdl models.ASRModel, samples []float32, rate int) ([]Segment, error) {
+// done, when set, hears the share of the audio read after each chunk, so a
+// window can say how far into the recording recognition has come.
+func recognizeOffline(ctx context.Context, mdl models.ASRModel, samples []float32, rate int, done func(float64)) ([]Segment, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -63,12 +65,18 @@ func recognizeOffline(ctx context.Context, mdl models.ASRModel, samples []float3
 					StartMs: int64(offset * 1000), EndMs: int64(float64(end) / float64(rate) * 1000), Text: text,
 				})
 			}
+			if done != nil {
+				done(float64(end) / float64(len(samples)))
+			}
 			continue
 		}
 		for i := range timestamps {
 			timestamps[i] += offset
 		}
 		segments = append(segments, GroupTokens(tokens, timestamps)...)
+		if done != nil {
+			done(float64(end) / float64(len(samples)))
+		}
 	}
 	segments = mergeShortSegments(segments, 12000) // only artifacts at chunk edges
 	for i := range segments {

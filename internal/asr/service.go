@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -153,6 +154,29 @@ func (s *Service) TranscribeNow(ctx context.Context, mediaID int64, progress fun
 	return s.recognize(ctx, job, progress)
 }
 
+// The progress a transcription job reports at the start of each of its
+// phases. Recognition moves linearly from PhaseRecognizing to PhaseSpeakers
+// as the audio is read, so a window can turn a job's progress back into how
+// much of the recording has been transcribed (RecognizedShare).
+const (
+	PhaseExtracting  = 0.05
+	PhaseRecognizing = 0.15
+	PhaseSpeakers    = 0.7
+	PhaseSaving      = 0.9
+)
+
+// RecognizedShare is the share of the audio a transcription job had read when
+// it reported progress p: 0 before recognition starts, 1 once it is over.
+func RecognizedShare(p float64) float64 {
+	switch {
+	case p <= PhaseRecognizing:
+		return 0
+	case p >= PhaseSpeakers:
+		return 1
+	}
+	return (p - PhaseRecognizing) / (PhaseSpeakers - PhaseRecognizing)
+}
+
 // recognition is what one transcription needs: where the media is, and which
 // model reads it.
 type recognition struct {
@@ -194,7 +218,7 @@ func (s *Service) recognize(ctx context.Context, r recognition, progress func(fl
 	tmpWav := filepath.Join(os.TempDir(), fmt.Sprintf("ottr-asr-%d-%d.wav", r.mediaID, time.Now().UnixNano()))
 	defer os.Remove(tmpWav)
 
-	progress(0.05)
+	progress(PhaseExtracting)
 	if err := ExtractWav(ctx, r.path, tmpWav); err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
 	}
@@ -205,7 +229,7 @@ func (s *Service) recognize(ctx context.Context, r recognition, progress func(fl
 	if rate <= 0 {
 		return s.endFailed(r.mediaID, ctx, fmt.Errorf("read %s: no sample rate", tmpWav))
 	}
-	progress(0.15)
+	progress(PhaseRecognizing)
 	// Diarization and recognition both read the same samples and neither needs
 	// the other's result: run them side by side so the wall time is the longer
 	// of the two, not their sum.
@@ -214,11 +238,13 @@ func (s *Service) recognize(ctx context.Context, r recognition, progress func(fl
 		found, _ := s.diarizeFor(samples)
 		diar <- found
 	}()
-	segments, err := recognizeOffline(ctx, r.model, samples, rate)
+	segments, err := recognizeOffline(ctx, r.model, samples, rate, func(share float64) {
+		progress(PhaseRecognizing + share*(PhaseSpeakers-PhaseRecognizing))
+	})
 	if err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
 	}
-	progress(0.7)
+	progress(PhaseSpeakers)
 	if found := <-diar; len(found.ranges) > 0 {
 		// Speaker labels enrich the transcript; failing to place them must not
 		// throw the recognized text away.
@@ -226,7 +252,7 @@ func (s *Service) recognize(ctx context.Context, r recognition, progress func(fl
 			segments = labeled
 		}
 	}
-	progress(0.9)
+	progress(PhaseSaving)
 	if err := s.saveTranscript(r.mediaID, segments); err != nil {
 		return s.endFailed(r.mediaID, ctx, err)
 	}
@@ -301,42 +327,26 @@ func (s *Service) saveTranscript(mediaID int64, segments []Segment) error {
 	return tx.Commit()
 }
 
-// Export prompts user to save the transcript as SRT, VTT or TXT.
+// Export prompts the user to save the transcript as SRT, VTT or TXT.
 func (s *Service) Export(ctx context.Context, mediaID int64, format string) (string, error) {
-	tr, err := s.Get(mediaID)
-	if err != nil {
-		return "", err
-	}
-	if len(tr.Segments) == 0 {
-		return "", errors.New("no transcript available to export")
-	}
+	return s.ExportWith(ctx, mediaID, format, ExportOptions{})
+}
 
+// ExportWith prompts the user for a path and saves the transcript there in one
+// of ExportFormats, shaped by opts. An empty path means the user cancelled.
+func (s *Service) ExportWith(ctx context.Context, mediaID int64, format string, opts ExportOptions) (string, error) {
 	m, err := s.lib.Get(mediaID)
 	if err != nil {
 		return "", err
 	}
-
-	format = strings.ToLower(strings.TrimPrefix(format, "."))
-	var content, ext string
-	switch format {
-	case "srt":
-		content = FormatSRT(tr.Segments)
-		ext = "srt"
-	case "vtt":
-		content = FormatVTT(tr.Segments)
-		ext = "vtt"
-	case "txt":
-		content = FormatTXT(tr.Segments)
-		ext = "txt"
-	default:
+	ext := strings.ToLower(strings.TrimPrefix(format, "."))
+	if !slices.Contains(ExportFormats, ext) {
 		return "", fmt.Errorf("unsupported export format: %s", format)
 	}
-
-	defaultName := m.Name + "." + ext
 	path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
 		Parent:      mygo.CallerWindow(ctx),
-		Title:       "Export Subtitles",
-		DefaultPath: defaultName,
+		Title:       "Export Transcript",
+		DefaultPath: m.Name + "." + ext,
 		Filters: []mygo.FileFilter{
 			{Name: strings.ToUpper(ext) + " Files", Extensions: []string{ext}},
 		},
@@ -344,9 +354,24 @@ func (s *Service) Export(ctx context.Context, mediaID int64, format string) (str
 	if err != nil || path == "" {
 		return "", err
 	}
+	return path, s.ExportTo(mediaID, ext, opts, path)
+}
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return "", fmt.Errorf("write subtitle file: %w", err)
+// ExportTo saves the transcript of a media file at path, without asking.
+func (s *Service) ExportTo(mediaID int64, format string, opts ExportOptions, path string) error {
+	tr, err := s.Get(mediaID)
+	if err != nil {
+		return err
 	}
-	return path, nil
+	if len(tr.Segments) == 0 {
+		return errors.New("no transcript available to export")
+	}
+	data, err := Render(tr, format, opts)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write transcript file: %w", err)
+	}
+	return nil
 }
