@@ -94,10 +94,11 @@ func TestWindowShowsTranscript(t *testing.T) {
 	if !tt.HasText("first line") || !tt.HasText("second line") {
 		t.Fatalf("the transcript did not show: %q", tt.Texts())
 	}
+	// Search sits in the tab bar; the spoken language is on the row under it.
 	search, searchOK := tt.Find("Search the subtitles")
 	language, languageOK := tt.Find("Spoken language")
-	if !searchOK || !languageOK || search.X >= language.X {
-		t.Errorf("the search button is not left of the language selector: %+v %+v", search, language)
+	if !searchOK || !languageOK || search.Y+search.H > language.Y {
+		t.Errorf("the search button is not above the language selector: %+v %+v", search, language)
 	}
 	if err := tt.Click("Search the subtitles"); err != nil {
 		t.Fatal(err)
@@ -105,7 +106,7 @@ func TestWindowShowsTranscript(t *testing.T) {
 	tt.Frame()
 	a.trans.Segments = []translate.TranslationSegment{{SegmentID: a.segs[0].ID, TranslatedText: "translated first line"}}
 	a.transLang = a.trLang
-	if err := tt.Click("Settings"); err != nil {
+	if err := tt.Click("Subtitle settings"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -220,10 +221,10 @@ func TestDeleteMedia(t *testing.T) {
 	if len(a.media) != 0 {
 		t.Fatalf("still %d records", len(a.media))
 	}
-	for i := 0; i < 5 && !tt.HasText("No recordings yet"); i++ {
+	for i := 0; i < 5 && !tt.HasText("Record your first screen"); i++ {
 		tt.Frame()
 	}
-	if !tt.HasText("No recordings yet") {
+	if !tt.HasText("Record your first screen") {
 		t.Errorf("the empty library says %q", tt.Texts())
 	}
 }
@@ -429,7 +430,7 @@ func TestSettingsChooseAModel(t *testing.T) {
 	if a.modelInUse != filepath.Join(base, "aaa-model") {
 		t.Fatalf("in use: %q", a.modelInUse)
 	}
-	if err := tt.Click("Use"); err != nil {
+	if err := tt.Click("Use this model"); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
@@ -470,14 +471,22 @@ func TestSourceCardsAndPicker(t *testing.T) {
 
 	tt := ui.NewTester(a.view, 1100, 720)
 	tt.Frame()
-	if !tt.HasText("Choose a capture source") || !tt.HasText("System audio") {
-		t.Fatalf("the sidebar says %q", tt.Texts())
+	if !tt.HasText("New capture") || !tt.HasText("System audio") {
+		t.Fatalf("the capture panel says %q", tt.Texts())
 	}
 	if !tt.HasText("Full screen") || !tt.HasText("Window") || !tt.HasText("Microphone") {
 		t.Fatalf("the cards are not there: %q", tt.Texts())
 	}
-	if tt.HasText("Area") || tt.HasText("Camera only") || tt.HasText("Not yet") {
-		t.Errorf("unsupported source cards are still shown: %q", tt.Texts())
+	// Area and Camera are on the canvas but not built: they are shown as
+	// disabled cards marked SOON, and choosing them records nothing else.
+	if !tt.HasText("SOON") || tt.HasText("Camera only") || tt.HasText("Not yet") {
+		t.Errorf("unsupported source cards are not marked as coming: %q", tt.Texts())
+	}
+	before := a.sourceID
+	_ = tt.Click("Area")
+	tt.Frame()
+	if a.sourceID != before {
+		t.Errorf("the Area card changed the source to %q", a.sourceID)
 	}
 	if err := tt.Click("System audio device"); err != nil {
 		t.Fatal(err)
@@ -548,13 +557,18 @@ func TestCompactRecordingShowsTimerOnce(t *testing.T) {
 		})
 	}, CompactWidth, CompactHeight)
 	tt.Frame()
+	// The clock is shown twice by design: in the title bar's REC pill and as
+	// the page's large clock. Nothing else repeats it.
 	count := 0
 	for _, text := range tt.Texts() {
-		if text == "0:23" {
+		if strings.HasSuffix(text, "0:23") {
 			count++
+			if text != "00:00:23" {
+				t.Errorf("the clock reads %q, not 00:00:23", text)
+			}
 		}
 	}
-	if count != 1 {
+	if count != 2 {
 		t.Fatalf("recording timer appears %d times: %q", count, tt.Texts())
 	}
 	preview, ok := tt.Find("Recording preview")
@@ -568,14 +582,14 @@ func TestCompactRecordingShowsTimerOnce(t *testing.T) {
 func TestTitleBarKeepsClearOfTheWindowControls(t *testing.T) {
 	a, _ := newTestApp(t)
 	tt := ui.NewTester(a.view, 1100, 720)
-	tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
+	tt.SetTitleBar(ui.TitleBar{Height: TitleBarHeight, Right: 138})
 	tt.Frame()
 
 	name, ok := tt.Find("Ottr")
 	if !ok {
 		t.Fatalf("the title bar has no name: %q", tt.Texts())
 	}
-	if name.Y+name.H > titleBarHeight {
+	if name.Y+name.H > TitleBarHeight {
 		t.Errorf("the name is at y=%.0f, below the title bar", name.Y)
 	}
 	if right := name.X + name.W; right > 1100-138 {
@@ -587,10 +601,10 @@ func TestSecondaryWindowsUseImmersiveTitleBars(t *testing.T) {
 	a, _ := newTestApp(t)
 	for name, view := range map[string]func(*ui.Context){"Settings": a.settingsView} {
 		tt := ui.NewTester(view, WideWidth, WideHeight)
-		tt.SetTitleBar(ui.TitleBar{Height: titleBarHeight, Right: 138})
+		tt.SetTitleBar(ui.TitleBar{Height: TitleBarHeight, Right: 138})
 		tt.Frame()
 		title, ok := tt.Find("Ottr")
-		if !ok || title.Y+title.H > titleBarHeight {
+		if !ok || title.Y+title.H > TitleBarHeight {
 			t.Errorf("%s has no immersive title: %+v", name, title)
 		}
 		if title.X+title.W > WideWidth-138 {
@@ -599,64 +613,72 @@ func TestSecondaryWindowsUseImmersiveTitleBars(t *testing.T) {
 	}
 }
 
-// The recorder opens alone, gains a list-shaped library when there is room,
-// and opens details in the same window.
-func TestMainWindowExpandsLibrary(t *testing.T) {
+// The wide window shows the sidebar, the library and the capture panel
+// together; narrower windows show one page, and the library button switches
+// between the recorder and the library. A row opens its page in the same
+// window, and back returns to the library.
+func TestMainWindowLayouts(t *testing.T) {
 	a, _ := newTestApp(t)
 	a.sources = []capture.Source{{ID: "screen", Kind: "screen", Name: "Full screen"}}
 	a.pickSource()
 
-	tt := ui.NewTester(a.view, CompactWidth, CompactHeight)
+	tt := ui.NewTester(a.view, WideWidth, WideHeight)
 	tt.Frame()
-	if !tt.HasText("Choose a capture source") || !tt.HasText("Library") || !tt.HasText("Settings") {
-		t.Fatalf("the main window says %q", tt.Texts())
-	}
-	if tt.HasText("standup") {
-		t.Fatalf("the compact window opened the library: %q", tt.Texts())
-	}
-	if err := tt.Click("Library"); err != nil {
-		t.Fatal(err)
-	}
-	tt.SetSize(libraryAutoMinWidth, CompactHeight) // the real window is widened on toggle
-	tt.Frame()
-	if !tt.HasText("standup") || tt.HasText("New recording") {
-		t.Fatalf("the library panel says %q", tt.Texts())
-	}
-	if !tt.HasText("Choose a capture source") {
-		t.Fatal("expanding the library replaced the recorder")
+	for _, want := range []string{"All media", "New capture", "standup", "Start recording", "Settings"} {
+		if !tt.HasText(want) {
+			t.Fatalf("the wide window lacks %q: %q", want, tt.Texts())
+		}
 	}
 
-	a.librarySet = false
+	tt.SetSize(CompactWidth, CompactHeight)
+	tt.Frame()
+	if !tt.HasText("New capture") || tt.HasText("standup") {
+		t.Fatalf("the narrow window should show the recorder alone: %q", tt.Texts())
+	}
+	if err := tt.Click("Library"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("standup") || tt.HasText("New capture") {
+		t.Fatalf("the library button did not show the library: %q", tt.Texts())
+	}
+
+	tt.SetSize(900, 620)
+	a.libraryOpen = false
+	tt.Frame()
+	// The recorder at 900 lists the last recording under it, but not the
+	// library itself.
+	if !tt.HasText("New capture") || !tt.HasText("Last recording") && !tt.HasText("LAST RECORDING") || tt.HasText("All media") {
+		t.Fatalf("the 900px window should show the recorder: %q", tt.Texts())
+	}
+	if err := tt.Click("Library"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("standup") || !tt.HasText("All media") {
+		t.Fatalf("the rail's library button did not show the library: %q", tt.Texts())
+	}
+
 	tt.SetSize(WideWidth, WideHeight)
-	tt.Frame()
-	if !tt.HasText("standup") || !tt.HasText("Choose a capture source") {
-		t.Fatalf("the wide window did not show both panes: %q", tt.Texts())
-	}
-	if err := tt.Click("Library"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if tt.HasText("standup") {
-		t.Fatal("the automatic wide library could not be closed")
-	}
-	if err := tt.Click("Library"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
 	id := a.media[0].ID
 	a.openDetail(id)
-	for i := 0; i < 20 && !tt.HasText("Transcript"); i++ {
+	// The library row already quotes the first line, so wait for the page's
+	// own way back rather than for the text.
+	for i := 0; i < 20; i++ {
+		if _, ok := tt.Find("Back"); ok {
+			break
+		}
 		time.Sleep(5 * time.Millisecond)
 		tt.Frame()
 	}
-	if !tt.HasText("Transcript") {
-		t.Fatalf("opening a row did not show its details: %q", tt.Texts())
+	if !tt.HasText("Transcript") || !tt.HasText("first line") {
+		t.Fatalf("opening a row did not show its page: %q", tt.Texts())
 	}
 	if err := tt.Click("Back"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if tt.HasText("Transcript") || !tt.HasText("standup") {
+	if _, onPage := tt.Find("Back"); onPage || !tt.HasText("All media") || !tt.HasText("standup") {
 		t.Errorf("back did not return to the library: %q", tt.Texts())
 	}
 }
@@ -669,12 +691,18 @@ func TestRecordingSettingsTab(t *testing.T) {
 		a.recorderPage(c, a.applyTheme(c))
 	}, CompactWidth, CompactHeight)
 	tt.Frame()
-	if err := tt.Click("Settings"); err != nil {
+	// The redesign puts the live transcript's settings on the page itself:
+	// the spoken language and the translation, without a menu between.
+	if !tt.HasText("Spoken language") || !tt.HasText("Live transcript") && !tt.HasText("LIVE TRANSCRIPT") {
+		t.Fatalf("the recording page has no live transcript settings: %q", tt.Texts())
+	}
+	if err := tt.Click("Spoken language"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(250 * time.Millisecond)
 	tt.Frame()
-	if !tt.HasText("Transcription model") {
-		t.Fatalf("the recording Settings menu has no model settings: %q", tt.Texts())
+	if !tt.HasText("English") {
+		t.Fatalf("the spoken language select offers %q", tt.Texts())
 	}
 }
 
@@ -684,7 +712,7 @@ func TestDefaultFont(t *testing.T) {
 		ui.Text(c, a.applyTheme(c).Font)
 	}, 200, 60)
 	tt.Frame()
-	if !tt.HasText("Noto Sans") {
+	if !tt.HasText("Geist") {
 		t.Fatalf("default font = %q", tt.Texts())
 	}
 }

@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/ui"
-
 	"ottr/internal/jobs"
 	"ottr/internal/library"
 )
@@ -47,71 +45,6 @@ func (a *App) loadDetails() {
 		}
 		a.update(func() { a.details = d })
 	}()
-}
-
-// detailsCard sits under the recorder's controls: the facts a recording
-// depends on, so a full disk or a missing model is seen before it matters.
-func (a *App) detailsCard(c *ui.Context, t *ui.Theme) {
-	if a.recording || len(a.sources) == 0 {
-		return
-	}
-	if !a.details.loaded {
-		a.loadDetails()
-	}
-	d := a.details
-	ui.Column(c).Padding(0, t.Space(4), t.Space(4), t.Space(4)).Children(func() {
-		card := ui.Column(c).FillWidth().Padding(t.Space(1), t.Space(3.5)).Radius(t.Radius+4).
-			Border(1, t.Border).Background(t.Background)
-		cardShadow(card, t)
-		card.Children(func() {
-			a.detailRow(c, t, 0, a.tr("Saves to"), func() {
-				ui.Text(c, shortDir(a.recordingsDir())).FontSize(t.FontSize - 2).SingleLine().
-					Tooltip(a.recordingsDir())
-			})
-			a.detailRow(c, t, 1, a.tr("Free space"), func() {
-				text := "—"
-				switch {
-				case d.freeErr != "":
-					text = a.tr("Unknown")
-				case d.free > 0:
-					text = fmtSize(int64(d.free))
-				}
-				label := ui.Text(c, text).FontSize(t.FontSize - 2).FontFeatures("tnum")
-				if d.freeErr != "" {
-					label.Tooltip(d.freeErr)
-				}
-			})
-			a.detailRow(c, t, 2, a.tr("Transcribes with"), func() {
-				ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
-					dot, text, tip := t.Success, d.model+" · "+a.tr("offline"), ""
-					switch {
-					case !d.loaded:
-						dot, text = t.TextMuted, "—"
-					case d.model == "":
-						dot, text = t.Danger, a.tr("No model installed")
-					case !d.ready:
-						dot, text, tip = t.Warning, d.model+" · "+a.tr("not ready"), d.why
-					}
-					ui.Box(c).Size(7, 7).Radius(4).Background(dot)
-					label := ui.Text(c, text).FontSize(t.FontSize - 2).SingleLine()
-					if tip != "" {
-						label.Tooltip(tip)
-					}
-				})
-			})
-		})
-	})
-}
-
-func (a *App) detailRow(c *ui.Context, t *ui.Theme, i int, name string, value func()) {
-	row := ui.Row(c.Key(i)).FillWidth().Padding(t.Space(2.5), 0).Gap(t.Space(3)).AlignItems(ui.Center)
-	if i > 0 {
-		row.BorderWidth(1, 0, 0, 0).BorderColor(t.Border)
-	}
-	row.Children(func() {
-		ui.Text(c, name).FontSize(t.FontSize - 2).TextColor(t.TextMuted).Grow(1).SingleLine()
-		value()
-	})
 }
 
 func (a *App) recordingsDir() string {

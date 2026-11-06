@@ -83,9 +83,11 @@ func main() {
 		// The look chosen last, before the window exists, so that it starts in
 		// it.
 		mygo.Theme.SetSource(mygo.ThemeSource(prefs.Get(settings.Theme)))
-		background := "#000000"
-		if !mygo.Theme.IsDark() {
-			background = "#ffffff"
+		// The paper of the palette (kit.Palette), so that the first frame
+		// does not flash a different ground.
+		background := "#F3F4F5"
+		if mygo.Theme.IsDark() {
+			background = "#0E0F11"
 		}
 
 		win := mygo.NewWindow(mygo.WindowOptions{
@@ -93,9 +95,9 @@ func main() {
 			// The view draws its own title bar in the strip the window
 			// controls sit in (native.titleBar).
 			TitleBarStyle:   mygo.TitleBarHidden,
-			TitleBarHeight:  46,
-			Width:           native.CompactWidth,
-			Height:          native.CompactHeight,
+			TitleBarHeight:  native.TitleBarHeight,
+			Width:           native.WideWidth,
+			Height:          native.WideHeight,
 			MinWidth:        380,
 			MinHeight:       560,
 			BackgroundColor: background,

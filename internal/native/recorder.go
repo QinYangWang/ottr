@@ -6,137 +6,105 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"ottr/internal/capture"
 	"ottr/internal/native/kit"
 )
 
-// recorderPage uses the same structure as sessionPage: title and media on the
-// left, transcript on the right, stacked when the window is compact.
-func (a *App) recorderPage(c *ui.Context, t *ui.Theme) {
-	width, _ := c.Size()
-	if width < 900 {
-		ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Column(c).Padding(t.Space(3), t.Space(4), 0, t.Space(4)).Gap(t.Space(3)).Children(func() {
-				a.recordingHead(c, t)
-				a.recordingStage(c, t, true)
+// livePanel is the capture panel while recording: the clock, what is heard,
+// Pause and Stop, and the live transcript with its translation under each
+// final line. full lays it out as the whole window (the narrow layout), with
+// the picture of what is recorded on top.
+func (a *App) livePanel(c *ui.Context, t *ui.Theme, full bool) {
+	p := pal(t)
+	ui.Column(c).Fill().MinHeight(0).Background(p.Sheet).Children(func() {
+		ui.Column(c).FillWidth().Shrink(0).Padding(18, 20, 16, 20).Gap(12).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				label := a.tr("Recording")
+				if a.recordingPaused {
+					label = a.tr("Paused")
+				}
+				kit.Chip(c, t, kit.ChipRec, label)
+				ui.Text(c, a.liveSourceLine()).FontSize(12).TextColor(p.Ink3).SingleLine().MinWidth(0)
+				ui.Spacer(c)
+				if a.busy {
+					ui.Spinner(c).Label(a.tr("Finishing")).Size(14, 14)
+				}
 			})
-			ui.Column(c).Grow(1).MinHeight(0).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-				a.recordingTranscript(c, t)
+			ui.Row(c).AlignItems(ui.End).Gap(8).Children(func() {
+				mono(ui.Text(c, fmtClock(a.recordingElapsed().Milliseconds()))).FontSize(34).
+					FontWeight(500).LetterSpacing(-0.5).TextColor(p.Ink).Grow(1)
+				if a.previewW > 0 {
+					mono(ui.Text(c, a.trf("%dp", a.previewH))).FontSize(11.5).TextColor(p.Ink3).
+						Padding(0, 0, 6, 0)
+				}
 			})
-		})
-		return
-	}
-	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-		ui.Scroll(c).Grow(1).MinWidth(0).Children(func() {
-			ui.Column(c).Padding(t.Space(4), t.Space(5), t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
-				a.recordingHead(c, t)
-				a.recordingStage(c, t, false)
-				a.recordingFacts(c, t)
-			})
-		})
-		ui.Column(c).Width(sideWidth).Shrink(0).FillHeight().MinWidth(0).
-			Background(t.Surface).BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Children(func() {
-			a.recordingTranscript(c, t)
-		})
-	})
-}
-
-// recordingFacts is the strip under the preview: where the recording comes
-// from, what it hears, and which model is writing it.
-func (a *App) recordingFacts(c *ui.Context, t *ui.Theme) {
-	source := a.sourceName()
-	if detail := a.sourceDetail(); detail != "" {
-		source += " · " + detail
-	}
-	systemAudio := a.tr("Off")
-	if a.speaker.Name != "" {
-		systemAudio = a.speaker.Name
-	}
-	microphone := a.tr("Off")
-	if a.microphone.Name != "" {
-		microphone = a.microphone.Name
-	}
-	model := ""
-	if a.MM != nil {
-		model = a.MM.CurrentName()
-	}
-	facts := [][2]string{
-		{a.tr("Source"), source},
-		{a.tr("System audio"), systemAudio},
-		{a.tr("Microphone"), microphone},
-		{a.tr("Model"), model},
-	}
-	ui.Row(c).FillWidth().Radius(t.Radius).Border(1, t.Border).Clip().
-		AlignItems(ui.Stretch).Children(func() {
-		for i, fact := range facts {
-			if i > 0 {
-				ui.Column(c).Width(1).Shrink(0).Background(t.Border)
+			if full {
+				a.recordingStage(c, t)
 			}
-			ui.Column(c).Grow(1).MinWidth(0).Padding(t.Space(2.5), t.Space(3.5)).Gap(t.Space(1)).Children(func() {
-				ui.Text(c, fact[0]).FontSize(t.FontSize - 3).Bold().TextColor(t.TextMuted).SingleLine()
-				ui.Text(c, fact[1]).FontSize(t.FontSize - 1).Bold().SingleLine()
+			ui.Column(c).Gap(4).Children(func() {
+				a.liveSoundRow(c, t, iconSpeaker, iconSpeaker, "System audio", a.speaker)
+				a.liveSoundRow(c, t, iconMic, iconMicOff, "Microphone", a.microphone)
 			})
-		}
-	})
-}
-
-// recordingHead is the title, the running clock and the two transport buttons.
-func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
-	ui.Row(c).Gap(t.Space(2.5)).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, a.tr("Recording")).FontSize(t.FontSize + 3).Bold()
-		ui.Column(c).Padding(t.Space(0.5), t.Space(2)).Radius(9999).
-			Background(t.Danger.Alpha(0.12)).Children(func() {
-			ui.Text(c, fmtDuration(a.recordingElapsed().Milliseconds())).FontSize(t.FontSize - 3).
-				Bold().TextColor(t.Danger).FontFeatures("tnum")
+			ui.Row(c).FillWidth().Gap(8).Children(func() {
+				pauseLabel, pauseIcon := a.tr("Pause"), iconPause
+				if a.recordingPaused {
+					pauseLabel, pauseIcon = a.tr("Resume"), iconPlay
+				}
+				if kit.Button(c, t, kit.Secondary, pauseIcon, pauseLabel, true).Grow(1).Basis(0).
+					Disabled(a.busy).Clicked() && !a.busy {
+					a.Rec.SetPaused(!a.recordingPaused)
+				}
+				if kit.Button(c, t, kit.Danger, iconStop, a.tr("Stop"), true).Grow(1).Basis(0).
+					Disabled(a.busy).Clicked() && !a.busy {
+					a.stopRecording(false)
+				}
+			})
 		})
-		ui.Spacer(c)
-		if a.busy {
-			ui.Spinner(c).Label(a.tr("Finishing"))
-		}
-		pauseLabel := a.tr("Pause")
-		if a.recordingPaused {
-			pauseLabel = a.tr("Resume")
-		}
-		if ui.Button(c, pauseLabel).Disabled(a.busy).Clicked() {
-			a.Rec.SetPaused(!a.recordingPaused)
-		}
-		if kit.DangerButton(c, t, a.tr("Stop")).Disabled(a.busy).Clicked() {
-			a.stopRecording(false)
-		}
+		a.liveTranscript(c, t)
 	})
 }
 
-// recordingStage is the recording counterpart of nativePlayerStage, including
-// the same square frame and dark transport bar.
-func (a *App) recordingStage(c *ui.Context, t *ui.Theme, fitWidth bool) {
-	ui.Column(c).FillWidth().Clip().Border(1, t.Border).Children(func() {
-		a.previewPane(c, t, fitWidth)
-		ui.Row(c).Padding(t.Space(2), t.Space(3)).Gap(t.Space(3)).AlignItems(ui.Center).
-			Background(playerBar(t)).Children(func() {
-			ui.Spacer(c)
-			ui.Text(c, a.tr("Recording to disk")).FontSize(t.FontSize - 2).
-				TextColor(onMedia()).Opacity(0.9).SingleLine().Shrink(0)
-		})
-	})
-}
-
-func (a *App) previewPane(c *ui.Context, t *ui.Theme, fitWidth bool) {
-	from, to := mediaBackdrop(t.Dark)
-	pane := ui.Column(c).Label(a.tr("Recording preview")).MinWidth(0).Clip().
-		Border(0, t.Border).Gradient(from, to, 90)
-	if fitWidth {
-		ratio := float32(16.0 / 9.0)
-		if a.previewW > 0 && a.previewH > 0 {
-			ratio = float32(a.previewW) / float32(a.previewH)
-		}
-		pane.FillWidth().AspectRatio(ratio)
-	} else {
-		pane.Grow(1)
+// liveSourceLine is what is recorded, said briefly: "Display 1 · System audio".
+func (a *App) liveSourceLine() string {
+	parts := []string{a.sourceName()}
+	if a.speaker.ID != "" {
+		parts = append(parts, a.tr("System audio"))
 	}
+	if a.microphone.ID != "" {
+		parts = append(parts, a.tr("Microphone"))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// liveSoundRow is one sound the recording takes, or Off.
+func (a *App) liveSoundRow(c *ui.Context, t *ui.Theme, icon, offIcon *ui.SVG, label string, device capture.AudioDevice) {
+	p := pal(t)
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		glyph, value := icon, device.Name
+		if device.ID == "" {
+			glyph, value = offIcon, a.tr("Off")
+		}
+		ui.Icon(c, glyph).FontSize(14).TextColor(p.Ink3)
+		ui.Text(c, a.tr(label)).FontSize(11.5).TextColor(p.Ink3).Width(84).SingleLine()
+		ui.Text(c, value).FontSize(11.5).TextColor(p.Ink2).SingleLine().MinWidth(0)
+	})
+}
+
+// recordingStage is the picture of what is being recorded.
+func (a *App) recordingStage(c *ui.Context, t *ui.Theme) {
+	p := pal(t)
+	ratio := float32(16.0 / 9.0)
+	if a.previewW > 0 && a.previewH > 0 {
+		ratio = float32(a.previewW) / float32(a.previewH)
+	}
+	pane := ui.Column(c).Label(a.tr("Recording preview")).FillWidth().AspectRatio(ratio).MinWidth(0).
+		Radius(kit.RadiusCard).Clip().Background(p.Media)
 	pane.Children(func() {
 		if a.preview == nil {
-			ui.Column(c).Fill().Center().Gap(t.Space(2)).Children(func() {
+			ui.Column(c).Fill().Center().Gap(8).Children(func() {
 				ui.Spinner(c).Label(a.tr("Waiting for the picture"))
-				ui.Text(c, a.tr("Waiting for the first frame…")).FontSize(t.FontSize - 2).TextColor(onMedia())
+				ui.Text(c, a.tr("Waiting for the first frame…")).FontSize(12).TextColor(onMedia()).Opacity(0.7)
 			})
 			return
 		}
@@ -144,63 +112,95 @@ func (a *App) previewPane(c *ui.Context, t *ui.Theme, fitWidth bool) {
 	})
 }
 
-func (a *App) recordingTranscript(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Padding(t.Space(4), t.Space(4), 0, t.Space(4)).Gap(t.Space(2)).AlignItems(ui.Center).
-			BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			tab := 0
-			ui.Tabs(c, &tab, a.tr("Transcript")).Grow(1)
+// liveTranscript is the live text: its controls, the lines, and what the text
+// is worth.
+func (a *App) liveTranscript(c *ui.Context, t *ui.Theme) {
+	p := pal(t)
+	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Row(c).FillWidth().Padding(14, 20, 6, 20).Gap(6).AlignItems(ui.Center).Children(func() {
+			kit.Label(c, t, a.tr("Live transcript")).Grow(1)
 			if a.canTranslateLive() {
-				ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-					if ui.Switch(c, &a.liveTranslate).Label(a.tr("Translate")).Tooltip(a.tr("Translate")).Changed() {
-						a.restartLiveTranslation()
-					}
-					ui.Text(c, a.tr("Translate")).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-				})
+				a.liveTranslateChip(c, t)
 			}
-			a.subtitleSettingsButton(c, t, nil)
-		})
-		ui.Column(c).Grow(1).MinHeight(0).Padding(t.Space(3), t.Space(4)).Children(func() {
-			a.livePane(c, t)
-		})
-	})
-}
-
-func (a *App) livePane(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
-		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			a.transcriptSearchButton(c, t)
 			a.liveLanguageSelect(c, t)
 		})
-		ui.Text(c, a.tr("Provisional: start transcription after the recording stops.")).
-			FontSize(t.FontSize - 3).TextColor(t.TextMuted)
-		if a.liveTranslate {
+		if a.liveTranslate && a.canTranslateLive() {
 			a.liveTranslationControls(c, t)
 		}
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Gap(t.Space(2.5)).Children(func() {
+		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+			ui.Column(c).Padding(6, 20, 16, 20).Gap(14).Children(func() {
 				shown := 0
 				for _, line := range a.late {
 					if !a.liveMatches(line.text) {
 						continue
 					}
 					shown++
-					a.subtitleContent(c, t, 0, fmtDuration(line.at), line.text, a.liveTrans[line.utterance].translated)
+					a.liveLineRow(c.Key(line.utterance), t, line, a.liveTrans[line.utterance].translated)
 				}
 				if len(a.late) == 0 {
-					ui.Text(c, a.tr("Listening for audio…")).TextColor(t.TextMuted).
-						FontSize(t.FontSize - 1)
+					ui.Text(c, a.tr("Listening for audio…")).FontSize(13).TextColor(p.Ink3)
 				} else if shown == 0 {
-					ui.Text(c, a.tr("Nothing matches that search.")).TextColor(t.TextMuted).
-						FontSize(t.FontSize - 1)
+					ui.Text(c, a.tr("Nothing matches that search.")).FontSize(13).TextColor(p.Ink3)
 				}
 				if a.liveWarn != "" {
-					ui.Text(c, a.liveWarn).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
+					ui.Text(c, a.liveWarn).FontSize(11.5).TextColor(p.Ink3)
 				}
 				if a.liveTransErr != "" {
-					ui.Text(c, a.liveTransErr).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
+					ui.Text(c, a.liveTransErr).FontSize(11.5).TextColor(p.Ink3)
 				}
 			})
+		})
+		ui.Row(c).FillWidth().Shrink(0).Padding(12, 20).Gap(8).AlignItems(ui.Start).
+			BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
+			ui.Icon(c, iconCPU).FontSize(14).TextColor(p.Ink3).Shrink(0)
+			ui.Text(c, a.tr("Provisional. When you stop, the full pass on this computer replaces it and adds speakers.")).
+				FontSize(11.5).TextColor(p.Ink3)
+		})
+	})
+}
+
+// liveTranslateChip turns the translation of final lines on and off: amber
+// when on.
+func (a *App) liveTranslateChip(c *ui.Context, t *ui.Theme) {
+	p := pal(t)
+	label := a.trf("%s on", langName(a.trLang))
+	if !a.liveTranslate {
+		label = a.trf("%s off", langName(a.trLang))
+	}
+	chip := ui.ButtonBase(c).Label(a.tr("Translate")).Tooltip(a.tr("Translate")).Role(ui.RoleSwitch).
+		Checked(a.liveTranslate).Height(22).Padding(0, 8).Radius(9999).Center().Cursor(ui.CursorPointer)
+	if a.liveTranslate {
+		chip.Background(p.AmberSoft).TextColor(p.AmberInk)
+	} else {
+		chip.Background(p.Hover).TextColor(p.Ink2)
+	}
+	chip.Children(func() { ui.Text(c, label).FontSize(11).FontWeight(500).SingleLine() })
+	if chip.Clicked() {
+		a.liveTranslate = !a.liveTranslate
+		a.restartLiveTranslation()
+	}
+}
+
+// liveLineRow is one live line: its time, the text, and the translation under
+// a final line. The line still being spoken is dimmed, with an amber caret.
+func (a *App) liveLineRow(c *ui.Context, t *ui.Theme, line liveLine, translated string) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Gap(12).AlignItems(ui.Start).Children(func() {
+		mono(ui.Text(c, fmtDuration(line.at))).FontSize(11.5).TextColor(p.Ink3).Width(36).Shrink(0).
+			Padding(2, 0, 0, 0)
+		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+			ui.Row(c).FillWidth().AlignItems(ui.End).Wrap().Children(func() {
+				text := ui.Text(c, line.text).FontSize(a.subtitleSize() - 0.5).Selectable().MinWidth(0)
+				if line.final {
+					text.TextColor(p.Ink)
+				} else {
+					text.TextColor(p.Ink3)
+					ui.Box(c).Size(2, 15).Background(p.Amber).Margin(0, 0, 2, 2)
+				}
+			})
+			if translated != "" && line.final {
+				ui.Text(c, translated).FontSize(max(a.subtitleSize()-1.5, 10)).TextColor(p.Ink3).Selectable()
+			}
 		})
 	})
 }
@@ -214,7 +214,7 @@ func (a *App) liveLanguageSelect(c *ui.Context, t *ui.Theme) {
 	for i, name := range names {
 		options[i] = kit.SelectOption[string]{Value: name, Label: name}
 	}
-	kit.CompactSelect(c, t, &lang, options, a.tr("Spoken language"), 120, iconEarth, func(choice string) {
+	kit.CompactSelect(c, t, &lang, options, a.tr("Spoken language"), 96, nil, func(choice string) {
 		for i, name := range names {
 			if name == choice && codes[i] != a.defaultLanguage {
 				a.setDefaultLanguage(codes[i], nil)
@@ -237,14 +237,15 @@ func (a *App) canTranslateLive() bool {
 // liveTranslationControls picks the target language of the live lines. It is
 // the same target the saved transcript uses, so switching one switches both.
 func (a *App) liveTranslationControls(c *ui.Context, t *ui.Theme) {
-	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-		ui.Icon(c, iconEarth).FontSize(t.FontSize + 2).TextColor(t.TextMuted)
+	p := pal(t)
+	ui.Row(c).Padding(0, 20, 4, 20).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, a.tr("Translate into")).FontSize(11.5).TextColor(p.Ink3)
 		name := langName(a.trLang)
 		options := make([]kit.SelectOption[string], len(langs))
 		for i, l := range langs {
 			options[i] = kit.SelectOption[string]{Value: l.name, Label: l.name}
 		}
-		kit.CompactSelect(c, t, &name, options, a.tr("Translate into"), 130, nil, func(choice string) {
+		kit.CompactSelect(c, t, &name, options, a.tr("Translate into"), 120, nil, func(choice string) {
 			for _, l := range langs {
 				if l.name == choice && l.code != a.trLang {
 					a.trLang = l.code
@@ -253,7 +254,7 @@ func (a *App) liveTranslationControls(c *ui.Context, t *ui.Theme) {
 			}
 		})
 		if len(a.liveTransBusy) > 0 {
-			ui.Spinner(c).Label(a.tr("Translating"))
+			ui.Spinner(c).Label(a.tr("Translating")).Size(12, 12)
 		}
 	})
 }
