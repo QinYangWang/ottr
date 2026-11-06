@@ -1,0 +1,132 @@
+<!doctype html><html><head><link rel="stylesheet" data-doop-webfonts href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Geist+Mono:wght@100..900&amp;display=swap"><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet"><style>
+*{margin:0;box-sizing:border-box}
+:root{--r-ctl:6px;--r-card:10px;--r-panel:12px}
+body{font-family:"Geist","Segoe UI Variable Text","Noto Sans SC","Microsoft YaHei UI",sans-serif;font-size:13px;line-height:1.45;color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;overflow:hidden;
+--paper:#F3F4F5;--sheet:#FFFFFF;--sunk:#F7F8F9;--hover:#EEF0F2;--ink:#121417;--ink2:#4A5058;--ink3:#7C838C;--ink4:#A6ACB3;--line:#E4E6E9;--line2:#CDD1D6;
+--amber:#FFB020;--amber-ink:#8A5600;--amber-soft:#FFF4DB;--amber-line:#F5C46B;--red:#E5383B;--red-ink:#C42B2E;--red-soft:#FDECEC;--green:#1F9D61;--green-soft:#E4F5EC;
+--btn:#121417;--btn-ink:#FFFFFF;--media:#1B1E22;--shadow:0 12px 32px rgba(17,20,23,.14),0 2px 6px rgba(17,20,23,.06)}
+body.dark{--paper:#0E0F11;--sheet:#16181B;--sunk:#1B1E22;--hover:#22262B;--ink:#EDEEF0;--ink2:#A9AFB7;--ink3:#737A83;--ink4:#555B62;--line:#2A2E33;--line2:#3A3F46;
+--amber:#FFB020;--amber-ink:#FFC453;--amber-soft:#33270F;--amber-line:#6B4E14;--red:#E5383B;--red-ink:#FF6B6E;--red-soft:#3A1516;--green:#3DD68C;--green-soft:#12301F;
+--btn:#EDEEF0;--btn-ink:#121417;--media:#0A0B0D;--shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3)}
+.i{flex:none;display:block}
+.mono{font-family:"Geist Mono","Cascadia Mono",monospace;font-variant-numeric:tabular-nums;letter-spacing:0}
+.lbl{font-family:"Geist Mono","Cascadia Mono",monospace;font-size:10.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.row{display:flex;align-items:center}
+.grow{flex:1;min-width:0}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* window chrome */
+.tb{height:40px;display:flex;align-items:center;padding-left:16px;background:var(--paper);border-bottom:1px solid var(--line);position:relative}
+.wm{display:flex;align-items:center;gap:7px;font-weight:600;font-size:15px;letter-spacing:-.3px;color:var(--ink)}
+.wm .dot{width:9px;height:9px;border-radius:3px;background:var(--amber)}
+.tb .ctx{margin-left:14px;color:var(--ink3);font-size:12px;display:flex;gap:6px;align-items:center}
+.wc{margin-left:auto;display:flex;height:40px}
+.wc span{width:46px;display:flex;align-items:center;justify-content:center;color:var(--ink2)}
+.recpill{position:absolute;left:50%;transform:translateX(-50%);top:8px;height:24px;padding:0 10px;border-radius:999px;background:var(--red-soft);color:var(--red-ink);display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600}
+.recdot{width:8px;height:8px;border-radius:50%;background:var(--red)}
+/* buttons */
+.btn{height:32px;padding:0 12px;border-radius:var(--r-ctl);display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:13px;font-weight:500;border:1px solid var(--line2);background:var(--sheet);color:var(--ink);white-space:nowrap}
+.btn.pri{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink2)}
+.btn.lg{height:40px;font-size:13.5px;padding:0 16px}
+.ib{width:32px;height:32px;border-radius:var(--r-ctl);display:inline-flex;align-items:center;justify-content:center;color:var(--ink2);flex:none}
+.ib.on{background:var(--hover);color:var(--ink)}
+.ib.bo{border:1px solid var(--line2);background:var(--sheet)}
+.kbd{font-family:"Geist Mono",monospace;font-size:10.5px;height:18px;min-width:18px;padding:0 5px;border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;background:var(--sheet)}
+/* chips */
+.chip{height:20px;padding:0 7px;border-radius:999px;font-size:11px;font-weight:500;display:inline-flex;align-items:center;gap:4px;background:var(--hover);color:var(--ink2);white-space:nowrap}
+.chip.ok{background:var(--green-soft);color:var(--green)}
+.chip.am{background:var(--amber-soft);color:var(--amber-ink)}
+.chip.bad{background:var(--red-soft);color:var(--red-ink)}
+.chip.line{background:transparent;border:1px solid var(--line2)}
+/* switch */
+.sw{width:32px;height:18px;border-radius:999px;background:var(--line2);position:relative;flex:none}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw.on{background:var(--ink)}
+.sw.on:after{left:16px}
+body.dark .sw.on{background:var(--amber)} body.dark .sw.on:after{background:#121417}
+/* select / field */
+.sel{height:32px;border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--sheet);display:flex;align-items:center;gap:8px;padding:0 10px;font-size:13px;color:var(--ink)}
+.sel .i:last-child{margin-left:auto;color:var(--ink3)}
+.field{height:32px;border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--sheet);display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--ink3);font-size:13px}
+.field.focus{border-color:var(--amber);box-shadow:0 0 0 3px var(--amber-soft);color:var(--ink)}
+/* sidebar */
+.sb{width:232px;background:var(--paper);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:12px 10px}
+.sb .lbl{padding:14px 10px 6px}
+.ni{height:32px;border-radius:var(--r-ctl);display:flex;align-items:center;gap:10px;padding:0 10px;color:var(--ink2);font-size:13px}
+.ni .n{margin-left:auto;font-family:"Geist Mono",monospace;font-size:11px;color:var(--ink3)}
+.ni.on{background:var(--sheet);color:var(--ink);font-weight:500;box-shadow:inset 0 0 0 1px var(--line)}
+body.dark .ni.on{background:var(--hover);box-shadow:none}
+.ni.on .i{color:var(--ink)}
+.stat{margin-top:auto;border:1px solid var(--line);border-radius:var(--r-card);background:var(--sheet);padding:12px;display:flex;flex-direction:column;gap:10px}
+.stat .k{font-size:11px;color:var(--ink3)}
+.stat .v{font-size:12px;color:var(--ink);display:flex;align-items:center;gap:6px}
+.meter{height:4px;border-radius:2px;background:var(--hover);overflow:hidden}
+.meter b{display:block;height:100%;background:var(--ink2)}
+.gdot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+/* rail */
+.rail{width:56px;background:var(--paper);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px}
+.rail .ib{width:36px;height:36px}
+.rail .rec{width:36px;height:36px;border-radius:var(--r-ctl);background:var(--btn);display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.rail .rec i{width:10px;height:10px;border-radius:50%;background:var(--red);display:block}
+/* media mock */
+.media{background:var(--media);border-radius:var(--r-card);position:relative;overflow:hidden}
+.scr{position:absolute;background:#FFFFFF;border-radius:4px;overflow:hidden;display:flex;flex-direction:column}
+.scr .bar{height:9%;min-height:6px;background:#E8EBEF;display:flex;align-items:center;gap:3px;padding-left:4%}
+.scr .bar i{width:4px;height:4px;border-radius:50%;background:#C3C8CF;display:block}
+.scr .bd{flex:1;display:flex}
+.scr .side{width:22%;background:#F3F5F7;padding:6% 4%;display:flex;flex-direction:column;gap:7%}
+.scr .main{flex:1;padding:6%;display:flex;flex-direction:column;gap:6%}
+.ln{height:5%;min-height:3px;border-radius:2px;background:#D5DAE0}
+.ln.d{background:#9AA3AE}.ln.a{background:#FFB020}
+.tiles{position:absolute;inset:6%;display:grid;grid-template-columns:1fr 1fr;gap:4%}
+.tiles>div{border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;position:relative}
+.mchip{position:absolute;left:6px;bottom:6px;display:flex;gap:4px}
+.mdur{position:absolute;right:6px;bottom:6px;font-family:"Geist Mono",monospace;font-size:10.5px;color:#fff;background:rgba(0,0,0,.62);padding:1px 5px;border-radius:4px}
+/* speaker avatar */
+.av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;color:#fff;flex:none}
+/* sections */
+.sheet{background:var(--sheet)}
+.hr{height:1px;background:var(--line)}
+.seg{display:flex;gap:6px}
+
+html,body{width:1280px;height:800px}
+
+.dets{display:grid;grid-template-columns:repeat(4,1fr);margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.dets .k{font-size:11px;color:var(--ink3)} .dets .v{font-size:12.5px;margin-top:2px}
+.center{flex:1;min-width:0;background:var(--sheet);display:flex;flex-direction:column;padding:0 24px}
+.phead{height:64px;display:flex;align-items:center;gap:12px}
+.ptitle{font-size:18px;font-weight:600;letter-spacing:-.2px}
+.pmeta{font-size:12px;color:var(--ink3);margin-top:1px}
+.seek{position:relative;height:16px;display:flex;align-items:center;gap:3px;margin-top:12px}
+.seek .sg{height:4px;border-radius:2px;background:var(--line2);position:relative;overflow:hidden}
+.seek .sg b{position:absolute;left:0;top:0;bottom:0;background:var(--ink)}
+.seek .ph{position:absolute;top:2px;width:12px;height:12px;border-radius:50%;background:var(--amber);border:2px solid var(--sheet);box-shadow:0 0 0 1px var(--amber-line)}
+.seek .tk{position:absolute;top:0;width:2px;height:16px;border-radius:1px;background:var(--amber)}
+.trans{display:flex;align-items:center;gap:6px;height:44px;margin-top:4px}
+.play{width:36px;height:36px;border-radius:50%;background:var(--btn);color:var(--btn-ink);display:flex;align-items:center;justify-content:center}
+.chaps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.chap{border:1px solid var(--line);border-radius:8px;padding:9px 11px;position:relative;overflow:hidden}
+.chap .mono{font-size:11px;color:var(--ink3)}
+.chap div{font-size:12.5px;margin-top:2px}
+.chap.on{border-color:var(--amber-line);background:var(--amber-soft)}
+.chap.on .mono{color:var(--amber-ink)}
+.panel{width:440px;flex:none;background:var(--sheet);border-left:1px solid var(--line);display:flex;flex-direction:column}
+.tabs{height:48px;display:flex;align-items:stretch;padding:0 12px 0 20px;border-bottom:1px solid var(--line);gap:20px}
+.tab{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink3);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--ink);font-weight:500;border-color:var(--ink)}
+.subbar{height:44px;display:flex;align-items:center;gap:8px;padding:0 20px;border-bottom:1px solid var(--line)}
+.sel.sm{height:28px;font-size:12px;padding:0 8px}
+.tl{padding:6px 10px;overflow:hidden;flex:1}
+.tr{display:flex;gap:11px;padding:9px 10px;border-radius:8px;position:relative}
+.tr .nm{font-size:12px;font-weight:600}
+.tr .tm{font-family:"Geist Mono",monospace;font-size:11px;color:var(--ink3)}
+.tr .tx{font-size:13px;line-height:1.5;margin-top:2px;color:var(--ink)}
+.tr .zh{font-size:12.5px;color:var(--ink3);margin-top:3px;line-height:1.5}
+.tr.on{background:var(--amber-soft)}
+.tr.on:before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--amber)}
+.tr.on .tm{color:var(--amber-ink)}
+mark{background:var(--amber-soft);color:inherit;border-bottom:2px solid var(--amber);padding:0 1px}
+mark.cur{background:var(--amber);color:#121417}
+.pfoot{height:44px;border-top:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:8px;font-size:11.5px;color:var(--ink3)}
+</style></head><body class=""><div class="tb"><div class="wm"><span class="dot"></span>ottr</div><div class="wc"><span><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></svg></span><span><svg class="i " width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg></span><span><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></svg></span></div></div><div class="row" style="height:760px;align-items:stretch"><nav class="rail"><span class="rec"><i></i></span><span class="ib on" data-doop-on="click" data-doop-action="navigate:8Gr6-Ve2G5" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14" /> <path d="M12 6v14" /> <path d="M8 8v12" /> <path d="M4 4v16" /></svg></span><span class="ib"><svg class="i " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" /></svg></span><span class="ib" data-doop-on="click" data-doop-action="navigate:oM7uRXDq4A" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /></svg></span><span style="flex:1"></span><span class="ib" data-doop-on="click" data-doop-action="navigate:K5zn4aFdP4" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /> <circle cx="12" cy="12" r="3" /></svg></span></nav><section class="center"><div class="phead"><span class="ib" data-doop-on="click" data-doop-action="navigate:8Gr6-Ve2G5" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7" /> <path d="M19 12H5" /></svg></span><div class="grow"><div class="ptitle ell">Weekly product sync</div><div class="pmeta ell">Recorded · Nov 6, 10:02 · 42:18 · 3 speakers</div></div><span class="btn ghost"><svg class="i " width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></svg>Show file</span><span class="btn" data-doop-on="click" data-doop-action="overlay:iovV_bKivj" data-doop-transition="dissolve" data-doop-duration="200"><svg class="i " width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /></svg>Export</span><span class="ib" data-doop-on="click" data-doop-action="overlay:AwxltPO8hH" data-doop-transition="dissolve" data-doop-duration="200" style="color:var(--red-ink)"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6" /> <path d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></span></div><div class="media" style="width:736px;height:414px"><div class="tiles" style="gap:4%"><div style="background:#2A3340;"><div class="av" style="width:69px;height:69px;background:#3E63DD;font-size:27px">AR</div><span style="position:absolute;left:6px;bottom:4px;font-size:12px;font-weight:500;color:#E6E8EB">Ana Ruiz</span></div><div style="background:#28332F;box-shadow:inset 0 0 0 2px #FFB020;"><div class="av" style="width:69px;height:69px;background:#12A594;font-size:27px">CL</div><span style="position:absolute;left:6px;bottom:4px;font-size:12px;font-weight:500;color:#E6E8EB">Chen Ligan</span></div><div style="background:#36293A;"><div class="av" style="width:69px;height:69px;background:#D6409F;font-size:27px">S3</div><span style="position:absolute;left:6px;bottom:4px;font-size:12px;font-weight:500;color:#E6E8EB">Speaker 3</span></div><div style="background:#2C2A3A;"><div class="av" style="width:69px;height:69px;background:#8E4EC6;font-size:27px">JK</div><span style="position:absolute;left:6px;bottom:4px;font-size:12px;font-weight:500;color:#E6E8EB">Jonas Keller</span></div></div></div><div class="seek"><div class="sg" style="flex:27"><b style="width:100%"></b></div><div class="sg" style="flex:31"><b style="width:6%"></b></div><div class="sg" style="flex:22"><b style="width:0%"></b></div><div class="sg" style="flex:20"><b style="width:0%"></b></div><span class="ph" style="left:calc(28.8% - 6px)"></span></div><div class="trans"><span class="play"><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" /></svg></span><span class="ib"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z" /> <path d="M3 20V4" /></svg></span><span class="ib"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4v16" /> <path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" /></svg></span><span class="mono" style="font-size:12px;margin-left:4px">12:11 <span style="color:var(--ink3)">/ 42:18</span></span><span style="flex:1"></span><span class="chip line mono">1×</span><span class="ib"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="14" x="3" y="5" rx="2" ry="2" /> <path d="M7 15h4M15 15h2M7 11h2M13 11h4" /></svg></span><span class="ib"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" /> <path d="M16 9a5 5 0 0 1 0 6" /> <path d="M19.364 18.364a9 9 0 0 0 0-12.728" /></svg></span><span class="ib"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3" /> <path d="M21 8V5a2 2 0 0 0-2-2h-3" /> <path d="M3 16v3a2 2 0 0 0 2 2h3" /> <path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg></span></div><div class="lbl" style="margin-top:16px">Chapters</div><div class="chaps"><div class="chap"><span class="mono">00:00</span><div class="ell">Release status</div></div><div class="chap on"><span class="mono">11:31</span><div class="ell">What is left for 0.6.1</div></div><div class="chap"><span class="mono">24:10</span><div class="ell">Export dialog scope</div></div><div class="chap"><span class="mono">33:48</span><div class="ell">Docs and release day</div></div></div><div class="dets"><div><div class="k">Source</div><div class="v ell">Display 1 · System audio</div></div><div><div class="k">File</div><div class="v ell">1080p30 · H.264 · 412 MB</div></div><div><div class="k">Saved to</div><div class="v ell">Videos › Ottr</div></div><div><div class="k">Language</div><div class="v ell">English → 中文</div></div></div></section><section class="panel"><div class="tabs"><div class="tab on">Transcript</div><div class="tab">中文 <span class="chip am" style="height:18px;font-size:10.5px">Translated</span></div><div class="tab" data-doop-on="click" data-doop-action="navigate:BHaEGh64p_" data-doop-transition="dissolve" data-doop-duration="250">Summary</div><span style="margin-left:auto;display:flex;align-items:center;gap:2px"><span class="ib" data-doop-on="click" data-doop-action="navigate:aEhVbltVSK" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></svg></span><span class="ib" data-doop-on="click" data-doop-action="overlay:iovV_bKivj" data-doop-transition="dissolve" data-doop-duration="200"><svg class="i " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /></svg></span></span></div><div class="subbar"><span style="font-size:12px;color:var(--ink3)">Spoken</span><div class="sel sm">English<span class="chip" style="height:16px;font-size:10px">detected</span><svg class="i " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg></div><span style="margin-left:auto;font-size:12px;color:var(--ink2)">中文 under lines</span><span class="sw on"></span></div><div class="tl"><div class="tr"><div class="av" style="width:24px;height:24px;background:#3E63DD;font-size:9px">AR</div><div class="grow"><div class="row" style="gap:8px"><span class="nm">Ana Ruiz</span><span class="tm">11:52</span></div><div class="tx">And the library? Last week the orphan files banner showed up twice.</div><div class="zh">那媒体库呢？上周孤立文件的提示出现了两次。</div></div></div><div class="tr"><div class="av" style="width:24px;height:24px;background:#D6409F;font-size:9px">S3</div><div class="grow"><div class="row" style="gap:8px"><span class="nm">Speaker 3</span><span class="tm">12:02</span></div><div class="tx">Fixed on Tuesday. It shows once now, under the grid, with Add back.</div><div class="zh">周二修好了。现在只在网格下方显示一次，带“重新加入”。</div></div></div><div class="tr on"><div class="av" style="width:24px;height:24px;background:#12A594;font-size:9px">CL</div><div class="grow"><div class="row" style="gap:8px"><span class="nm">Chen Ligan</span><span class="tm">12:09</span></div><div class="tx">So the export dialog is the last thing blocking 0.6.1.</div><div class="zh">所以导出对话框是 0.6.1 最后的阻碍。</div></div></div><div class="tr"><div class="av" style="width:24px;height:24px;background:#3E63DD;font-size:9px">AR</div><div class="grow"><div class="row" style="gap:8px"><span class="nm">Ana Ruiz</span><span class="tm">12:15</span></div><div class="tx">I&#x27;ll take it and pair with you tomorrow morning.</div><div class="zh">我来做，明天上午和你结对。</div></div></div><div class="tr"><div class="av" style="width:24px;height:24px;background:#12A594;font-size:9px">CL</div><div class="grow"><div class="row" style="gap:8px"><span class="nm">Chen Ligan</span><span class="tm">12:24</span></div><div class="tx">Keep SRT and plain text, and drop the Word option for now.</div><div class="zh">保留 SRT 和纯文本，暂时去掉 Word 选项。</div></div></div><div class="tr"><div class="av" style="width:24px;height:24px;background:#3E63DD;font-size:9px">AR</div><div class="grow"><div class="row" style="gap:8px"><span class="nm">Ana Ruiz</span><span class="tm">12:31</span></div><div class="tx">Then the translation toggle goes into the same dialog?</div><div class="zh">那翻译开关也放进同一个对话框？</div></div></div><div class="tr"><div class="av" style="width:24px;height:24px;background:#12A594;font-size:9px">CL</div><div class="grow"><div class="row" style="gap:8px"><span class="nm">Chen Ligan</span><span class="tm">12:40</span></div><div class="tx">Yes, one switch: include the 中文 lines under each subtitle.</div><div class="zh">对，一个开关：在每条字幕下附上中文。</div></div></div></div><div class="pfoot"><svg class="i " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v2" /> <path d="M12 2v2" /> <path d="M17 20v2" /> <path d="M17 2v2" /> <path d="M2 12h2" /> <path d="M2 17h2" /> <path d="M2 7h2" /> <path d="M20 12h2" /> <path d="M20 17h2" /> <path d="M20 7h2" /> <path d="M7 20v2" /> <path d="M7 2v2" /> <rect x="4" y="4" width="16" height="16" rx="2" /> <rect x="8" y="8" width="8" height="8" rx="1" /></svg>Transcribed on this computer · SenseVoice · 3 speakers<span style="margin-left:auto" class="mono">286 lines</span></div></section></div></body></html>
