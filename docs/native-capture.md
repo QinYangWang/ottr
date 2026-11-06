@@ -317,8 +317,9 @@ Exit: one BGRA frame with correct pixels, dimensions and PTS on each OS/toolchai
 - Introduce `Backend`, `Stream`, `Frame`, typed errors and the shared backend in
   the composition root.
 - Replace MJPEG/TCP with bounded raw frames and Go JPEG preview.
-- Implement one-frame capture and atomic PNG output, then add the Screenshot UI
-  and Library metadata path.
+- Implement one-frame capture and atomic PNG output, plus the Library metadata
+  path. The recorder no longer shows a Screenshot button: the design dropped it, so
+  only `capture.Snapshotter` and `Library.AddScreenshot` remain.
 - Test color conversion, stride, Retina/HiDPI, odd sizes and latest-frame-only
   backpressure.
 
@@ -405,7 +406,7 @@ import supported media and transcribe.
 | Phase | State |
 |---|---|
 | 0. Lock behavior, prove the native ABI | **done on Windows.** WGC + D3D11 staging readback delivers BGRA physical pixels with monotonic PTS; built by mingw cgo, no MSVC DLL needed. |
-| 1. Common frame pipeline, preview, screenshots | **done on Windows.** `capture.Backend`/`Stream`/`Frame`, typed errors, bounded queue, native JPEG preview (no TCP, no subprocess), PNG screenshots with atomic rename, `Library.AddScreenshot`, a Screenshot button in the recording form. |
+| 1. Common frame pipeline, preview, screenshots | **done on Windows.** `capture.Backend`/`Stream`/`Frame`, typed errors, bounded queue, native JPEG preview (no TCP, no subprocess), PNG screenshots with atomic rename, `Library.AddScreenshot` (the design keeps the button out of the recorder). |
 | 2. Encoders, PCM, fragmented MP4 | **not started.** Recording still hands raw BGRA to FFmpeg over a named pipe; no `internal/media` yet. |
 
 ### What phase 1 changed
