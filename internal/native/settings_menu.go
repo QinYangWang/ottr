@@ -8,6 +8,7 @@ import (
 
 	"ottr/internal/jobs"
 	"ottr/internal/library"
+	"ottr/internal/native/kit"
 	"ottr/internal/settings"
 )
 
@@ -15,11 +16,11 @@ import (
 // and playback. Submenus float left of the main item and never get clipped by
 // the main popover.
 func (a *App) subtitleSettingsMenu(c *ui.Context, t *ui.Theme, m *library.Media) {
-	button := ui.ButtonBase(c).Label(a.tr("Settings")).Tooltip(a.tr("Settings")).TextColor(t.TextMuted).
-		Padding(t.Space(1.5)).Radius(t.Radius)
-	button.Children(func() { ui.Icon(c, iconSliders).FontSize(t.FontSize + 3) })
-	if button.Hovered() {
-		button.Background(t.SurfaceHover)
+	button := ui.ButtonBase(c).Label(a.tr("Subtitle settings")).Tooltip(a.tr("Subtitle settings")).TextColor(pal(t).Ink2).
+		Size(32, 32).Center().Radius(kit.RadiusControl).Cursor(ui.CursorPointer)
+	button.Children(func() { ui.Icon(c, iconSliders).FontSize(16) })
+	if button.Hovered() || a.subtitleSettingsOpen {
+		button.Background(pal(t).Hover).TextColor(pal(t).Ink)
 	}
 	if button.Clicked() {
 		a.subtitleSettingsOpen = !a.subtitleSettingsOpen
@@ -27,7 +28,7 @@ func (a *App) subtitleSettingsMenu(c *ui.Context, t *ui.Theme, m *library.Media)
 		a.translationMenuOpen, a.styleMenuOpen = false, false
 	}
 	ui.PopoverBase(c, button, &a.subtitleSettingsOpen, func(panel ui.Element) {
-		panel.Width(360).Padding(t.Space(2)).Radius(t.Radius).
+		panel.Width(340).Padding(4).Radius(kit.RadiusCard).
 			Background(t.Background).Border(1, t.Border)
 		popoverShadow(panel, t)
 		ui.Column(c).Gap(t.Space(1)).Children(func() {
@@ -85,8 +86,8 @@ func (a *App) onOff(on bool) string {
 // settingsValueItem is a menu row that acts or toggles in place: no submenu
 // arrow, and an optional value on the right.
 func (a *App) settingsValueItem(c *ui.Context, t *ui.Theme, label, value string, onClick func()) {
-	item := ui.ButtonBase(c).Label(a.tr(label)).FillWidth().Height(44).Padding(0, t.Space(3)).
-		Radius(t.Space(2)).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	item := ui.ButtonBase(c).Label(a.tr(label)).FillWidth().Height(36).Padding(0, t.Space(2.5)).
+		Radius(kit.RadiusControl).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if item.Hovered() {
 		item.Background(t.SurfaceHover)
 	}
@@ -105,8 +106,8 @@ func (a *App) settingsValueItem(c *ui.Context, t *ui.Theme, label, value string,
 }
 
 func (a *App) settingsMenuItem(c *ui.Context, t *ui.Theme, label, value string, onClick func()) ui.Element {
-	item := ui.ButtonBase(c).Label(label).FillWidth().Height(44).Padding(0, t.Space(3)).
-		Radius(t.Space(2)).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	item := ui.ButtonBase(c).Label(label).FillWidth().Height(36).Padding(0, t.Space(2.5)).
+		Radius(kit.RadiusControl).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	if item.Hovered() {
 		item.Background(t.SurfaceHover)
 	}
@@ -142,7 +143,7 @@ func (a *App) closeSettingsMenus() {
 func (a *App) settingsSubmenu(c *ui.Context, t *ui.Theme, anchor ui.Element, open *bool, build func()) {
 	ui.PopoverBase(c, anchor, open, func(panel ui.Element) {
 		panel.AttachTo(anchor, ui.AnchorTopStart, ui.AnchorTopEnd).Width(300).
-			Padding(t.Space(2)).Radius(t.Radius).Background(t.Background).Border(1, t.Border)
+			Padding(4).Radius(kit.RadiusCard).Background(t.Background).Border(1, t.Border)
 		popoverShadow(panel, t)
 		build()
 	})
