@@ -20,39 +20,28 @@ for the canvas URL; do not create a new canvas.
 
 ## Where the HTML comes from
 
-`.doop/` holds the generator (gitignored, local only):
-
-| File | Role |
-| --- | --- |
-| `gen2.js` | every page template, shared CSS, the `srow()` row helper |
-| `ui.js` | interaction layer: tabs, switches, selects, seek, menus, toasts |
-| `icons/*.svg` | Lucide icons used by `ic(name, size)` |
-| `scripts/build.js` | regenerates pages; `--shots` also refreshes `docs/design` |
-
-Edit `gen2.js` — never patch generated HTML by hand, or the next build loses the change.
-Two scripts keep the loop honest:
+The canvas itself. `docs/design/pages/*.html` are the frames' own documents, exported
+with `get_frame`, and `docs/design/screens/*.png` are their screenshots. Never patch an
+exported page by hand: change the frame, then export again.
 
 ```sh
-node .agents/skills/doop-canvas/scripts/build.js          # regenerate .doop/*.html
-node .agents/skills/doop-canvas/scripts/build.js --shots  # + docs/design pages/screens
+DOOP_CLIENT="python3 <path>/doop.py" node .agents/skills/doop-canvas/scripts/build.js          # pages
+DOOP_CLIENT="python3 <path>/doop.py" node .agents/skills/doop-canvas/scripts/build.js --shots  # + screens
 ```
 
-The second form copies the generated pages into `docs/design/pages` (with the
-settings-height and 420px overrides) and renders every screenshot into
-`docs/design/screens`. Set `DOOP_BROWSER` to a Chromium/Edge executable if it is not
-found automatically.
+`DOOP_CLIENT` is any Doop MCP client that takes `call <tool> -` with JSON arguments on
+stdin. The script caches each frame in `.doop/frames/<id>.html` (gitignored); without
+`DOOP_CLIENT` it builds from that cache. Screenshots come from a local Chromium/Edge
+(`DOOP_BROWSER`, or one found on the machine) and otherwise from Doop's own renderer
+(`get_frame_screenshot`), which is what the canvas shows anyway.
 
-For a single page, render it directly:
+The frame → page table (22 frames) lives at the top of `build.js`. When a frame is added
+or removed on the canvas, edit that table and the screen table in `docs/design/README.md`
+in the same change. Frames are generated from a small kit (tokens + helpers + one script
+per screen family) kept outside the repo; see the `ottr-redesign` skill for how.
 
-```sh
-msedge --headless=old --hide-scrollbars --virtual-time-budget=5000 \
-  --window-size=1280,800 --screenshot=.doop/shot.png \
-  "file:///<repo>/.doop/session.html"
-```
-
-Sizes: recorder/playback/library/recording 1280×800, settings 920×660 (snapshots use
-920×1050 so the full page is captured), compact 900×620, narrow 420×800 (set
-`html,body{width:420px}` — Chromium will not lay out below ~500px).
+Sizes: main window 1280×800, settings 920×660, compact 900×620, narrow 420×800, and the
+dialogs at the size of the modal (440×252, 460×452, 460×256).
 
 ## Pushing a frame
 
@@ -86,4 +75,4 @@ Sizes: recorder/playback/library/recording 1280×800, settings 920×660 (snapsho
 
 - Do not fabricate speaker identities. Speakers stay `Speaker 1…N`, renameable.
 - Do not add web UI to the shipped app. No webview, no HTML, no JS in `internal/`.
-- Do not commit `.doop/` — it is local tooling and gitignored.
+- Do not commit `.doop/` — it is a local cache and gitignored.

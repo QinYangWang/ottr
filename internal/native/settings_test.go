@@ -65,7 +65,7 @@ func TestSpeakerLibraryPage(t *testing.T) {
 	a.settingsTab = 3
 	tt := ui.NewTester(a.settingsView, settingsWidth, 1100)
 	tt.Frame()
-	for _, text := range []string{"Speaker library", "Ana Ruiz", "2 recordings · 41m · last heard Nov 5"} {
+	for _, text := range []string{"Speakers", "Ana Ruiz", "2 recordings · 41m · last heard Nov 5"} {
 		if !tt.HasText(text) {
 			t.Fatalf("the speaker page does not show %q: %q", text, tt.Texts())
 		}

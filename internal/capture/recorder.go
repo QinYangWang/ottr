@@ -66,6 +66,12 @@ type LiveLine struct {
 	Warn string `json:"warn,omitempty"`
 }
 
+// recordFPS is the rate a recording is written at. Native capture delivers a
+// frame only when the screen changes, so the sink repeats the newest frame to
+// keep the encoder's input fixed-rate: a still screen still records, and audio
+// stays on the same clock.
+const recordFPS = 30
+
 // StateChanged is broadcast when recording starts, stops or fails.
 var StateChanged = mygo.NewEvent[State]("recording:state")
 

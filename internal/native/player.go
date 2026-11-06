@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"ottr/internal/library"
+	"ottr/internal/native/kit"
 	player "ottr/internal/player"
 )
 
@@ -186,105 +187,121 @@ func (a *App) playbackPlaying() bool {
 	return a.playback.audio != nil && a.playback.audio.Playing()
 }
 
+// nativePlayerStage is the media on its dark ground, the seek bar split into
+// the summary's chapters, and the transport under it.
 func (a *App) nativePlayerStage(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Column(c).FillWidth().Radius(16).Clip().
-		BorderWidth(1).BorderColor(t.Border).Children(func() {
-		from, to := mediaBackdrop(t.Dark)
+	p := pal(t)
+	ui.Column(c).FillWidth().Gap(12).Children(func() {
 		ratio := float32(16.0 / 9.0)
 		if m.Width > 0 && m.Height > 0 {
 			ratio = float32(m.Width) / float32(m.Height)
 		}
-		stage := ui.Column(c).FillWidth().AspectRatio(ratio).Gradient(from, to, 90).Center()
+		stage := ui.Column(c).FillWidth().AspectRatio(ratio).Radius(kit.RadiusCard).Clip().
+			Background(p.Media).Center()
 		stage.Children(func() {
 			switch {
 			case a.playback.id == m.ID && a.playback.video != nil:
-				ui.Video(c, a.playback.video).Grow(1).Fit(ui.Contain)
+				ui.Video(c, a.playback.video).Fill().Fit(ui.Contain)
 			case m.Source == "screenshot":
-				ui.Icon(c, iconScreen).FontSize(t.FontSize + 16).TextColor(onMedia()).Opacity(0.7)
+				if picture := a.thumbs[m.ID]; picture != nil {
+					ui.Image(c, picture).Fit(ui.Contain).Fill()
+				} else {
+					ui.Icon(c, iconImage).FontSize(28).TextColor(onMedia()).Opacity(0.6)
+				}
 			case !m.HasVideo:
-				ui.Icon(c, iconMic).FontSize(t.FontSize + 16).TextColor(onMedia()).Opacity(0.7)
+				ui.Icon(c, iconWaveform).FontSize(28).TextColor(onMedia()).Opacity(0.6)
 			case a.playback.loading && a.playback.id == m.ID:
-				ui.Column(c).Center().Gap(t.Space(2)).Children(func() {
+				ui.Column(c).Center().Gap(8).Children(func() {
 					ui.Spinner(c).Label(a.tr("Loading"))
-					ui.Text(c, a.tr("Loading…")).FontSize(t.FontSize - 2).TextColor(onMedia())
+					ui.Text(c, a.tr("Loading…")).FontSize(12).TextColor(onMedia())
 				})
 			default:
-				play := ui.ButtonBase(c).Label(a.tr("Play")).Tooltip(a.tr("Play in Ottr")).
-					Padding(t.Space(4)).Radius(t.Space(10)).Background(ui.RGBA(255, 255, 255, 0.12))
-				play.Children(func() { ui.Icon(c, iconPlay).FontSize(t.FontSize + 12).TextColor(onMedia()) })
+				if picture := a.thumbs[m.ID]; picture != nil {
+					ui.Image(c, picture).Fit(ui.Contain).Fill()
+				}
+				play := ui.ButtonBase(c).Label(a.tr("Play")).Tooltip(a.tr("Play in Ottr")).Size(56, 56).
+					Radius(28).Center().Background(ui.RGBA(255, 255, 255, 0.14)).Cursor(ui.CursorPointer)
+				if a.thumbs[m.ID] != nil {
+					play.Attach(ui.AnchorCenter, ui.AnchorCenter)
+				}
+				play.Children(func() { ui.Icon(c, iconPlay).FontSize(24).TextColor(onMedia()) })
 				if play.Hovered() {
-					play.Background(ui.RGBA(255, 255, 255, 0.2))
+					play.Background(ui.RGBA(255, 255, 255, 0.24))
 				}
 				if play.Clicked() {
 					a.togglePlayback(m)
 				}
 			}
 		})
-		ui.Column(c).Attach(ui.AnchorBottomLeft, ui.AnchorBottomLeft).FillWidth().
-			Background(ui.RGBA(0, 0, 0, 0.55)).Children(func() {
-			a.playbackControls(c, t, m)
-		})
-	})
-}
-
-func (a *App) playbackControls(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Column(c).Children(func() {
-		ui.Row(c).Padding(t.Space(1), t.Space(2), 0, t.Space(2)).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			if m.Source != "screenshot" {
-				label := a.tr("Play")
-				icon := iconPlay
-				if a.playback.id == m.ID && a.playbackPlaying() {
-					label, icon = a.tr("Pause"), iconPause
-				}
-				a.playbackIconButton(c, t, icon, label, func() { a.togglePlayback(m) })
-			}
-			ui.Text(c, fmtDuration(a.playbackPosition(m).Milliseconds())+" / "+fmtDuration(m.DurationMs)).
-				FontSize(t.FontSize - 2).TextColor(onMedia()).FontFeatures("tnum").SingleLine().Shrink(0)
-			ui.Spacer(c)
-			if m.Source == "screenshot" {
-				ui.Text(c, a.tr("Still image")).FontSize(t.FontSize - 3).TextColor(onMedia()).Opacity(0.8)
-				return
-			}
-			volumeIcon := iconSpeaker
-			if a.muted {
-				volumeIcon = iconVolumeX
-			}
-			a.playbackIconButton(c, t, volumeIcon, a.tr("Mute"), a.toggleMute)
-			a.playbackIconButton(c, t, iconFullscreen, a.tr("Enter full screen"), func() {
-				if a.win != nil {
-					a.win.ToggleFullScreen()
-				}
-			})
-			more := ui.ButtonBase(c).Label(a.tr("More actions")).Tooltip(a.tr("More actions")).
-				Padding(t.Space(1.5)).Radius(t.Radius).TextColor(onMedia())
-			more.Children(func() { ui.Icon(c, iconMore).FontSize(t.FontSize + 2) })
-			more.Menu(func(mn *ui.Menu) {
-				if mn.Item(a.tr("Show the file")).Chosen() {
-					mygo.Shell.ShowItemInFolder(m.Path)
-				}
-			})
-		})
 		if a.playback.id == m.ID && a.playback.err != "" {
-			ui.Row(c).Padding(0, t.Space(3), t.Space(1)).Children(func() {
-				ui.Text(c, a.playback.err).FontSize(t.FontSize - 3).TextColor(onMedia()).Opacity(0.8).
-					SingleLine().MinWidth(0).Tooltip(a.playback.err)
-			})
+			ui.Text(c, a.playback.err).FontSize(11.5).TextColor(p.Ink3).SingleLine().MinWidth(0).
+				Tooltip(a.playback.err)
 		}
 		if m.Source != "screenshot" {
 			a.playbackSeekSlider(c, t, m)
 		}
+		a.playbackControls(c, t, m)
 	})
 }
 
-func (a *App) playbackIconButton(c *ui.Context, t *ui.Theme, icon *ui.SVG, label string, onClick func()) {
-	button := ui.ButtonBase(c).Label(label).Tooltip(label).Padding(t.Space(1.5)).Radius(t.Radius).TextColor(onMedia())
-	button.Children(func() { ui.Icon(c, icon).FontSize(t.FontSize + 2) })
-	if button.Hovered() {
-		button.Background(ui.RGBA(255, 255, 255, 0.14))
-	}
-	if button.Clicked() {
-		onClick()
-	}
+// playbackControls is the transport: play, ten seconds back and on, the clock,
+// and on the right the translation under lines, mute, full screen and more.
+func (a *App) playbackControls(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
+		if m.Source == "screenshot" {
+			ui.Text(c, a.tr("Still image")).FontSize(12).TextColor(p.Ink3)
+			return
+		}
+		label, icon := a.tr("Play"), iconPlay
+		if a.playback.id == m.ID && a.playbackPlaying() {
+			label, icon = a.tr("Pause"), iconPause
+		}
+		play := ui.ButtonBase(c).Label(label).Tooltip(label).Size(36, 36).Radius(18).Center().
+			Background(p.Btn).TextColor(p.BtnInk).Cursor(ui.CursorPointer)
+		play.Children(func() { ui.Icon(c, icon).FontSize(16) })
+		if play.Clicked() {
+			a.togglePlayback(m)
+		}
+		ui.Box(c).Width(4)
+		kit.IconButton(c, t, iconSkipBack, a.tr("Back 10 seconds"), func() {
+			a.seekPlayback(m, a.playbackPosition(m)-10*time.Second)
+		})
+		kit.IconButton(c, t, iconSkipForward, a.tr("Forward 10 seconds"), func() {
+			a.seekPlayback(m, a.playbackPosition(m)+10*time.Second)
+		})
+		ui.Row(c).Gap(6).Padding(0, 8).AlignItems(ui.Center).Shrink(0).Children(func() {
+			mono(ui.Text(c, fmtDuration(a.playbackPosition(m).Milliseconds()))).FontSize(13).
+				FontWeight(500).TextColor(p.Ink)
+			ui.Text(c, "/").FontSize(13).TextColor(p.Ink4)
+			mono(ui.Text(c, fmtDuration(m.DurationMs))).FontSize(13).TextColor(p.Ink3)
+		})
+		ui.Spacer(c)
+		if len(a.segs) > 0 {
+			captions := kit.IconButton(c, t, iconCaptions, a.tr("Show translation"), func() {
+				a.setTranslationVisible(m, !a.showTranslation)
+			})
+			if a.showTranslation {
+				captions.Background(p.Hover).TextColor(p.Ink)
+			}
+		}
+		volumeIcon := iconSpeaker
+		if a.muted {
+			volumeIcon = iconVolumeX
+		}
+		kit.IconButton(c, t, volumeIcon, a.tr("Mute"), a.toggleMute)
+		kit.IconButton(c, t, iconFullscreen, a.tr("Enter full screen"), func() {
+			if a.win != nil {
+				a.win.ToggleFullScreen()
+			}
+		})
+		more := kit.IconButton(c, t, iconMoreH, a.tr("More actions"), nil)
+		more.Menu(func(mn *ui.Menu) {
+			if mn.Item(a.tr("Show the file")).Chosen() {
+				mygo.Shell.ShowItemInFolder(m.Path)
+			}
+		})
+	})
 }
 
 func (a *App) toggleMute() {
@@ -296,26 +313,64 @@ func (a *App) toggleMute() {
 	}
 }
 
-// playbackSeekSlider draws its own high-contrast track because the player bar
-// is dark in both themes. Changed updates the thumb immediately; release seeks.
+// playbackSeekSlider is the seek bar: the summary's chapters as segments with
+// gaps between them, what has played in ink, amber ticks where the search
+// found something, and the amber playhead. Changed moves the thumb at once;
+// release seeks.
 func (a *App) playbackSeekSlider(c *ui.Context, t *ui.Theme, m library.Media) {
 	if m.DurationMs <= 0 {
 		return
 	}
+	p := pal(t)
 	if !a.playback.seeking {
 		a.playback.seekSeconds = a.playbackPosition(m).Seconds()
 	}
 	duration := float64(m.DurationMs) / 1000
 	slider := ui.SliderBase(c, &a.playback.seekSeconds, 0, duration).
-		Label(a.tr("Playback position")).Grow(1).MinWidth(60).Height(18)
+		Label(a.tr("Playback position")).FillWidth().MinWidth(60).Height(16).Cursor(ui.CursorPointer)
 	fraction := float32(a.playback.seekSeconds / duration)
-	slider.Draw(func(p *ui.Painter, r ui.Rect) {
-		const inset = float32(0)
-		x, width := r.X+inset, r.W-2*inset
-		y := r.Y + r.H/2 - 2
-		p.Fill(ui.Rect{X: x, Y: y, W: width, H: 4}, ui.RGBA(255, 255, 255, 0.22), 2)
-		p.Fill(ui.Rect{X: x, Y: y, W: width * fraction, H: 4}, onMedia(), 2)
-		p.Fill(ui.Rect{X: x + width*fraction - 6, Y: r.Y + r.H/2 - 6, W: 12, H: 12}, onMedia(), 6)
+	var cuts []float32
+	for _, ch := range a.sum.Chapters {
+		if ch.StartMs > 0 && ch.StartMs < m.DurationMs {
+			cuts = append(cuts, float32(ch.StartMs)/float32(m.DurationMs))
+		}
+	}
+	var ticks []float32
+	for _, id := range a.searchHits() {
+		for _, seg := range a.segs {
+			if seg.ID == id {
+				ticks = append(ticks, float32(seg.StartMs)/float32(m.DurationMs))
+			}
+		}
+	}
+	slider.Draw(func(pt *ui.Painter, r ui.Rect) {
+		y := r.Y + r.H/2 - 1.5
+		bounds := append([]float32{0}, cuts...)
+		bounds = append(bounds, 1)
+		for i := 0; i+1 < len(bounds); i++ {
+			x0, x1 := r.X+r.W*bounds[i], r.X+r.W*bounds[i+1]
+			if i > 0 {
+				x0 += 1.5
+			}
+			if i+2 < len(bounds) {
+				x1 -= 1.5
+			}
+			if x1 <= x0 {
+				continue
+			}
+			pt.Fill(ui.Rect{X: x0, Y: y, W: x1 - x0, H: 3}, p.Line2, 1.5)
+			played := min(r.X+r.W*fraction, x1)
+			if played > x0 {
+				pt.Fill(ui.Rect{X: x0, Y: y, W: played - x0, H: 3}, p.Ink, 1.5)
+			}
+		}
+		for _, tick := range ticks {
+			pt.Fill(ui.Rect{X: r.X + r.W*tick - 1, Y: r.Y + r.H/2 - 5, W: 2, H: 10}, p.Amber, 1)
+		}
+		head := ui.Rect{X: r.X + r.W*fraction - 6, Y: r.Y + r.H/2 - 6, W: 12, H: 12}
+		pt.Fill(head, p.Sheet, 6)
+		pt.Fill(ui.Rect{X: head.X + 2, Y: head.Y + 2, W: 8, H: 8}, p.Amber, 4)
+		pt.Stroke(head, p.Amber, 6, 1)
 	})
 	if slider.Changed() {
 		a.playback.seeking = true

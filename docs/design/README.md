@@ -1,110 +1,131 @@
 # Ottr UI design reference
 
-Static snapshots of the Ottr desktop UI, plus the tokens and component code they are built from.
-These pages are **design references only** — the shipped app is native Go/MyGo in [`internal/native`](../../internal/native)
-and never renders HTML. Use this folder to check spacing, colour and state behaviour, then mirror
-the change in Go.
+Static snapshots of the Ottr desktop UI, exported from the Doop canvas, plus the tokens they
+are drawn with. These pages are **design references only**: the shipped app is native Go/MyGo
+in [`internal/native`](../../internal/native) and never renders HTML. Use this folder to check
+spacing, colour and state behaviour, then mirror the change in Go.
 
-![Component examples](screens/00-components.png)
+The system is **"studio console + highlighter"**: graphite ink on cool paper-grey, one amber
+accent for what is current (the playing line, the playhead, a search hit, a focused field),
+red only for recording and destruction, green only for "done" and level meters.
 
 ## Screens
 
-Open any file in `pages/` in a browser. Each one is a single self-contained document.
+Open any file in `pages/` in a browser. Each one is the frame's own HTML, self-contained.
 
-| Screenshot | Page | Size | What it shows |
-| --- | --- | --- | --- |
-| `01-recorder.png` | `01-recorder.html` | 1280×800 | Empty recorder, library panel open |
-| `02-playback.png` | `02-playback.html` | 1280×800 | Playback with transcript, player controls |
-| `03-playback-dark.png` | `03-playback-dark.html` | 1280×800 | Same screen, dark theme |
-| `04-recording.png` | `04-recording.html` | 1280×800 | Live recording, pause/stop in the header, red clock pill |
-| `05-library.png` | `05-library.html` | 1280×800 | Library grid view |
-| `06-settings-speakers.png` | `06-settings-speakers.html` | 920×1050 | Global speaker names |
-| `07-settings-appearance.png` | `07-settings-appearance.html` | 920×660 | Language, display font, theme |
-| `08-settings-transcription.png` | `08-settings-transcription.html` | 920×1050 | Models, download states, subtitle options |
-| `09-settings-provider.png` | `09-settings-provider.html` | 920×1050 | ASR/LLM provider and prompt templates |
-| `10-recorder-900.png` | `10-recorder-900.html` | 900×620 | Recorder without the library panel |
-| `11-recorder-420.png` | `11-recorder-420.html` | 420×800 | Narrow recorder, single column |
-| `12-playback-900.png` | `12-playback-900.html` | 900×620 | Playback without the library panel |
-| `13-playback-420.png` | `13-playback-420.html` | 420×800 | Narrow playback |
-| `14-search-open.png` | `14-search-open.html` | 1280×800 | Transcript search unfolded over the language selects |
+| Screenshot / page | Size | What it shows |
+| --- | --- | --- |
+| `01-recorder` | 1280×800 | Sidebar, library list and the New capture panel |
+| `02-recorder-dark` | 1280×800 | Same, dark |
+| `03-recording` | 1280×800 | The capture panel as the live panel: clock, meters, Pause/Stop, live transcript; REC pill in the title bar |
+| `04-recording-dark` | 1280×800 | Same, dark |
+| `05-transcribing` | 1280×800 | Item page after Stop: the pipeline card (transcribe → translate → summarize) |
+| `06-playback` | 1280×800 | Item page: stage, chapter-segmented seek bar, chapter cards, facts strip, document panel |
+| `07-playback-dark` | 1280×800 | Same, dark |
+| `08-summary` | 1280×800 | Document panel on the Summary tab |
+| `09-search` | 1280×800 | Transcript search with hit ticks on the seek bar |
+| `10-library-grid` | 1280×800 | Library as a grid |
+| `11-library-empty` | 1280×800 | First run: record or import, three steps |
+| `12-settings-appearance` | 920×660 | Settings window: language, font, theme, highlighter |
+| `13-settings-transcription` | 920×660 | Speech recognition models and the spoken language |
+| `14-settings-provider` | 920×660 | Provider tiles, bordered fields, import chain, prompts |
+| `15-settings-speakers` | 920×660 | Speaker library with search and rename |
+| `16-dialog-delete` | 440×252 | Delete recording |
+| `17-dialog-export` | 460×452 | Export: transcript / translation / summary, formats |
+| `18-dialog-failed` | 460×256 | Transcription failed |
+| `19-recorder-900` | 900×620 | Rail + recorder, last recording under the audio rows |
+| `20-recorder-420` | 420×800 | Narrow recorder, library button in the header |
+| `21-playback-900` | 900×620 | Rail + item page, chapter list, 344px document panel |
+| `22-playback-420` | 420×800 | Narrow item page, document under the player |
 
-Layout rule in the app: the library panel is visible at **≥ 840 DIP**, the 900×620 shell is used
-from 840 to 1100 DIP, and below ~560 DIP the panels stack into the 420×800 layout.
+### Breakpoints
+
+The main window opens at **1280×800** with a **40px** title bar the view draws itself.
+
+| Width | Layout (`layoutOf` in `app.go`) |
+| --- | --- |
+| ≥ 1100 | `wide`: 232px sidebar, library, 360px capture panel; item pages use a 56px rail and a 440px document panel |
+| 560 – 1099 | `mid`: 56px rail and one page (recorder or library); item pages use a 344px document panel |
+| < 560 | `narrow`: one column; the recorder header has a Library button, item pages stack the document under the player |
 
 ## Tokens
 
-[`tokens.css`](tokens.css) carries the Interfere palette for light and dark. The values that matter
-when implementing in Go:
+[`tokens.css`](tokens.css) carries the palette for light and dark; the Go mirror is
+[`kit/palette.go`](../../internal/native/kit/palette.go).
 
-| Token | Light | Dark |
-| --- | --- | --- |
-| Page | `#ffffff` | `#000000` |
-| Surface / component | `#0000000f` | `#ffffff12` |
-| Hover | `#00000017` | `#ffffff1b` |
-| Border | `#0000000f` | `#ffffff12` |
-| Strong border | `#00000026` | `#ffffff2c` |
-| Text primary | `#000000df` | `#ffffffed` |
-| Text secondary | `#0000009b` | `#ffffffaf` |
-| Text tertiary | `#00000072` | `#ffffff64` |
-| Brand | `#0090ff` | `#0090ff` |
-| Brand hover | `#0588f0` | `#3b9eff` |
-| Danger | `#e54d2e` | `#e54d2e` |
-| Positive | `#008647` | `#43fea4` |
+| Token | Light | Dark | Use |
+| --- | --- | --- | --- |
+| paper | `#F3F4F5` | `#0E0F11` | Window chrome, sidebar, rail |
+| sheet | `#FFFFFF` | `#16181B` | Content, cards, fields |
+| sunk / hover | `#F7F8F9` / `#EEF0F2` | `#1B1E22` / `#22262B` | Inset wells / hover fills |
+| ink · ink2 · ink3 · ink4 | `#121417` `#4A5058` `#7C838C` `#A6ACB3` | `#EDEEF0` `#A9AFB7` `#737A83` `#555B62` | Text: primary, secondary, meta (≥11px only), disabled |
+| line / line2 | `#E4E6E9` / `#CDD1D6` | `#2A2E33` / `#3A3F46` | Dividers and card borders / control borders |
+| amber | `#FFB020` | `#FFB020` | The highlighter: current line, playhead, focus |
+| amber-soft / amber-ink | `#FFF4DB` / `#8A5600` | `#33270F` / `#FFC453` | Active-line fill / text on it (amber itself is never text) |
+| red / red-soft | `#E5383B` / `#FDECEC` | `#E5383B` / `#3A1516` | Recording and destructive only |
+| green / green-soft | `#1F9D61` / `#E4F5EC` | `#3DD68C` / `#12301F` | Done chips, level meters |
+| btn | `#121417` | `#EDEEF0` | Primary button fill |
+| media | `#1B1E22` | `#0A0B0D` | Stage and thumbnails |
 
-Radii: 2 / 4 / 6 / 8 / 10 / 12 / 16 / 20 / 24 / full. Controls use **8**, media frames **16**,
-popovers **12** with 6px padding and 6px items (inner radius + 8 = outer radius).
+Radii: controls **6**, cards **10**, panels and groups **12**, pills full. Controls are **32px**
+tall. One shadow (`--shadow`) for dialogs and popovers; cards use 1px borders, never shadows.
+A selected tile is a 2px ink stroke.
 
-Shadows: `--shadow-default` for cards, `--shadow-large` for the library panel,
-`--shadow-extra-large` for popovers and menus.
+Type: **Geist** 400/500/600 for the UI and **Geist Mono** (tabular figures) for every number,
+timecode, size, path and key, and for the 10.5px capital section labels. Both are embedded
+from `internal/native/fonts` (SIL OFL 1.1, `fonts/OFL.txt`); CJK falls back to the system
+(Microsoft YaHei UI, Noto Sans SC). Scale: 20 / 18 / 16 titles, 13 body, 12.5 中文 and
+secondary, 11.5–12 meta, 10.5 mono labels.
 
-Typography: Inter (Saans substitute) at 680 / 450 / 300; numbers use tabular figures; body text
-13px, secondary 11–12px, section labels 10px uppercase at 0.06em.
+## Native constraints
 
-## Components
+The canvas is drawn only with what MyGo can paint: flat fills, 1px borders, rounded rects,
+one shadow, Lucide icons at stroke 1.75. No gradients, blur, backdrop filters or images as
+chrome. Hover, on and focus states are fills and borders only.
 
-[`components.css`](components.css) + [`example.html`](example.html) (screenshot `00-components.png`)
-cover the pieces used in more than one screen: pill buttons, icon buttons, the white and filled
-selects, the popover, the settings menu, the unfolding search, switches, setting rows, badges,
-and the speaker row.
-
-Two rules that are easy to get wrong:
-
-- **Selects**: the Appearance selects are white with a `#00000026` border, 38px tall, 10px radius,
-  13px text, value left and chevron right. The in-line selects (language, subtitle size) stay filled
-  and 32px tall.
-- **Search**: collapsed it is a 32px icon button; expanded it becomes an absolutely positioned field
-  that starts at the button and stretches over the controls to its right, with a default shadow.
-
-## Regenerating screenshots
-
-Pages and screenshots are rebuilt from the local generators with one command (needs node
-and the gitignored `.doop/` folder):
+## Regenerating pages and screenshots
 
 ```bash
-node .agents/skills/doop-canvas/scripts/build.js --shots
+DOOP_CLIENT="python3 <path-to>/doop.py" node .agents/skills/doop-canvas/scripts/build.js --shots
 ```
 
-Set `DOOP_BROWSER` to a Chromium/Edge executable if it is not found automatically. A single
-page can also be rendered directly:
+`DOOP_CLIENT` is a Doop MCP client that takes `call <tool> -` with JSON arguments on stdin.
+Without it the pages are rebuilt from the gitignored `.doop/frames/` cache. Screenshots come
+from a local Chromium/Edge (`DOOP_BROWSER`), or from Doop's `get_frame_screenshot` when none
+is found. The frame → page table is at the top of `build.js`.
+
+To compare the Go window with these screenshots, render it headless:
 
 ```bash
-msedge --headless=old --hide-scrollbars --virtual-time-budget=5000 \
-  --window-size=1280,800 --screenshot=docs/design/screens/01-recorder.png \
-  "file:///C:/Projects/github/ottr/docs/design/pages/01-recorder.html"
+OTTR_PREVIEW=<dir> OTTR_PREVIEW_CJK=<a CJK .otf/.ttf> go test ./internal/native -run TestPreview
 ```
 
-The three settings pages override the 660px shell height so the full page is captured. The two 420px pages pin `html, body` to 420px because Chromium will not lay out below ~500px;
-1000px examples are fine at their natural width.
+`TestPreview` writes PNGs under the same names as `screens/`. `OTTR_PREVIEW_CJK` is needed on
+machines without a CJK font (Linux containers), where 中文 would otherwise draw as nothing.
 
 ## Mapping to the Go implementation
 
 | Design | Go |
 | --- | --- |
-| Recorder, recording, library panel | [`recorder.go`](../../internal/native/recorder.go) |
-| Playback, transcript, player controls | [`session.go`](../../internal/native/session.go), [`player.go`](../../internal/native/player.go) |
-| Library list/grid, thumbnails | [`library.go`](../../internal/native/library.go), [`thumbnail.go`](../../internal/native/thumbnail.go) |
-| Settings pages | [`settings.go`](../../internal/native/settings.go) |
-| Settings menu | [`settings_menu.go`](../../internal/native/settings_menu.go) |
-| Shared controls (select, switch, rows) | [`kit/kit.go`](../../internal/native/kit/kit.go) |
-| Colours, radii, shadows | [`theme.go`](../../internal/native/theme.go) |
-| Strings | [`i18n.go`](../../internal/native/i18n.go) |
+| Palette, radii, heights, fonts | [`kit/palette.go`](../../internal/native/kit/palette.go) |
+| Buttons, chips, switches, groups, selects, bordered `Field`, avatars | [`kit/kit.go`](../../internal/native/kit/kit.go) |
+| ui.Theme mapping, font registration, the one shadow | [`theme.go`](../../internal/native/theme.go), [`fonts/`](../../internal/native/fonts) |
+| Window frame, breakpoints, title bar and REC pill, rail, back button | [`app.go`](../../internal/native/app.go) |
+| Sidebar: library views, Views, Workspace, status card | [`shell.go`](../../internal/native/shell.go) |
+| New capture panel: source tiles, preview, audio rows, last recording, Ctrl+Shift+R | [`capture.go`](../../internal/native/capture.go) |
+| Live panel while recording (clock, sounds, Pause/Stop, live transcript) | [`recorder.go`](../../internal/native/recorder.go) |
+| Library page: title, search (Ctrl+K), filter chips, list/grid, day groups | [`library.go`](../../internal/native/library.go), [`details.go`](../../internal/native/details.go) |
+| A library row's first line and speaker count | [`rowfacts.go`](../../internal/native/rowfacts.go) |
+| Thumbnails | [`thumbnail.go`](../../internal/native/thumbnail.go) |
+| Item page: stage, chapters, facts strip, document panel and its tabs, summary | [`session.go`](../../internal/native/session.go) |
+| Transport and seek bar | [`player.go`](../../internal/native/player.go) |
+| Pipeline card after Stop | [`transcribing.go`](../../internal/native/transcribing.go) |
+| Dialogs: delete, export, transcription failed | [`dialogs.go`](../../internal/native/dialogs.go) |
+| Settings window and its four pages | [`settings.go`](../../internal/native/settings.go) |
+| Subtitle settings menu (document panel) | [`settings_menu.go`](../../internal/native/settings_menu.go) |
+| Icons (Lucide) | [`icons.go`](../../internal/native/icons.go), [`icons/`](../../internal/native/icons) |
+| Strings, English and 中文 | [`i18n.go`](../../internal/native/i18n.go) |
+| Headless screenshots of every screen | [`preview_test.go`](../../internal/native/preview_test.go) |
+
+Where the Go window still differs from a frame, the gap is listed in
+[ROADMAP §17](../ROADMAP.md#17-redesign-gaps-between-the-canvas-and-the-window--partial).

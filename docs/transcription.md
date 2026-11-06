@@ -49,9 +49,19 @@ media file ─► ffmpeg ─► 16 kHz mono s16le WAV (temp) ─► Converter �
 5. Segments are written in one transaction, and `media.transcript_status`
    becomes `done`.
 
-Progress is still coarse — extraction done, then recognition done — because
-FFmpeg reports no position. `internal/media`'s native decoder will replace
-step 1 and with it the progress reporting.
+Progress follows the phases exported as `asr.Phase*`: extraction starts at
+`PhaseExtracting`, recognition runs from `PhaseRecognizing` to `PhaseSpeakers`
+and reports after every 30 s chunk, speaker matching runs to `PhaseSaving`, and
+saving ends the job. `RecognizedShare(p)` turns a job's progress back into the
+share of the audio read, which is how the window says "1:55 of 3:00 processed",
+estimates the time left, and says where a failed transcription stopped.
+Extraction itself is still one step, because FFmpeg reports no position.
+
+Stopping a recording starts this job for the new file. The transcript tab shows
+the progress and the phases while it runs and the transcript when it ends; a
+failure on the media shown opens a dialog with the error, **Try again**,
+**Change model** (Settings · Transcription) and **Later**, and the library list
+marks the file Failed.
 
 ## Segmentation rules
 
@@ -130,8 +140,13 @@ nothing failed. Nothing is fabricated.
 
 - `Search(mediaID, query)` performs a `LIKE %query%` over that media's segments;
   an empty query returns all segments.
-- `Export` writes SRT, VTT, or TXT through a native save dialog. Formats are
-  produced by `FormatSRT/FormatVTT/FormatTXT` in `formats.go`.
+- `Export` / `ExportWith` write SRT, VTT, TXT, Markdown or Word (`.docx`)
+  through a native save dialog; `ExportTo` writes to a given path, which the
+  delete dialog uses to keep a transcript as text. `Render` in `export.go`
+  applies `ExportOptions`: speaker names, timestamps (text formats only —
+  subtitles are always timed), a translation under each line, and for Markdown
+  the summary in front. The `.docx` is a minimal WordprocessingML package
+  written with the standard library.
 
 Time formatting is `HH:MM:SS,mmm` for SRT and `HH:MM:SS.mmm` for WebVTT, with
 negative values clamped to zero.

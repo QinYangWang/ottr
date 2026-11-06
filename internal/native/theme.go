@@ -1,106 +1,103 @@
 package native
 
-import "github.com/egoist/mygo/ui"
+import (
+	"embed"
+	"sync"
 
-// themeFor applies Interfere's Light/Dark palette. Controls use its 8px
-// rounded-lg radius; media and semantic states keep their own colors.
+	"github.com/egoist/mygo/ui"
+
+	"ottr/internal/native/kit"
+)
+
+// The UI is set in Geist and its numbers in Geist Mono (SIL Open Font
+// License 1.1, fonts/OFL.txt). They are registered once, before the first
+// frame; the system's fonts supply what they lack, such as CJK.
+//
+//go:embed fonts/*.ttf
+var fontFiles embed.FS
+
+var registerFonts = sync.OnceValue(func() error {
+	files := []struct{ name, family string }{
+		{"Geist-Regular.ttf", kit.FontUI},
+		{"Geist-Medium.ttf", kit.FontUI},
+		{"Geist-SemiBold.ttf", kit.FontUI},
+		{"Geist-Bold.ttf", kit.FontUI},
+		{"GeistMono-Regular.ttf", kit.FontMono},
+		{"GeistMono-Medium.ttf", kit.FontMono},
+		{"GeistMono-SemiBold.ttf", kit.FontMono},
+	}
+	for _, f := range files {
+		data, err := fontFiles.ReadFile("fonts/" + f.name)
+		if err != nil {
+			return err
+		}
+		if err := ui.RegisterFont(data, f.family); err != nil {
+			return err
+		}
+	}
+	return nil
+})
+
+// themeFor maps the "studio console + highlighter" palette onto the colours
+// MyGo's own widgets read. The accent of ui.Theme is the ink, because that is
+// what fills a primary button, a checked control and a selected tab; the
+// highlighter amber is drawn by the app itself (kit.Palette).
 func themeFor(dark bool) *ui.Theme {
 	t := ui.LightTheme()
 	if dark {
 		t = ui.DarkTheme()
 	}
+	p := kit.P(&ui.Theme{Dark: dark})
 	t.Dark = dark
-	t.Radius = 8
+	t.Radius = kit.RadiusControl
 	t.Spacing = 4
-	t.FontSize = 14
+	t.FontSize = 13
 
-	if dark {
-		t.Background = ui.Hex("#000000")
-		t.Surface = ui.Hex("#ffffff").Alpha(0.07)
-		t.SurfaceHover = ui.Hex("#ffffff").Alpha(0.105)
-		t.SurfacePressed = ui.Hex("#ffffff").Alpha(0.133)
-		t.Border = ui.Hex("#ffffff").Alpha(0.07)
-		t.Text = ui.Hex("#ffffff").Alpha(0.93)
-		t.TextMuted = ui.Hex("#ffffff").Alpha(0.69)
-		t.Accent = ui.Hex("#0090ff")
-		t.AccentHover = ui.Hex("#3b9eff")
-		t.AccentPressed = ui.Hex("#70b8ff")
-		t.AccentText = ui.Hex("#ffffff")
-		t.Danger = ui.Hex("#ec6142")
-		t.Warning = ui.Hex("#ffa057")
-		t.Success = ui.Hex("#3dd68c")
-		t.Selection = ui.Hex("#0090ff").Alpha(0.35)
-		t.Focus = ui.Hex("#0090ff")
-		t.Scrollbar = ui.Hex("#ffffff").Alpha(0.18)
-		t.ScrollbarWidth = 8
-		return t
-	}
-
-	t.Background = ui.Hex("#ffffff")
-	t.Surface = ui.Hex("#000000").Alpha(0.06)
-	t.SurfaceHover = ui.Hex("#000000").Alpha(0.09)
-	t.SurfacePressed = ui.Hex("#000000").Alpha(0.12)
-	t.Border = ui.Hex("#000000").Alpha(0.06)
-	t.Text = ui.Hex("#000000").Alpha(0.875)
-	t.TextMuted = ui.Hex("#000000").Alpha(0.61)
-	t.Accent = ui.Hex("#0090ff")
-	t.AccentHover = ui.Hex("#0588f0")
-	t.AccentPressed = ui.Hex("#0d74ce")
-	t.AccentText = ui.Hex("#ffffff")
-	t.Danger = ui.Hex("#e54d2e")
-	t.Warning = ui.Hex("#f76b15")
-	t.Success = ui.Hex("#30a46c")
-	t.Selection = ui.Hex("#0090ff").Alpha(0.22)
-	t.Focus = ui.Hex("#0084e6").Alpha(0.63)
-	t.Scrollbar = ui.Hex("#000000").Alpha(0.18)
-	t.ScrollbarWidth = 8
+	t.Background = p.Sheet
+	t.Surface = p.Sunk
+	t.SurfaceHover = p.Hover
+	t.SurfacePressed = p.Line
+	t.Border = p.Line
+	t.Text = p.Ink
+	t.TextMuted = p.Ink3
+	t.Accent = p.Btn
+	t.AccentHover = p.Btn.Mix(ui.RGB(128, 128, 128), 0.14)
+	t.AccentPressed = p.Btn.Mix(ui.RGB(128, 128, 128), 0.24)
+	t.AccentText = p.BtnInk
+	t.Danger = p.Red
+	t.Warning = p.Amber
+	t.Success = p.Green
+	t.Selection = p.Amber.Alpha(0.35)
+	t.Focus = p.Amber
+	t.Inverse = p.Ink
+	t.InverseText = p.Sheet
+	t.Scrollbar = p.Ink.Alpha(0.18)
+	t.ScrollbarWidth = 6
 	return t
 }
 
 // applyTheme is the look of the frame, applied before anything is drawn so
 // that the window, its widgets and the elements built here all share it.
 func (a *App) applyTheme(c *ui.Context) *ui.Theme {
+	_ = registerFonts()
 	t := themeFor(c.Theme().Dark)
 	t.Font = a.font
 	if t.Font == "" {
-		t.Font = "Noto Sans"
+		t.Font = kit.FontUI
 	}
 	c.SetTheme(t)
 	return t
 }
 
-// popoverShadow applies Interfere's Extra Large elevation to menus.
-func popoverShadow(e ui.Element, t *ui.Theme) ui.Element {
-	return e.Shadow(0, 8, 40, 0, ui.RGBA(0, 0, 0, 0.05)).
-		Shadow(0, 12, 32, -16, ui.RGBA(0, 0, 0, 0.15))
-}
+// pal is the palette of the look t is in.
+func pal(t *ui.Theme) kit.Palette { return kit.P(t) }
 
-// cardShadow applies Interfere's Default elevation to a raised card.
-func cardShadow(e ui.Element, t *ui.Theme) ui.Element {
-	if t.Dark {
-		return e.Shadow(0, 1, 2, 0, ui.RGBA(255, 255, 255, 0.07))
-	}
-	return e.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.1))
-}
+// popoverShadow is the system's one shadow, for menus and popovers.
+func popoverShadow(e ui.Element, t *ui.Theme) ui.Element { return kit.DialogShadow(e, t) }
 
-// mediaBackdrop is the dark ground thumbnails, the player and the recording
-// preview share, so that media always sits on the same surface in both looks.
-func mediaBackdrop(dark bool) (from, to ui.Color) {
-	if dark {
-		return ui.Hex("#1e2637"), ui.Hex("#0b1017")
-	}
-	return ui.Hex("#33456a"), ui.Hex("#121a26")
-}
+// mono sets text in Geist Mono with tabular figures.
+func mono(e ui.Element) ui.Element { return kit.Mono(e) }
 
-// playerBar is the strip under the player's picture, a shade darker than the
-// picture so that the two read as one unit.
-func playerBar(t *ui.Theme) ui.Color {
-	if t.Dark {
-		return ui.Hex("#12141a")
-	}
-	return ui.Hex("#0d1119")
-}
-
-// onMedia is the text drawn over media — chips, a duration, a badge — which is
-// light in both looks, because the ground under it always is.
-func onMedia() ui.Color { return ui.Hex("#f4f6fa") }
+// onMedia is the text drawn over media — a duration, a badge — which is light
+// in both looks, because the ground under it always is dark.
+func onMedia() ui.Color { return ui.Hex("#FFFFFF") }
