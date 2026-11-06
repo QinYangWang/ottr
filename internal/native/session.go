@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,977 @@ import (
 	"ottr/internal/native/kit"
 	"ottr/internal/translate"
 )
+
+// Tabs of an item page, in their indices; the bar shows them in the order
+// Transcript, translation, Summary.
+const (
+	tabTranscript  = 0
+	tabSummary     = 1
+	tabTranslation = 2
+)
+
+// sessionPage is one media's page, the reading desk: the media, its seek bar
+// split into chapters, the chapters and the facts in the centre, and the
+// document panel (Transcript / translation / Summary) on the right. The
+// narrow window stacks them.
+func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	width, _ := c.Size()
+	layout := layoutOf(width)
+	if m.SummaryStatus == "done" && !a.sumLoaded && !a.sumLoading {
+		a.loadSummary() // the chapters under the player come from it
+	}
+	if layout == "narrow" {
+		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(p.Sheet).Children(func() {
+			ui.Column(c).Shrink(0).Padding(12, 16).Gap(12).Children(func() {
+				a.sessionHead(c, t, m, true)
+				a.playerStage(c, t, m)
+			})
+			ui.Column(c).Grow(1).MinHeight(0).BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
+				a.docPanel(c, t, m)
+			})
+		})
+		return
+	}
+	panel := float32(docWidth)
+	if layout == "mid" {
+		panel = docWidthMid
+	}
+	ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Background(p.Sheet).Children(func() {
+		ui.Scroll(c).Grow(1).MinWidth(0).Children(func() {
+			ui.Column(c).Padding(16, 24, 24, 24).Gap(16).Children(func() {
+				a.sessionHead(c, t, m, layout == "mid")
+				a.playerStage(c, t, m)
+				if layout == "wide" {
+					a.chapterCards(c, t, m)
+					a.factStrip(c, t, m)
+				} else {
+					a.chapterList(c, t, m)
+				}
+			})
+		})
+		ui.Column(c).Width(panel).Shrink(0).FillHeight().MinWidth(0).
+			BorderWidth(0, 0, 0, 1).BorderColor(p.Line).Children(func() {
+			a.docPanel(c, t, m)
+		})
+	})
+}
+
+// sessionHead is back, the title (a click renames it) and its meta, and what
+// to do with the file: show it, export, delete.
+func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media, compact bool) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+		if a.backButton(c, t, "") {
+			a.closeDetail()
+		}
+		if a.renameID == m.ID {
+			input := ui.TextInput(c, &a.renameText).Label(a.tr("Media name")).Grow(1).MinWidth(0)
+			if input.Submitted() {
+				a.saveRename(m.ID)
+			}
+			if kit.Button(c, t, kit.Primary, nil, a.tr("Save"), false).Clicked() {
+				a.saveRename(m.ID)
+			}
+			if kit.Button(c, t, kit.Secondary, nil, a.tr("Cancel"), false).Clicked() {
+				a.renameID, a.renameText = 0, ""
+			}
+			return
+		}
+		title := ui.ButtonBase(c).Label(a.tr("Rename")).Tooltip(a.tr("Rename this media")).Grow(1).MinWidth(0).
+			Padding(0, 4)
+		title.Children(func() {
+			ui.Column(c).FillWidth().Gap(2).Children(func() {
+				ui.Text(c, m.Name).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
+					SingleLine().MinWidth(0)
+				ui.Text(c, a.sessionMeta(m)).FontSize(12).TextColor(p.Ink3).SingleLine()
+			})
+		})
+		if title.Clicked() {
+			a.renameID, a.renameText = m.ID, m.Name
+		}
+		if compact {
+			if len(a.segs) > 0 {
+				kit.IconButton(c, t, iconDownload, a.tr("Export"), func() { a.openExport(m) })
+			}
+		} else if kit.Button(c, t, kit.Ghost, iconFolderOpen, a.tr("Show file"), false).
+			Tooltip(a.tr("Show the file in its folder")).Clicked() {
+			mygo.Shell.ShowItemInFolder(m.Path)
+		}
+		if len(a.segs) > 0 && !compact {
+			if kit.Button(c, t, kit.Secondary, iconDownload, a.tr("Export"), false).Clicked() {
+				a.openExport(m)
+			}
+		}
+		if m.TranscriptStatus == "pending" {
+			// Deleting under a running transcription would leave it writing
+			// to a record that is gone.
+			return
+		}
+		del := ui.ButtonBase(c).Label(a.tr("Delete")).Tooltip(a.tr("Delete this media from the library")).
+			Size(32, 32).Radius(kit.RadiusControl).Center().TextColor(p.Red).Cursor(ui.CursorPointer)
+		del.Children(func() { ui.Icon(c, iconTrash).FontSize(16) })
+		if del.Hovered() {
+			del.Background(p.RedSoft)
+		}
+		if del.Clicked() {
+			a.askDelete(m.ID)
+		}
+	})
+}
+
+// sessionMeta is the line under the title: "Recorded · Nov 6, 10:02 · 42:18 ·
+// 3 speakers".
+func (a *App) sessionMeta(m library.Media) string {
+	parts := []string{a.mediaSourceLabel(m), a.dateTime(m.CreatedAt)}
+	if m.DurationMs > 0 {
+		parts = append(parts, fmtDuration(m.DurationMs))
+	}
+	if n := speakerCount(a.segs); n > 0 && a.trLoaded {
+		parts = append(parts, a.speakersText(n))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// playerStage presents the media with MyGo's in-window player.
+func (a *App) playerStage(c *ui.Context, t *ui.Theme, m library.Media) {
+	a.nativePlayerStage(c, t, m)
+}
+
+// chapterCards are the summary's chapters as cards under the player: a click
+// seeks there, and the one playing is in the highlighter.
+func (a *App) chapterCards(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	ui.Column(c).FillWidth().Gap(8).Children(func() {
+		kit.Label(c, t, a.tr("Chapters"))
+		chapters := a.sum.Chapters
+		if len(chapters) == 0 {
+			ui.Row(c).FillWidth().Height(52).Gap(8).Radius(kit.RadiusCard).BorderStyle(ui.BorderDashed).
+				Border(1, p.Line2).Center().Children(func() {
+				ui.Icon(c, iconSparkles).FontSize(14).TextColor(p.Ink3)
+				ui.Text(c, a.tr("Chapters appear once the summary is ready")).FontSize(12).TextColor(p.Ink3)
+			})
+			return
+		}
+		at := a.playbackPosition(m).Milliseconds()
+		current := -1
+		for i, ch := range chapters {
+			if at >= ch.StartMs {
+				current = i
+			}
+		}
+		ui.Row(c).FillWidth().Gap(8).Children(func() {
+			for i, ch := range chapters[:min(len(chapters), 4)] {
+				on := i == current && a.playback.id == m.ID
+				clock := fmtDuration(ch.StartMs)
+				card := ui.ButtonBase(c.Key(i)).Label(a.tr("Seek to ")+clock).Tooltip(ch.Title).Grow(1).Width(0).
+					MinWidth(0).Padding(10, 12).Gap(4).Radius(kit.RadiusCard).Cursor(ui.CursorPointer)
+				switch {
+				case on:
+					card.Background(p.AmberSoft).Border(1, p.AmberLine)
+				case card.Hovered():
+					card.Background(p.Sunk).Border(1, p.Line)
+				default:
+					card.Background(p.Sheet).Border(1, p.Line)
+				}
+				card.Children(func() {
+					ui.Column(c).FillWidth().Gap(4).Children(func() {
+						ink := p.Ink3
+						if on {
+							ink = p.AmberInk
+						}
+						mono(ui.Text(c, clock)).FontSize(11.5).TextColor(ink)
+						ui.Text(c, ch.Title).FontSize(12.5).TextColor(p.Ink).SingleLine().MinWidth(0)
+					})
+				})
+				if card.Clicked() {
+					a.seekPlayback(m, time.Duration(ch.StartMs)*time.Millisecond)
+				}
+			}
+		})
+	})
+}
+
+// chapterList is the chapters of the 900px window: a mono time and the
+// title per row, the one playing in amber.
+func (a *App) chapterList(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	if len(a.sum.Chapters) == 0 {
+		return
+	}
+	at := a.playbackPosition(m).Milliseconds()
+	current := -1
+	for i, ch := range a.sum.Chapters {
+		if at >= ch.StartMs {
+			current = i
+		}
+	}
+	ui.Column(c).FillWidth().Gap(2).Children(func() {
+		kit.Label(c, t, a.tr("Chapters"))
+		for i, ch := range a.sum.Chapters {
+			clock := fmtDuration(ch.StartMs)
+			on := i == current && a.playback.id == m.ID
+			row := ui.ButtonBase(c.Key(i)).Label(a.tr("Seek to ") + clock).FillWidth().Height(30).Gap(16).
+				AlignItems(ui.Center).Justify(ui.Start).Cursor(ui.CursorPointer)
+			row.Children(func() {
+				ink := p.Ink3
+				title := p.Ink
+				if on {
+					ink, title = p.AmberInk, p.AmberInk
+				}
+				mono(ui.Text(c, clock)).FontSize(11.5).TextColor(ink).Width(42).Shrink(0).SingleLine()
+				ui.Text(c, ch.Title).FontSize(12.5).TextColor(title).SingleLine().MinWidth(0)
+			})
+			if row.Clicked() {
+				a.seekPlayback(m, time.Duration(ch.StartMs)*time.Millisecond)
+			}
+		}
+	})
+}
+
+// factStrip is the media's four facts under a hairline: where it came from,
+// the file, where it is saved, and its languages.
+func (a *App) factStrip(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	file := []string{}
+	if m.Height > 0 {
+		file = append(file, strconv.Itoa(m.Height)+"p")
+	}
+	if m.Size > 0 {
+		file = append(file, fmtSize(m.Size))
+	}
+	if len(file) == 0 {
+		file = append(file, strings.TrimPrefix(filepath.Ext(m.Path), "."))
+	}
+	lang := a.langLabel(a.lang)
+	if len(a.trans.Segments) > 0 {
+		lang += " → " + langName(a.trLang)
+	}
+	facts := [][2]string{
+		{a.tr("Source"), a.mediaSourceLabel(m)},
+		{a.tr("File"), strings.Join(file, " · ")},
+		{a.tr("Saved to"), shortDir(filepath.Dir(m.Path))},
+		{a.tr("Language"), lang},
+	}
+	ui.Row(c).FillWidth().Padding(14, 0, 0, 0).Gap(16).BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
+		for i, fact := range facts {
+			ui.Column(c.Key(i)).Grow(1).Width(0).MinWidth(0).Gap(4).Children(func() {
+				ui.Text(c, fact[0]).FontSize(11.5).TextColor(p.Ink3).SingleLine()
+				ui.Text(c, fact[1]).FontSize(12.5).TextColor(p.Ink).SingleLine().Tooltip(fact[1])
+			})
+		}
+	})
+}
+
+// ---------------------------------------------------------- document panel
+
+// docPanel is the right pane of a media's page: its tabs with search, export
+// and the settings menu across the top, and the chosen tab below.
+func (a *App) docPanel(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	width, _ := c.Size()
+	gap, pad := float32(20), float32(20)
+	if layoutOf(width) == "mid" {
+		gap, pad = 16, 16
+	}
+	ui.Column(c).Fill().MinHeight(0).Background(p.Sheet).Children(func() {
+		ui.Row(c).FillWidth().Height(48).Shrink(0).Padding(0, 8, 0, pad).Gap(gap).AlignItems(ui.Stretch).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+			a.docTab(c, t, tabTranscript, a.tr("Transcript"), "", kit.ChipNeutral)
+			chip, kind := a.translationState(m)
+			if layoutOf(width) == "mid" {
+				chip = "" // 344 wide, the chip pushes the tools out of the panel
+			}
+			a.docTab(c, t, tabTranslation, langName(a.trLang), chip, kind)
+			a.docTab(c, t, tabSummary, a.tr("Summary"), "", kit.ChipNeutral)
+			ui.Spacer(c)
+			ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+				if a.tab != tabSummary && len(a.segs) > 0 {
+					kit.IconButton(c, t, iconSearch, a.tr("Search the subtitles"), func() {
+						a.segSearchOpen = !a.segSearchOpen
+						if !a.segSearchOpen {
+							a.segQuery = ""
+						}
+					})
+				}
+				if layoutOf(width) != "mid" {
+					a.exportButton(c, t, m)
+				}
+				a.subtitleSettingsButton(c, t, &m)
+			})
+		})
+		switch a.tab {
+		case tabSummary:
+			a.summaryTab(c, t, m)
+		case tabTranslation:
+			a.translationTab(c, t, m)
+		default:
+			a.transcriptTab(c, t, m)
+		}
+	})
+}
+
+// translationState is the chip beside the translation tab's name.
+func (a *App) translationState(m library.Media) (string, kit.ChipKind) {
+	switch {
+	case a.transLoading || a.jobRunning(jobs.KindTranslate):
+		return a.tr("Translating"), kit.ChipAmber
+	case len(a.trans.Segments) > 0:
+		return a.tr("Translated"), kit.ChipAmber
+	case m.TranscriptStatus != "done":
+		return a.tr("Waiting"), kit.ChipNeutral
+	}
+	return "", kit.ChipNeutral
+}
+
+// docTab is one tab: its name, an optional chip, and the ink underline when
+// chosen.
+func (a *App) docTab(c *ui.Context, t *ui.Theme, index int, label, chip string, kind kit.ChipKind) {
+	p := pal(t)
+	on := a.tab == index
+	tab := ui.ButtonBase(c.Key(index)).Label(label).Role(ui.RoleTab).Checked(on).Gap(6).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).BorderWidth(0, 0, 2, 0)
+	if on {
+		tab.BorderColor(p.Ink)
+	} else {
+		tab.BorderColor(ui.Transparent)
+	}
+	tab.Children(func() {
+		text := ui.Text(c, label).FontSize(13).SingleLine()
+		if on {
+			text.FontWeight(500).TextColor(p.Ink)
+		} else if tab.Hovered() {
+			text.TextColor(p.Ink)
+		} else {
+			text.TextColor(p.Ink3)
+		}
+		if chip != "" {
+			kit.Chip(c, t, kind, chip)
+		}
+	})
+	if tab.Clicked() && !on {
+		a.tab = index
+		if index == tabTranslation {
+			if mm, ok := a.current(); ok && mm.TranscriptStatus == "done" {
+				a.setTranslationVisible(mm, true)
+			}
+		}
+	}
+}
+
+// exportButton opens the export dialog, from any tab.
+func (a *App) exportButton(c *ui.Context, t *ui.Theme, m library.Media) {
+	label := ""
+	switch {
+	case a.tab == tabSummary && a.sum.ContentMarkdown != "":
+		label = a.tr("Export the summary")
+	case a.tab != tabSummary && len(a.segs) > 0:
+		label = a.tr("Export the transcript")
+	default:
+		return
+	}
+	kit.IconButton(c, t, iconDownload, label, func() {
+		if a.tab == tabSummary && len(a.segs) == 0 {
+			a.exportSummary(m.ID)
+			return
+		}
+		a.openExport(m)
+		switch a.tab {
+		case tabSummary:
+			a.exportKind = 2
+		case tabTranslation:
+			a.exportKind = 1
+		}
+	})
+}
+
+// ------------------------------------------------------------- transcript
+
+func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	if m.TranscriptStatus == "pending" {
+		if a.job.Kind == jobs.KindTranscribe {
+			a.transcribingPanel(c, t, m)
+			return
+		}
+		a.working(c, t, "Transcribing", "Recognizing the speech in this file on this computer.")
+		return
+	}
+	if m.TranscriptStatus != "done" {
+		detail := "Offline speech recognition turns the audio into timestamped subtitles."
+		switch {
+		case a.job.Kind == jobs.KindTranscribe && a.job.State == jobs.StateFailed && a.job.Error != "":
+			detail = a.job.Error
+		case a.trErr != "":
+			detail = a.trErr
+		}
+		a.emptyTab(c, t, "No transcript yet", detail,
+			[]action{{"Transcribe", m.HasAudio, func() { a.startTranscribe(m.ID) }}})
+		return
+	}
+	if !a.trLoaded {
+		a.loadTranscript()
+		a.working(c, t, "Loading", "Reading the transcript.")
+		return
+	}
+	if len(a.segs) == 0 {
+		a.emptyTab(c, t, "The transcript is empty",
+			"No speech was recognized in this file.",
+			[]action{{"Transcribe again", true, func() { a.startTranscribe(m.ID) }}})
+		return
+	}
+	hits := a.searchHits()
+	width, _ := c.Size()
+	if a.segSearchOpen {
+		a.searchBar(c, t, m, hits)
+	} else if layoutOf(width) != "mid" {
+		ui.Row(c).FillWidth().Height(48).Shrink(0).Padding(0, 20).Gap(8).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+			ui.Text(c, a.tr("Spoken")).FontSize(12).TextColor(p.Ink3)
+			a.spokenLanguageSelect(c, t, m)
+			ui.Spacer(c)
+			if a.transLoading || a.jobRunning(jobs.KindTranslate) {
+				ui.Spinner(c).Label(a.tr("Translating")).Size(12, 12)
+			}
+			ui.Text(c, a.trf("%s under lines", langName(a.trLang))).FontSize(12).TextColor(p.Ink2).SingleLine()
+			on := a.showTranslation
+			if kit.Switch(c, t, &on, a.tr("Show translation")).Changed() {
+				a.setTranslationVisible(m, on)
+			}
+		})
+	}
+	translated := map[int64]string{}
+	if a.showTranslation {
+		for _, seg := range a.trans.Segments {
+			translated[seg.SegmentID] = seg.TranslatedText
+		}
+	}
+	active := a.activeSegment(m)
+	current := int64(-1)
+	if len(hits) > 0 {
+		current = hits[min(a.segHit, len(hits)-1)]
+	}
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(10, 10, 16, 10).Gap(2).Children(func() {
+			for _, seg := range a.segs {
+				a.transcriptRow(c.Key(seg.ID), t, m, seg, translated[seg.ID], seg.ID == active, seg.ID == current)
+			}
+		})
+	})
+	a.docFooter(c, t, func() {
+		ui.Icon(c, iconCPU).FontSize(14).TextColor(p.Ink3)
+		ui.Text(c, a.trf("Transcribed on this computer · %s", a.speakersText(speakerCount(a.segs)))).
+			FontSize(11.5).TextColor(p.Ink3).SingleLine().Grow(1).MinWidth(0)
+		mono(ui.Text(c, a.trf("%d lines", len(a.segs)))).FontSize(11).TextColor(p.Ink3)
+	})
+}
+
+// docFooter is the strip at the bottom of the document panel.
+func (a *App) docFooter(c *ui.Context, t *ui.Theme, children func()) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Height(44).Shrink(0).Padding(0, 20).Gap(8).AlignItems(ui.Center).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(children)
+}
+
+// activeSegment is the line under the playhead, or -1 when nothing plays.
+func (a *App) activeSegment(m library.Media) int64 {
+	if a.playback.id != m.ID || a.playback.loading || a.playback.err != "" {
+		return -1
+	}
+	at := a.playbackPosition(m).Milliseconds()
+	for _, seg := range a.segs {
+		if at >= seg.StartMs && at < max(seg.EndMs, seg.StartMs+1) {
+			return seg.ID
+		}
+	}
+	return -1
+}
+
+// transcriptRow is one line: the speaker's avatar, name and time, the text,
+// and the translation under it. The line playing gets the highlighter: an
+// amber-soft fill and a 3px amber bar.
+func (a *App) transcriptRow(c *ui.Context, t *ui.Theme, m library.Media, seg asr.Segment, translation string, active, currentHit bool) {
+	p := pal(t)
+	at := fmtDuration(seg.StartMs)
+	row := ui.ButtonBase(c).Label(a.tr("Seek to ")+at).Tooltip(a.tr("Seek to ")+at).FillWidth().
+		Padding(9, 10, 9, 10).Radius(kit.RadiusCard).Cursor(ui.CursorPointer)
+	switch {
+	case active:
+		row.Background(p.AmberSoft)
+	case row.Hovered():
+		row.Background(p.Sunk)
+	}
+	if currentHit {
+		row.ScrollIntoView()
+	}
+	row.Children(func() {
+		if active {
+			ui.Box(c).Absolute().Left(0).Top(8).Bottom(8).Width(3).Radius(2).Background(p.Amber)
+		}
+		a.lineContent(c, t, seg.Speaker, at, seg.Text, translation, active, currentHit)
+	})
+	if row.Clicked() {
+		a.seekPlayback(m, time.Duration(seg.StartMs)*time.Millisecond)
+	}
+}
+
+// lineContent is a transcript line's avatar, name, time, text and translation.
+func (a *App) lineContent(c *ui.Context, t *ui.Theme, speaker int, at, text, translation string, active, current bool) {
+	p := pal(t)
+	name := a.transcript.SpeakerNames[speaker]
+	if name == "" {
+		name = a.trf("Speaker %d", speaker+1)
+	}
+	ui.Row(c).FillWidth().Gap(12).AlignItems(ui.Start).Children(func() {
+		kit.Avatar(c, speakerNumber(name, speaker), speakerInitials(name, speaker), 24)
+		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if a.renameSpeakerID == speaker {
+					input := ui.TextInput(c, &a.renameSpeakerText).Label(a.tr("Speaker name")).Grow(1).MinWidth(0)
+					if input.Submitted() {
+						a.saveSpeakerName(speaker)
+					}
+					if kit.Button(c, t, kit.Primary, nil, a.tr("Save"), false).Clicked() {
+						a.saveSpeakerName(speaker)
+					}
+				} else {
+					button := ui.ButtonBase(c).Label(a.tr("Rename speaker")).Tooltip(a.tr("Rename speaker")).
+						Cursor(ui.CursorPointer)
+					button.Children(func() {
+						ui.Text(c, name).FontSize(12).FontWeight(600).TextColor(p.Ink).SingleLine()
+					})
+					if button.Clicked() {
+						a.renameSpeakerID, a.renameSpeakerText = speaker, name
+					}
+				}
+				ink := p.Ink3
+				if active {
+					ink = p.AmberInk
+				}
+				mono(ui.Text(c, at)).FontSize(11.5).TextColor(ink)
+			})
+			a.highlightedText(c, t, text, a.subtitleSize(), p.Ink, current)
+			if translation != "" {
+				ui.Text(c, translation).FontSize(max(a.subtitleSize()-0.5, 10)).TextColor(p.Ink3).Selectable()
+			}
+		})
+	})
+}
+
+// highlightedText draws text with the search query marked: amber-soft with an
+// amber underline, and solid amber on the match shown.
+func (a *App) highlightedText(c *ui.Context, t *ui.Theme, text string, size float32, ink ui.Color, current bool) {
+	p := pal(t)
+	q := strings.TrimSpace(a.segQuery)
+	if !a.segSearchOpen || q == "" {
+		ui.Text(c, text).FontSize(size).TextColor(ink).Selectable()
+		return
+	}
+	lower, lq := strings.ToLower(text), strings.ToLower(q)
+	var spans []ui.Span
+	for {
+		i := strings.Index(lower, lq)
+		if i < 0 {
+			spans = append(spans, ui.Span{Text: text, Color: ink, Size: size})
+			break
+		}
+		if i > 0 {
+			spans = append(spans, ui.Span{Text: text[:i], Color: ink, Size: size})
+		}
+		hit := ui.Span{Text: text[i : i+len(lq)], Color: ink, Size: size,
+			Background: p.AmberSoft, Underline: true, DecorationColor: p.Amber, DecorationThickness: 2}
+		if current {
+			hit.Background, hit.Color, hit.Underline = p.Amber, ui.Hex("#121417"), false
+		}
+		spans = append(spans, hit)
+		text, lower = text[i+len(lq):], lower[i+len(lq):]
+		if text == "" {
+			break
+		}
+	}
+	ui.RichText(c, spans...).Selectable()
+}
+
+// searchHits are the lines that contain the query, in order.
+func (a *App) searchHits() []int64 {
+	q := strings.TrimSpace(strings.ToLower(a.segQuery))
+	if !a.segSearchOpen || q == "" {
+		return nil
+	}
+	var hits []int64
+	for _, s := range a.segs {
+		if strings.Contains(strings.ToLower(s.Text), q) {
+			hits = append(hits, s.ID)
+		}
+	}
+	return hits
+}
+
+// searchBar replaces the panel's sub-bar while searching: the field, "3 of 5",
+// up and down through the hits, and close (Esc).
+func (a *App) searchBar(c *ui.Context, t *ui.Theme, m library.Media, hits []int64) {
+	p := pal(t)
+	if a.segHit >= len(hits) {
+		a.segHit = 0
+	}
+	ui.Row(c).FillWidth().Height(48).Shrink(0).Padding(0, 12, 0, 20).Gap(6).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+		ui.Row(c).Grow(1).MinWidth(0).Height(32).Padding(0, 10).Gap(8).AlignItems(ui.Center).
+			Radius(kit.RadiusControl).Border(1, p.Amber).Shadow(0, 0, 0, 3, p.AmberSoft).
+			Background(p.Sheet).Children(func() {
+			ui.Icon(c, iconSearch).FontSize(16).TextColor(p.Ink3)
+			field := ui.TextInputBase(c, &a.segQuery).Label(a.tr("Search the subtitles")).
+				Placeholder(a.tr("Search the transcript")).PlaceholderColor(p.Ink3).
+				Grow(1).MinWidth(0).FontSize(13).TextColor(p.Ink).AutoFocus()
+			if field.Changed() {
+				a.segHit = 0
+			}
+			if field.Shortcut(0, ui.KeyEscape) {
+				a.segSearchOpen, a.segQuery = false, ""
+			}
+			if field.Submitted() && len(hits) > 0 {
+				a.segHit = (a.segHit + 1) % len(hits)
+			}
+			if strings.TrimSpace(a.segQuery) != "" {
+				count := a.trf("%d of %d", min(a.segHit+1, len(hits)), len(hits))
+				if len(hits) == 0 {
+					count = a.tr("No matches")
+				}
+				mono(ui.Text(c, count)).FontSize(11.5).TextColor(p.Ink3).SingleLine()
+			}
+		})
+		kit.IconButton(c, t, iconArrowUp, a.tr("Previous match"), func() {
+			if len(hits) > 0 {
+				a.segHit = (a.segHit + len(hits) - 1) % len(hits)
+			}
+		})
+		kit.IconButton(c, t, iconArrowDown, a.tr("Next match"), func() {
+			if len(hits) > 0 {
+				a.segHit = (a.segHit + 1) % len(hits)
+			}
+		})
+		kit.IconButton(c, t, iconClose, a.tr("Close search"), func() {
+			a.segSearchOpen, a.segQuery = false, ""
+		})
+	})
+}
+
+// translationTab is the transcript in the target language: each line's
+// translation, with the original under it.
+func (a *App) translationTab(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Height(48).Shrink(0).Padding(0, 20).Gap(8).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+		ui.Text(c, a.tr("Translate into")).FontSize(12).TextColor(p.Ink3)
+		a.translationTargetSelect(c, t, m)
+		ui.Spacer(c)
+		if len(a.trans.Segments) > 0 && !a.transLoading && !a.jobRunning(jobs.KindTranslate) {
+			if kit.Button(c, t, kit.Ghost, iconRefresh, a.tr("Translate again"), false).Clicked() {
+				a.startTranslate(m.ID)
+			}
+		}
+	})
+	switch {
+	case m.TranscriptStatus != "done":
+		a.emptyTab(c, t, "A transcript comes first", "Translate this file once it has been transcribed.", nil)
+		return
+	case a.transLoading || a.jobRunning(jobs.KindTranslate):
+		a.working(c, t, "Translating", "Sending the transcript to the provider chosen in Settings.")
+		return
+	case len(a.trans.Segments) == 0:
+		a.emptyTab(c, t, "Not translated yet",
+			"The provider in Settings translates the transcript; the lines stay timed to the video.",
+			[]action{{"Translate", true, func() {
+				a.showTranslation = true
+				a.transLang = a.trLang
+				a.startTranslate(m.ID)
+			}}})
+		return
+	}
+	if !a.trLoaded {
+		a.loadTranscript()
+	}
+	original := map[int64]asr.Segment{}
+	for _, seg := range a.segs {
+		original[seg.ID] = seg
+	}
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(10, 10, 16, 10).Gap(2).Children(func() {
+			for _, tr := range a.trans.Segments {
+				seg := original[tr.SegmentID]
+				at := fmtDuration(seg.StartMs)
+				row := ui.ButtonBase(c.Key(tr.SegmentID)).Label(a.tr("Seek to ")+at).FillWidth().Padding(9, 10).
+					Radius(kit.RadiusCard).Cursor(ui.CursorPointer)
+				if row.Hovered() {
+					row.Background(p.Sunk)
+				}
+				row.Children(func() {
+					a.lineContent(c, t, seg.Speaker, at, tr.TranslatedText, seg.Text, false, false)
+				})
+				if row.Clicked() {
+					a.seekPlayback(m, time.Duration(seg.StartMs)*time.Millisecond)
+				}
+			}
+		})
+	})
+}
+
+// translationTargetSelect picks the language translations are shown in.
+func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme, m library.Media) {
+	name := langName(a.trLang)
+	options := make([]kit.SelectOption[string], len(langs))
+	for i, l := range langs {
+		options[i] = kit.SelectOption[string]{Value: l.name, Label: l.name}
+	}
+	kit.CompactSelect(c, t, &name, options, a.tr("Translate into"), 130, nil, func(choice string) {
+		for _, l := range langs {
+			if l.name == choice && l.code != a.trLang {
+				a.trLang = l.code
+				a.trans = translate.Translation{}
+				if !a.showTranslation {
+					// Picking a language is an explicit request to see it.
+					a.setTranslationVisible(m, true)
+					return
+				}
+				a.loadTranslation()
+			}
+		}
+	})
+}
+
+// spokenLanguageSelect overrules the detected language.
+func (a *App) spokenLanguageSelect(c *ui.Context, t *ui.Theme, m library.Media) {
+	names, codes := a.langChoices()
+	lang := a.langLabel(a.lang)
+	options := make([]kit.SelectOption[string], len(names))
+	for i, name := range names {
+		options[i] = kit.SelectOption[string]{Value: name, Label: name}
+	}
+	kit.CompactSelect(c, t, &lang, options, a.tr("Spoken language"), 140, nil, func(choice string) {
+		for i, name := range names {
+			if name == choice && codes[i] != a.lang {
+				a.setLanguage(m.ID, codes[i])
+			}
+		}
+	})
+}
+
+// transcriptSearchButton is kept for the live pane: the magnifier that opens
+// the search field.
+func (a *App) transcriptSearchButton(c *ui.Context, t *ui.Theme) {
+	kit.IconButton(c, t, iconSearch, a.tr("Search the subtitles"), func() {
+		a.segSearchOpen = !a.segSearchOpen
+		if !a.segSearchOpen {
+			a.segQuery = ""
+		}
+	})
+}
+
+// ---------------------------------------------------------------- summary
+
+func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	if m.TranscriptStatus != "done" {
+		a.emptyTab(c, t, "A transcript comes first",
+			"Summarize this file once it has been transcribed.",
+			[]action{{"Go to Transcript", true, func() { a.tab = tabTranscript }}})
+		return
+	}
+	if m.SummaryStatus == "pending" || a.jobRunning(jobs.KindSummarize) {
+		a.working(c, t, "Summarizing", "Asking the AI model for the overview, key points and chapters.")
+		return
+	}
+	if !a.sumLoaded {
+		if !a.sumLoading {
+			a.loadSummary()
+		}
+		a.working(c, t, "Loading", "Reading the summary.")
+		return
+	}
+	if a.sum.ContentMarkdown == "" {
+		a.emptyTab(c, t, "No summary yet",
+			"Generate an overview, key points, action items, chapters and highlights from the transcript.",
+			[]action{{"Generate", true, func() { a.startSummary(m.ID) }}})
+		return
+	}
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(16, 20, 20, 20).Gap(18).Children(func() {
+			if a.sum.Overview != "" {
+				ui.Column(c).Gap(8).Children(func() {
+					kit.Label(c, t, a.tr("Overview"))
+					ui.Text(c, a.sum.Overview).FontSize(13).LineHeight(1.6).TextColor(p.Ink).Selectable()
+				})
+			}
+			if len(a.sum.KeyPoints) > 0 {
+				ui.Column(c).Gap(8).Children(func() {
+					kit.Label(c, t, a.tr("Key points"))
+					for i, point := range a.sum.KeyPoints {
+						numbered(c.Key(i), t, fmt.Sprintf("%02d", i+1), point)
+					}
+				})
+			}
+			if len(a.sum.ActionItems) > 0 {
+				ui.Column(c).Gap(0).Children(func() {
+					ui.Row(c).Padding(0, 0, 8, 0).Children(func() {
+						kit.Label(c, t, a.tr("Action items")).Grow(1)
+						mono(ui.Text(c, fmt.Sprintf("%d", len(a.sum.ActionItems)))).FontSize(10.5).TextColor(p.Ink3)
+					})
+					for i, item := range a.sum.ActionItems {
+						ui.Row(c.Key(i)).FillWidth().Padding(8, 0).Gap(10).AlignItems(ui.Center).
+							BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+							ui.Box(c).Size(16, 16).Radius(4).Border(1, p.Line2).Shrink(0)
+							ui.Text(c, item).FontSize(13).TextColor(p.Ink).Grow(1).Selectable()
+						})
+					}
+				})
+			}
+			if len(a.sum.Chapters) > 0 {
+				ui.Column(c).Gap(2).Children(func() {
+					kit.Label(c, t, a.tr("Chapters"))
+					for i, ch := range a.sum.Chapters {
+						a.timedRow(c.Key(i), t, m, ch.StartMs, ch.Title, ch.Summary)
+					}
+				})
+			}
+			if len(a.sum.Highlights) > 0 {
+				ui.Column(c).Gap(8).Children(func() {
+					kit.Label(c, t, a.tr("Highlights"))
+					for i, h := range a.sum.Highlights {
+						a.highlight(c.Key(i), t, m, h.StartMs, h.Note)
+					}
+				})
+			}
+		})
+	})
+	a.docFooter(c, t, func() {
+		ui.Icon(c, iconSparkles).FontSize(14).TextColor(p.Ink3)
+		ui.Text(c, a.modelName(a.sum.Model, m.SummaryStatus)).FontSize(11.5).TextColor(p.Ink3).
+			SingleLine().Grow(1).MinWidth(0)
+		kit.IconButton(c, t, iconCopy, a.tr("Copy the summary"), func() {
+			mygo.Clipboard.WriteText(a.sum.ContentMarkdown)
+		})
+		if kit.Button(c, t, kit.Secondary, iconRefresh, a.tr("Generate again"), false).Clicked() {
+			a.startSummary(m.ID)
+		}
+	})
+}
+
+// numbered is a key point: its mono number and the text.
+func numbered(c *ui.Context, t *ui.Theme, n, text string) {
+	p := pal(t)
+	ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+		mono(ui.Text(c, n)).FontSize(11).TextColor(p.Ink3).Padding(2, 0, 0, 0).Shrink(0)
+		ui.Text(c, text).FontSize(13).TextColor(p.Ink).Grow(1).Selectable()
+	})
+}
+
+// timedRow is a chapter: its start, which seeks the player there, beside its
+// title and what it covers.
+func (a *App) timedRow(c *ui.Context, t *ui.Theme, m library.Media, at int64, title, detail string) {
+	p := pal(t)
+	clock := fmtDuration(at)
+	row := ui.ButtonBase(c).Label(a.tr("Seek to ")+clock).Tooltip(a.tr("Seek to ")+clock).FillWidth().
+		Padding(6, 8).Radius(kit.RadiusControl).Justify(ui.Start).Cursor(ui.CursorPointer)
+	if row.Hovered() {
+		row.Background(p.Sunk)
+	}
+	row.Children(func() {
+		ui.Row(c).Gap(12).AlignItems(ui.Start).Children(func() {
+			mono(ui.Text(c, clock)).FontSize(11.5).TextColor(p.AmberInk).Width(44).Shrink(0)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+				ui.Text(c, title).FontSize(13).TextColor(p.Ink)
+				if detail != "" {
+					ui.Text(c, detail).FontSize(12).TextColor(p.Ink3)
+				}
+			})
+		})
+	})
+	if row.Clicked() {
+		a.seekPlayback(m, time.Duration(at)*time.Millisecond)
+	}
+}
+
+// highlight is a key moment as a quote in the highlighter, its time under it
+// seeking there.
+func (a *App) highlight(c *ui.Context, t *ui.Theme, m library.Media, at int64, note string) {
+	p := pal(t)
+	clock := fmtDuration(at)
+	quote := ui.ButtonBase(c).Label(a.tr("Seek to ")+clock).Tooltip(a.tr("Seek to ")+clock).FillWidth().
+		Padding(12, 14).Radius(0, kit.RadiusControl, kit.RadiusControl, 0).BorderWidth(0, 0, 0, 3).
+		BorderColor(p.Amber).Background(p.AmberSoft).Justify(ui.Start).Cursor(ui.CursorPointer)
+	quote.Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			ui.Text(c, "“"+note+"”").FontSize(13).TextColor(p.Ink).Selectable()
+			mono(ui.Text(c, clock)).FontSize(11.5).TextColor(p.AmberInk)
+		})
+	})
+	if quote.Clicked() {
+		a.seekPlayback(m, time.Duration(at)*time.Millisecond)
+	}
+}
+
+// ---------------------------------------------------------------- shared
+
+// emptyTab says why a tab has nothing, and offers what would fill it.
+func (a *App) emptyTab(c *ui.Context, t *ui.Theme, title, detail string, actions []action) {
+	p := pal(t)
+	ui.Column(c).Grow(1).FillWidth().Center().Padding(24).Gap(8).Children(func() {
+		ui.Text(c, a.tr(title)).FontSize(16).FontWeight(600).TextColor(p.Ink).TextAlign(ui.Center)
+		ui.Text(c, a.tr(detail)).FontSize(13).TextColor(p.Ink3).MaxWidth(340).TextAlign(ui.Center)
+		ui.Row(c).Gap(8).Padding(6, 0, 0, 0).Children(func() {
+			for _, act := range actions {
+				if !act.enabled {
+					continue
+				}
+				if kit.Button(c, t, kit.Primary, nil, a.tr(act.label), false).Clicked() {
+					act.onChoose()
+				}
+			}
+		})
+	})
+}
+
+// working shows what a long job is doing, how far it has come, and how to
+// stop it.
+func (a *App) working(c *ui.Context, t *ui.Theme, title, detail string) {
+	p := pal(t)
+	ui.Column(c).Grow(1).FillWidth().Center().Padding(24).Gap(8).Children(func() {
+		ui.Spinner(c).Label(a.tr(title))
+		ui.Text(c, a.tr(title)+"…").FontSize(13).FontWeight(500).TextColor(p.Ink)
+		ui.Text(c, a.tr(detail)).FontSize(12.5).TextColor(p.Ink3).MaxWidth(340).TextAlign(ui.Center)
+		if !a.job.Running() {
+			return
+		}
+		value := a.job.Progress
+		if value <= 0 {
+			value = -1
+		}
+		progressBar(c, t, value, 240)
+		if kit.Button(c, t, kit.Secondary, nil, a.tr("Cancel"), false).Label(a.tr("Stop this job")).Clicked() {
+			a.cancelJob()
+		}
+	})
+}
+
+// progressBar is the 6px amber bar of a job; a negative value is a bar of
+// unknown length.
+func progressBar(c *ui.Context, t *ui.Theme, value float64, width float32) {
+	p := pal(t)
+	if value < 0 {
+		ui.Progress(c, -1).Width(width)
+		return
+	}
+	bar := ui.Box(c).Height(6).Radius(3).Background(p.Hover)
+	if width > 0 {
+		bar.Width(width)
+	} else {
+		bar.FillWidth()
+	}
+	fraction := float32(min(max(value, 0), 1))
+	bar.Draw(func(pt *ui.Painter, r ui.Rect) {
+		pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * fraction, H: r.H}, p.Amber, 3)
+	})
+}
 
 var langs = []struct{ code, name string }{
 	{"en", "English"},
@@ -51,104 +1023,6 @@ func (a *App) langLabel(code string) string {
 	return langName(code)
 }
 
-// sessionPage is one media's page. Wide windows put the player and tabs side
-// by side; compact windows stack them so both remain readable.
-func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
-	width, _ := c.Size()
-	if width < 900 {
-		ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Column(c).Padding(t.Space(3), t.Space(4), 0, t.Space(4)).Gap(t.Space(3)).Children(func() {
-				a.sessionHead(c, t, m)
-				a.playerStage(c, t, m)
-			})
-			ui.Column(c).Grow(1).MinHeight(0).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-				a.tabs(c, t, m)
-			})
-		})
-		return
-	}
-	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-		ui.Scroll(c).Grow(1).MinWidth(0).Children(func() {
-			ui.Column(c).Padding(t.Space(4), t.Space(5), t.Space(5), t.Space(5)).Gap(t.Space(4)).Children(func() {
-				a.sessionHead(c, t, m)
-				a.playerStage(c, t, m)
-				a.factStrip(c, t, m)
-			})
-		})
-		ui.Column(c).Width(sideWidth).Shrink(0).FillHeight().MinWidth(0).
-			Background(t.Surface).BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Children(func() {
-			a.tabs(c, t, m)
-		})
-	})
-}
-
-// sideWidth is the column the tabs take beside a media.
-const sideWidth = 356
-
-// sessionHead names the media and holds the two things to do with its file: an
-// icon button that shows it in the file manager, and a Delete in the danger
-// tint. The name is all the text: the rest is in the fact strip.
-func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-		if a.backButton(c, t, "") {
-			a.closeDetail()
-		}
-		if a.renameID == m.ID {
-			input := ui.TextInput(c, &a.renameText).Label(a.tr("Media name")).Grow(1).MinWidth(0)
-			if input.Submitted() {
-				a.saveRename(m.ID)
-			}
-			if ui.Button(c, a.tr("Save")).Clicked() {
-				a.saveRename(m.ID)
-			}
-			if ui.Button(c, a.tr("Cancel")).Clicked() {
-				a.renameID, a.renameText = 0, ""
-			}
-			return
-		}
-		title := ui.ButtonBase(c).Label(a.tr("Rename")).Tooltip(a.tr("Rename this media")).Grow(1).MinWidth(0)
-		title.Children(func() {
-			ui.Text(c, m.Name).FontSize(t.FontSize + 3).Bold().SingleLine().MinWidth(0)
-		})
-		if title.Clicked() {
-			a.renameID, a.renameText = m.ID, m.Name
-		}
-		btn := ui.ButtonBase(c).Label(a.tr("Show file")).Tooltip(a.tr("Show the file in its folder")).
-			Padding(t.Space(1.5)).Radius(t.Radius).Border(1, t.Border).TextColor(t.TextMuted)
-		btn.Children(func() { ui.Icon(c, iconFolder).FontSize(t.FontSize + 2) })
-		if btn.Hovered() {
-			btn.Background(t.SurfaceHover).TextColor(t.Text)
-		}
-		if btn.Clicked() {
-			mygo.Shell.ShowItemInFolder(m.Path)
-		}
-		if m.TranscriptStatus == "pending" {
-			// Deleting under a running transcription would leave it writing
-			// to a record that is gone; the pill says what runs instead.
-			ui.Row(c).Gap(t.Space(1.5)).Padding(t.Space(1), t.Space(3)).Radius(9999).
-				Background(t.Accent.Alpha(0.12)).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c).Label(a.tr("Transcribing")).Size(12, 12)
-				ui.Text(c, a.tr("Transcribing")).FontSize(t.FontSize - 2).Bold().TextColor(t.Accent)
-			})
-			return
-		}
-		del := ui.ButtonBase(c).Label(a.tr("Delete")).Tooltip(a.tr("Delete this media from the library")).
-			Padding(t.Space(1.5), t.Space(2.5)).Radius(t.Radius).TextColor(t.Danger)
-		del.Children(func() {
-			ui.Row(c).Gap(t.Space(1.5)).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconTrash).FontSize(t.FontSize + 1)
-				ui.Text(c, a.tr("Delete")).FontSize(t.FontSize - 1).Bold()
-			})
-		})
-		if del.Hovered() {
-			del.Background(t.Danger.Alpha(0.12))
-		}
-		if del.Clicked() {
-			a.askDelete(m.ID)
-		}
-	})
-}
-
 func (a *App) saveRename(id int64) {
 	name := strings.TrimSpace(a.renameText)
 	if name == "" {
@@ -165,34 +1039,6 @@ func (a *App) saveRename(id int64) {
 			a.reload()
 		})
 	}()
-}
-
-// playerStage presents finished media with MyGo's in-window player.
-func (a *App) playerStage(c *ui.Context, t *ui.Theme, m library.Media) {
-	a.nativePlayerStage(c, t, m)
-}
-
-// factStrip is the four facts of a media, in one row divided by hairlines.
-func (a *App) factStrip(c *ui.Context, t *ui.Theme, m library.Media) {
-	facts := [][2]string{
-		{a.tr("Source"), a.mediaSourceLabel(m)},
-		{a.tr("Duration"), durationOrDash(m)},
-		{a.tr("Created"), a.dateTime(m.CreatedAt)},
-		{a.tr("Status"), a.mediaStatus(m)},
-	}
-	ui.Row(c).FillWidth().Radius(t.Radius).Border(1, t.Border).Clip().
-		AlignItems(ui.Stretch).Children(func() {
-		for i, fact := range facts {
-			if i > 0 {
-				ui.Column(c).Width(1).Shrink(0).Background(t.Border)
-			}
-			ui.Column(c).Grow(1).MinWidth(0).Padding(t.Space(2.5), t.Space(3.5)).Gap(t.Space(1)).Children(func() {
-				ui.Text(c, fact[0]).FontSize(t.FontSize - 3).Bold().
-					TextColor(t.TextMuted).SingleLine()
-				ui.Text(c, fact[1]).FontSize(t.FontSize - 1).Bold().SingleLine()
-			})
-		}
-	})
 }
 
 func (a *App) mediaSourceLabel(m library.Media) string {
@@ -236,129 +1082,6 @@ func (a *App) mediaStatus(m library.Media) string {
 	return strings.Join(parts, " · ")
 }
 
-// tabs is the right pane of a media's page: its tabs across the top, the
-// export button beside them, and the chosen tab below.
-func (a *App) tabs(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Padding(t.Space(4), t.Space(4), 0, t.Space(4)).Gap(t.Space(2)).
-			AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			ui.Tabs(c, &a.tab, a.tr("Transcript"), a.tr("Summary")).Grow(1)
-			a.exportButton(c, t, m)
-			a.subtitleSettingsButton(c, t, &m)
-		})
-		ui.Column(c).Grow(1).MinHeight(0).Padding(t.Space(3), t.Space(4)).Children(func() {
-			switch a.tab {
-			case 1:
-				a.summaryTab(c, t, m)
-			default:
-				a.transcriptTab(c, t, m)
-			}
-		})
-	})
-}
-
-// exportButton is the one way out of whatever the tabs made: the icon alone,
-// with its name in the label and tooltip. The transcript opens the export
-// dialog; the summary saves its Markdown.
-func (a *App) exportButton(c *ui.Context, t *ui.Theme, m library.Media) {
-	label := ""
-	switch {
-	case a.tab == 1 && a.sum.ContentMarkdown != "":
-		label = a.tr("Export the summary")
-	case a.tab != 1 && len(a.segs) > 0:
-		label = a.tr("Export the transcript")
-	default:
-		return
-	}
-	btn := ui.ButtonBase(c).Label(label).Tooltip(label).Padding(t.Space(1.5)).
-		Radius(t.Radius).TextColor(t.TextMuted).Border(1, t.Border)
-	btn.Children(func() { ui.Icon(c, iconDownload).FontSize(t.FontSize + 1) })
-	if btn.Hovered() {
-		btn.Background(t.SurfaceHover).TextColor(t.Text)
-	}
-	if btn.Clicked() {
-		if a.tab == 1 {
-			a.exportSummary(m.ID)
-		} else {
-			a.openExport(m)
-		}
-	}
-}
-
-// ------------------------------------------------------------- transcript
-
-func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
-	if m.TranscriptStatus == "pending" {
-		if a.job.Kind == jobs.KindTranscribe {
-			a.transcribingPanel(c, t, m)
-			return
-		}
-		a.working(c, t, "Transcribing", "Recognizing the speech in this file on this computer.")
-		return
-	}
-	if m.TranscriptStatus != "done" {
-		detail := "Offline speech recognition turns the audio into timestamped subtitles."
-		switch {
-		case a.job.Kind == jobs.KindTranscribe && a.job.State == jobs.StateFailed && a.job.Error != "":
-			detail = a.job.Error
-		case a.trErr != "":
-			detail = a.trErr
-		}
-		a.emptyTab(c, t, "No transcript yet", detail,
-			[]action{{"Transcribe", m.HasAudio, func() { a.startTranscribe(m.ID) }}})
-		return
-	}
-	if !a.trLoaded {
-		a.loadTranscript()
-		a.working(c, t, "Loading", "Reading the transcript.")
-		return
-	}
-	if len(a.segs) == 0 {
-		a.emptyTab(c, t, "The transcript is empty",
-			"No speech was recognized in this file.",
-			[]action{{"Transcribe again", true, func() { a.startTranscribe(m.ID) }}})
-		return
-	}
-	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
-		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			a.transcriptSearchButton(c, t)
-			a.spokenLanguageSelect(c, t, m)
-			a.translationTargetSelect(c, t, m)
-			if a.transLoading || a.jobRunning(jobs.KindTranslate) {
-				ui.Spinner(c).Label(a.tr("Translating"))
-			}
-		})
-		rows := a.filteredSegments()
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Gap(t.Space(2)).Children(func() {
-				if len(rows) == 0 {
-					ui.Text(c, a.tr("Nothing matches that search.")).TextColor(t.TextMuted)
-				}
-				translated := map[int64]string{}
-				if a.showTranslation {
-					for _, seg := range a.trans.Segments {
-						translated[seg.SegmentID] = seg.TranslatedText
-					}
-				}
-				for _, seg := range rows {
-					at := fmtDuration(seg.StartMs)
-					line := ui.ButtonBase(c.Key(seg.ID)).Label(a.tr("Seek to ")+at).Tooltip(a.tr("Seek to ")+at).
-						FillWidth().Padding(t.Space(1.5), t.Space(2.5)).Radius(t.Space(2)).Cursor(ui.CursorPointer)
-					if line.Hovered() {
-						line.Background(t.SurfaceHover)
-					}
-					line.Children(func() {
-						a.subtitleContent(c, t, seg.Speaker, at, seg.Text, translated[seg.ID])
-					})
-					if line.Clicked() {
-						a.seekPlayback(m, time.Duration(seg.StartMs)*time.Millisecond)
-					}
-				}
-			})
-		})
-	})
-}
-
 func (a *App) setTranslationVisible(m library.Media, visible bool) {
 	a.showTranslation = visible
 	if !visible {
@@ -372,82 +1095,6 @@ func (a *App) setTranslationVisible(m library.Media, visible bool) {
 	if len(a.trans.Segments) == 0 && !a.transLoading && !a.jobRunning(jobs.KindTranslate) {
 		a.startTranslate(m.ID)
 	}
-}
-
-// translationTargetSelect picks the language translations are shown in; it sits
-// in the transcript toolbar, beside the spoken language.
-func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme, m library.Media) {
-	name := langName(a.trLang)
-	options := make([]kit.SelectOption[string], len(langs))
-	for i, l := range langs {
-		options[i] = kit.SelectOption[string]{Value: l.name, Label: l.name}
-	}
-	kit.CompactSelect(c, t, &name, options, a.tr("Translate into"), 130, nil, func(choice string) {
-		for _, l := range langs {
-			if l.name == choice && l.code != a.trLang {
-				a.trLang = l.code
-				a.trans = translate.Translation{}
-				if !a.showTranslation {
-					// Picking a language is an explicit request to see it.
-					a.setTranslationVisible(m, true)
-					return
-				}
-				a.loadTranslation()
-			}
-		}
-	})
-}
-
-// subtitleContent is shared by saved and live transcript rows: speaker, time and
-// message, laid out like a chat thread — avatar on the left, the line in a
-// bubble so that consecutive turns are easy to tell apart.
-func (a *App) subtitleContent(c *ui.Context, t *ui.Theme, speaker int, at, text, translation string) {
-	name := a.transcript.SpeakerNames[speaker]
-	if name == "" {
-		name = a.trf("Speaker %d", speaker+1)
-	}
-	avatar, ink := speakerTint(t, speakerNumber(name, speaker))
-	ui.Row(c).FillWidth().Gap(t.Space(2.5)).AlignItems(ui.Start).Children(func() {
-		ui.Column(c).Size(32, 32).Shrink(0).Radius(16).Center().Background(avatar).Children(func() {
-			ui.Text(c, speakerInitials(name, speaker)).FontSize(t.FontSize - 3).Bold().TextColor(ink)
-		})
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Padding(0, 0, t.Space(0.5), 0).Children(func() {
-				ui.Text(c, at).FontSize(t.FontSize - 3).TextColor(t.TextMuted).FontFeatures("tnum")
-				if a.renameSpeakerID == speaker {
-					input := ui.TextInput(c, &a.renameSpeakerText).Label(a.tr("Speaker name")).Grow(1).MinWidth(0)
-					if input.Submitted() {
-						a.saveSpeakerName(speaker)
-					}
-					if ui.Button(c, a.tr("Save")).Clicked() {
-						a.saveSpeakerName(speaker)
-					}
-				} else {
-					button := ui.ButtonBase(c).Label(a.tr("Rename speaker")).Tooltip(a.tr("Rename speaker"))
-					button.Children(func() { ui.Text(c, name).FontSize(t.FontSize - 2).Bold().SingleLine() })
-					if button.Clicked() {
-						a.renameSpeakerID, a.renameSpeakerText = speaker, name
-					}
-				}
-			})
-			ui.Column(c).FillWidth().Padding(t.Space(1.5), t.Space(2.5)).Radius(t.Space(2.5)).
-				Background(t.Surface).Gap(t.Space(1)).Children(func() {
-				ui.Text(c, text).FontSize(a.subtitleSize()).Selectable()
-				if translation != "" {
-					ui.Text(c, translation).FontSize(max(a.subtitleSize()-1, 10)).TextColor(t.TextMuted).Selectable()
-				}
-			})
-		})
-	})
-}
-
-// speakerTint is the colour of a speaker's avatar: decoration like a chat app's,
-// so two voices are told apart at a glance, not an identity. The number starts at
-// one, so Speaker 1 takes the first colour.
-func speakerTint(t *ui.Theme, number int) (ui.Color, ui.Color) {
-	colors := []ui.Color{t.Accent, t.Success, t.Warning, t.Danger}
-	c := colors[max(number-1, 0)%len(colors)]
-	return c.Alpha(0.16), c
 }
 
 // speakerNumber is the number a speaker is shown with: the digits of a generated
@@ -498,48 +1145,6 @@ func (a *App) saveSpeakerName(id int) {
 			a.renameSpeakerID, a.renameSpeakerText = -1, ""
 		})
 	}()
-}
-
-// transcriptSearchButton is the magnifier that unfolds into the search field
-// over the controls to its right, shared by the live and saved transcripts.
-func (a *App) transcriptSearchButton(c *ui.Context, t *ui.Theme) {
-	btn := ui.ButtonBase(c).Label(a.tr("Search the subtitles")).Tooltip(a.tr("Search the subtitles")).
-		Size(t.Space(8), t.Space(8)).Radius(t.Space(2)).Border(1, t.Border).
-		Background(t.Surface).Center().TextColor(t.TextMuted).Cursor(ui.CursorPointer)
-	if btn.Hovered() {
-		btn.Background(t.SurfaceHover).TextColor(t.Text)
-	}
-	btn.Children(func() { ui.Icon(c, iconSearch).FontSize(t.FontSize + 1) })
-	if btn.Clicked() {
-		a.segSearchOpen = true
-	}
-	if !a.segSearchOpen {
-		return
-	}
-	field := ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).
-		Absolute().Left(t.Space(10)).Right(0).Top(0).Height(32).
-		Background(t.Background).Radius(t.Space(2)).AutoFocus()
-	if field.Shortcut(0, ui.KeyEscape) {
-		a.segSearchOpen, a.segQuery = false, ""
-	}
-}
-
-// spokenLanguageSelect overrules the detected language without adding a
-// second toolbar or a visible label.
-func (a *App) spokenLanguageSelect(c *ui.Context, t *ui.Theme, m library.Media) {
-	names, codes := a.langChoices()
-	lang := a.langLabel(a.lang)
-	options := make([]kit.SelectOption[string], len(names))
-	for i, name := range names {
-		options[i] = kit.SelectOption[string]{Value: name, Label: name}
-	}
-	kit.CompactSelect(c, t, &lang, options, a.tr("Spoken language"), 120, iconEarth, func(choice string) {
-		for i, name := range names {
-			if name == choice && codes[i] != a.lang {
-				a.setLanguage(m.ID, codes[i])
-			}
-		}
-	})
 }
 
 func (a *App) filteredSegments() []asr.Segment {
@@ -615,142 +1220,6 @@ func (a *App) startTranslate(id int64) {
 
 // ---------------------------------------------------------------- summary
 
-func (a *App) summaryTab(c *ui.Context, t *ui.Theme, m library.Media) {
-	if m.TranscriptStatus != "done" {
-		a.emptyTab(c, t, "A transcript comes first",
-			"Summarize this file once it has been transcribed.",
-			[]action{{"Go to Transcript", true, func() { a.tab = 0 }}})
-		return
-	}
-	if m.SummaryStatus == "pending" || a.jobRunning(jobs.KindSummarize) {
-		a.working(c, t, "Summarizing", "Asking the AI model for the overview, key points and chapters.")
-		return
-	}
-	if !a.sumLoaded {
-		a.loadSummary()
-		a.working(c, t, "Loading", "Reading the summary.")
-		return
-	}
-	has := a.sum.ContentMarkdown != ""
-	ui.Column(c).Fill().Gap(t.Space(3)).Children(func() {
-		ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
-			chip := ui.Row(c).Gap(t.Space(1.5)).Padding(t.Space(1), t.Space(3)).Radius(9999).
-				AlignItems(ui.Center).MinWidth(0).Shrink(1)
-			if a.sum.Model != "" {
-				chip.Background(t.Accent.Alpha(0.12))
-			}
-			chip.Children(func() {
-				label := ui.Text(c, a.modelName(a.sum.Model, m.SummaryStatus)).FontSize(t.FontSize - 2).SingleLine()
-				if a.sum.Model != "" {
-					label.Bold().TextColor(t.Accent)
-				} else {
-					label.TextColor(t.TextMuted)
-				}
-			})
-			ui.Spacer(c)
-			if has {
-				a.iconButton(c, t, iconCopy, "Copy the summary", func() {
-					mygo.Clipboard.WriteText(a.sum.ContentMarkdown)
-				})
-				a.iconButton(c, t, iconRefresh, "Generate again", func() { a.startSummary(m.ID) })
-			}
-		})
-		if !has {
-			a.emptyTab(c, t, "No summary yet",
-				"Generate an overview, key points, action items, chapters and highlights from the transcript.",
-				[]action{{"Generate", true, func() { a.startSummary(m.ID) }}})
-			return
-		}
-		ui.Scroll(c).Grow(1).Children(func() {
-			ui.Column(c).Gap(t.Space(4)).Children(func() {
-				if a.sum.Overview != "" {
-					ui.Column(c).Gap(t.Space(1.5)).Children(func() {
-						a.section(c, t, "Overview")
-						ui.Text(c, a.sum.Overview).Selectable()
-					})
-				}
-				if len(a.sum.Chapters) > 0 {
-					ui.Column(c).Gap(t.Space(0.5)).Children(func() {
-						a.section(c, t, "Chapters")
-						for i, ch := range a.sum.Chapters {
-							a.timedRow(c.Key(i), t, m, ch.StartMs, ch.Title, ch.Summary)
-						}
-					})
-				}
-				if len(a.sum.ActionItems) > 0 {
-					ui.Column(c).Gap(t.Space(1.5)).Children(func() {
-						a.section(c, t, "Action items")
-						for _, p := range a.sum.ActionItems {
-							bullet(c, t, "☐", p)
-						}
-					})
-				}
-				if len(a.sum.KeyPoints) > 0 {
-					ui.Column(c).Gap(t.Space(1.5)).Children(func() {
-						a.section(c, t, "Key points")
-						for _, p := range a.sum.KeyPoints {
-							bullet(c, t, "•", p)
-						}
-					})
-				}
-				if len(a.sum.Highlights) > 0 {
-					ui.Column(c).Gap(t.Space(1.5)).Children(func() {
-						a.section(c, t, "Highlights")
-						for i, h := range a.sum.Highlights {
-							a.highlight(c.Key(i), t, m, h.StartMs, h.Note)
-						}
-					})
-				}
-			})
-		})
-	})
-}
-
-// timedRow is a chapter: its start, which seeks the player there, beside its
-// title and what it covers.
-func (a *App) timedRow(c *ui.Context, t *ui.Theme, m library.Media, at int64, title, detail string) {
-	clock := fmtDuration(at)
-	row := ui.ButtonBase(c).Label(a.tr("Seek to ")+clock).Tooltip(a.tr("Seek to ")+clock).FillWidth().
-		Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius).Cursor(ui.CursorPointer)
-	if row.Hovered() {
-		row.Background(t.SurfaceHover)
-	}
-	row.Children(func() {
-		ui.Row(c).Gap(t.Space(3)).AlignItems(ui.Start).Children(func() {
-			ui.Text(c, clock).FontSize(t.FontSize - 2).Bold().TextColor(t.Accent).FontFeatures("tnum").Width(44).Shrink(0)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-				ui.Text(c, title).FontSize(t.FontSize - 1)
-				if detail != "" {
-					ui.Text(c, detail).FontSize(t.FontSize - 3).TextColor(t.TextMuted)
-				}
-			})
-		})
-	})
-	if row.Clicked() {
-		a.seekPlayback(m, time.Duration(at)*time.Millisecond)
-	}
-}
-
-// highlight is a key moment as a quote, its time under it seeking there.
-func (a *App) highlight(c *ui.Context, t *ui.Theme, m library.Media, at int64, note string) {
-	clock := fmtDuration(at)
-	quote := ui.ButtonBase(c).Label(a.tr("Seek to ")+clock).Tooltip(a.tr("Seek to ")+clock).FillWidth().
-		Padding(t.Space(2.5), t.Space(3.5)).Radius(0, t.Radius, t.Radius, 0).BorderWidth(0, 0, 0, 3).
-		BorderColor(t.Accent).Background(t.Surface).Cursor(ui.CursorPointer)
-	if quote.Hovered() {
-		quote.Background(t.SurfaceHover)
-	}
-	quote.Children(func() {
-		ui.Column(c).Gap(t.Space(1)).Children(func() {
-			ui.Text(c, note).Selectable()
-			ui.Text(c, clock).FontSize(t.FontSize - 3).TextColor(t.TextMuted).FontFeatures("tnum")
-		})
-	})
-	if quote.Clicked() {
-		a.seekPlayback(m, time.Duration(at)*time.Millisecond)
-	}
-}
-
 func (a *App) modelName(model, status string) string {
 	if model != "" {
 		return model
@@ -761,26 +1230,16 @@ func (a *App) modelName(model, status string) string {
 	return a.tr("not generated")
 }
 
-func (a *App) section(c *ui.Context, t *ui.Theme, title string) {
-	ui.Text(c, a.tr(title)).FontSize(t.FontSize - 3).Bold().
-		TextColor(t.TextMuted)
-}
-
-func bullet(c *ui.Context, t *ui.Theme, glyph, text string) {
-	ui.Row(c).Gap(t.Space(2.5)).AlignItems(ui.Start).Children(func() {
-		ui.Text(c, glyph).TextColor(t.TextMuted).Width(14)
-		ui.Text(c, text).Grow(1).Selectable()
-	})
-}
-
 func (a *App) loadSummary() {
 	id := a.sel
+	a.sumLoading = true
 	go func() {
 		s, err := a.Sum.Get(id)
 		a.update(func() {
 			if id != a.sel {
 				return
 			}
+			a.sumLoading = false
 			a.sumLoaded = true
 			if err != nil {
 				a.setError(err)
@@ -812,47 +1271,6 @@ type action struct {
 	label    string
 	enabled  bool
 	onChoose func()
-}
-
-// emptyTab says why a tab has nothing, and offers what would fill it.
-func (a *App) emptyTab(c *ui.Context, t *ui.Theme, title, detail string, actions []action) {
-	ui.Column(c).Fill().Center().Gap(t.Space(2)).Children(func() {
-		ui.Text(c, a.tr(title)).FontSize(t.FontSize + 4).Bold()
-		ui.Text(c, a.tr(detail)).TextColor(t.TextMuted).MaxWidth(460).TextAlign(ui.Center)
-		ui.Row(c).Gap(t.Space(2)).Children(func() {
-			for _, act := range actions {
-				if !act.enabled {
-					continue
-				}
-				if ui.PrimaryButton(c, a.tr(act.label)).Clicked() {
-					act.onChoose()
-				}
-			}
-		})
-	})
-}
-
-// working shows what a long job is doing, how far it has come, and how to
-// stop it.
-func (a *App) working(c *ui.Context, t *ui.Theme, title, detail string) {
-	ui.Column(c).Fill().Center().Gap(t.Space(2)).Children(func() {
-		ui.Spinner(c).Label(a.tr(title))
-		ui.Text(c, a.tr(title)+"…").Bold()
-		ui.Text(c, a.tr(detail)).TextColor(t.TextMuted).MaxWidth(420).TextAlign(ui.Center)
-		if !a.job.Running() {
-			return
-		}
-		// A negative value is a bar of unknown length, which is what work
-		// that has not reported any progress yet has.
-		value := a.job.Progress
-		if value <= 0 {
-			value = -1
-		}
-		ui.Progress(c, value).Width(240)
-		if ui.Button(c, a.tr("Cancel")).Label(a.tr("Stop this job")).Clicked() {
-			a.cancelJob()
-		}
-	})
 }
 
 // loadTranscript reads the transcript of the media shown.

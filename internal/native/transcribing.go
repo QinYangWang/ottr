@@ -9,6 +9,7 @@ import (
 	"ottr/internal/asr"
 	"ottr/internal/jobs"
 	"ottr/internal/library"
+	"ottr/internal/native/kit"
 )
 
 // stepState is where one step of a transcription stands.
@@ -83,75 +84,143 @@ func (s speechClock) left(job jobs.Job, now time.Time) (time.Duration, bool) {
 }
 
 // transcribingPanel is the transcript tab while a recording is transcribed:
-// how far it has come, the steps it goes through, and the way to stop it.
+// the pipeline card — transcription with its steps and progress, then what
+// the provider can do after it — Cancel, and the live lines of the recording
+// until the full pass replaces them.
 func (a *App) transcribingPanel(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
 	job := a.job
 	now := time.Now()
 	a.speech.observe(job, now)
-	ui.Scroll(c).Grow(1).Children(func() {
-		ui.Column(c).Gap(t.Space(3)).Children(func() {
-			card := ui.Column(c).FillWidth().Padding(t.Space(3.5)).Gap(t.Space(1.5)).
-				Radius(t.Radius+4).Border(1, t.Border).Background(t.Background)
-			card.Children(func() {
-				ui.Text(c, a.tr("Transcribing your recording")).Bold()
-				model := a.modelInUseName()
-				detail := a.tr("Runs on this computer. You can keep using Ottr while it works.")
-				if model != "" {
-					detail = a.trf("Runs on this computer with %s. You can keep using Ottr while it works.", model)
-				}
-				ui.Text(c, detail).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
-				value := job.Progress
-				if !job.Running() || value <= 0 {
-					value = -1
-				}
-				ui.Progress(c, value).FillWidth()
-				ui.Row(c).Gap(t.Space(2)).Children(func() {
-					ui.Text(c, a.processedText(job, m)).FontSize(t.FontSize - 3).
-						TextColor(t.TextMuted).FontFeatures("tnum").Grow(1)
-					if left, ok := a.speech.left(job, now); ok {
-						ui.Text(c, a.trf("about %s left", fmtLeft(left))).FontSize(t.FontSize - 3).
-							TextColor(t.TextMuted).FontFeatures("tnum")
+	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Column(c).Padding(16, 20, 20, 20).Gap(14).Children(func() {
+			ui.Column(c).FillWidth().Padding(14, 16).Gap(12).Radius(kit.RadiusPanel).Border(1, p.Line).
+				Background(p.Sheet).Children(func() {
+				ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+					ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+						ui.Text(c, a.tr("Processing on this computer")).FontSize(13.5).FontWeight(600).TextColor(p.Ink)
+						ui.Text(c, a.tr("Transcribing your recording")).FontSize(11.5).TextColor(p.Ink3)
+					})
+					if job.Running() {
+						if kit.Button(c, t, kit.Secondary, nil, a.tr("Cancel"), false).Label(a.tr("Stop this job")).Clicked() {
+							a.cancelJob()
+						}
 					}
 				})
-			})
-			steps := ui.Column(c).FillWidth().Padding(t.Space(2), t.Space(3.5)).
-				Radius(t.Radius+4).Border(1, t.Border).Background(t.Background)
-			steps.Children(func() {
-				for i, step := range transcribeSteps(job.Progress) {
-					a.stepRow(c, t, i, step, job, m)
+				model := a.modelInUseName()
+				stage1 := a.tr("Transcribing")
+				if model != "" {
+					stage1 = a.trf("Transcribing with %s", shortModel(model))
 				}
+				a.pipelineStage(c, t, 1, stage1, a.trf("%d%%", int(job.Progress*100)), true, func() {
+					value := job.Progress
+					if !job.Running() || value <= 0 {
+						value = -1
+					}
+					progressBar(c, t, value, 0)
+					ui.Row(c).FillWidth().Gap(6).Children(func() {
+						line := "CPU · " + a.processedText(job, m)
+						if left, ok := a.speech.left(job, now); ok {
+							line += " · " + a.trf("about %s left", fmtLeft(left))
+						}
+						mono(ui.Text(c, line)).FontSize(11).TextColor(p.Ink3).SingleLine()
+					})
+					ui.Column(c).FillWidth().Padding(4, 0, 0, 0).Children(func() {
+						for i, step := range transcribeSteps(job.Progress) {
+							a.stepRow(c, t, i, step, job, m)
+						}
+					})
+				})
+				a.pipelineStage(c, t, 2, a.trf("Translate into %s", langName(a.trLang)),
+					a.tr("On request · online provider"), false, nil)
+				a.pipelineStage(c, t, 3, a.tr("Summarize"), a.tr("On request"), false, nil)
 			})
-			ui.Text(c, a.tr("The transcript opens here when it is done.")).
-				FontSize(t.FontSize - 3).TextColor(t.TextMuted)
-			if job.Running() {
-				if ui.Button(c, a.tr("Cancel")).Label(a.tr("Stop this job")).Clicked() {
-					a.cancelJob()
+			ui.Text(c, a.tr("The transcript opens here when it is done.")).FontSize(11.5).TextColor(p.Ink3)
+			if a.provisionalID == m.ID && len(a.provisional) > 0 {
+				ui.Row(c).FillWidth().Padding(8, 12).Gap(8).AlignItems(ui.Center).Radius(kit.RadiusCard).
+					BorderStyle(ui.BorderDashed).Border(1, p.Line2).Background(p.Sunk).Children(func() {
+					ui.Icon(c, iconCaptions).FontSize(14).TextColor(p.Ink3)
+					ui.Text(c, a.tr("Live transcript shown until the full pass replaces it.")).FontSize(12).TextColor(p.Ink2)
+				})
+				for _, line := range a.provisional {
+					if !line.final {
+						continue
+					}
+					ui.Row(c.Key(line.utterance)).FillWidth().Gap(12).AlignItems(ui.Start).Opacity(0.75).Children(func() {
+						kit.UnknownAvatar(c, t, 24)
+						ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+							ui.Row(c).Gap(8).Children(func() {
+								ui.Text(c, a.tr("Unknown speaker")).FontSize(12).FontWeight(600).TextColor(p.Ink3)
+								mono(ui.Text(c, fmtDuration(line.at))).FontSize(11.5).TextColor(p.Ink3)
+							})
+							ui.Text(c, line.text).FontSize(13).TextColor(p.Ink2)
+						})
+					})
 				}
 			}
 		})
 	})
 }
 
-// stepRow is one step: its state as an icon, its name, and a detail.
+// pipelineStage is one numbered stage of the pipeline card; the active one has
+// an amber number and its details under it.
+func (a *App) pipelineStage(c *ui.Context, t *ui.Theme, n int, label, note string, active bool, details func()) {
+	p := pal(t)
+	ui.Row(c.Key(n)).FillWidth().Gap(10).AlignItems(ui.Start).Children(func() {
+		num := ui.Column(c).Size(22, 22).Radius(kit.RadiusControl).Center().Shrink(0)
+		ink := p.Ink3
+		if active {
+			num.Background(p.Amber)
+			ink = ui.Hex("#121417")
+		} else {
+			num.Background(p.Hover)
+		}
+		num.Children(func() { mono(ui.Text(c, strconv.Itoa(n))).FontSize(11.5).FontWeight(600).TextColor(ink) })
+		ui.Column(c).Grow(1).MinWidth(0).Gap(8).Padding(2, 0, 0, 0).Children(func() {
+			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+				text := ui.Text(c, label).FontSize(13).SingleLine().Grow(1).MinWidth(0)
+				if active {
+					text.TextColor(p.Ink)
+				} else {
+					text.TextColor(p.Ink3)
+				}
+				noteText := ui.Text(c, note).FontSize(11.5).SingleLine().Shrink(0)
+				if active {
+					mono(noteText).TextColor(p.Ink)
+				} else {
+					noteText.TextColor(p.Ink3)
+				}
+			})
+			if details != nil {
+				details()
+			}
+		})
+	})
+}
+
+// stepRow is one step of the transcription: its state as a mark, its name,
+// and a detail.
 func (a *App) stepRow(c *ui.Context, t *ui.Theme, i int, step transcribeStep, job jobs.Job, m library.Media) {
-	ui.Row(c.Key(i)).Gap(t.Space(2.5)).Padding(t.Space(2), 0).AlignItems(ui.Center).Children(func() {
-		mark := ui.Column(c).Size(22, 22).Radius(11).Center().Shrink(0)
+	p := pal(t)
+	ui.Row(c.Key(i)).FillWidth().Gap(8).Padding(3, 0).AlignItems(ui.Center).Children(func() {
+		mark := ui.Column(c).Size(16, 16).Radius(8).Center().Shrink(0)
 		mark.Children(func() {
 			switch step.state {
 			case stepDone:
-				mark.Background(t.Success.Alpha(0.16))
-				ui.Icon(c, iconCheck).FontSize(t.FontSize - 1).TextColor(t.Success)
+				mark.Background(p.GreenSoft)
+				ui.Icon(c, iconCheck).FontSize(11).TextColor(p.Green)
 			case stepActive:
-				mark.Background(t.Accent.Alpha(0.14))
-				ui.Spinner(c).Label(a.tr(step.label)).Size(14, 14)
+				mark.Background(p.AmberSoft)
+				ui.Box(c).Size(6, 6).Radius(3).Background(p.Amber)
 			default:
-				mark.Background(t.Surface)
-				ui.Icon(c, iconClock).FontSize(t.FontSize - 1).TextColor(t.TextMuted)
+				mark.Background(p.Hover)
 			}
 		})
-		label := ui.Text(c, a.tr(step.label)).FontSize(t.FontSize - 1).Bold().Grow(1)
+		label := ui.Text(c, a.tr(step.label)).FontSize(12).Grow(1).SingleLine()
 		if step.state == stepQueued {
-			label.TextColor(t.TextMuted)
+			label.TextColor(p.Ink3)
+		} else {
+			label.TextColor(p.Ink2)
 		}
 		detail := ""
 		switch {
@@ -166,7 +235,7 @@ func (a *App) stepRow(c *ui.Context, t *ui.Theme, i int, step transcribeStep, jo
 			detail = a.trf("%d%%", int(asr.RecognizedShare(job.Progress)*100))
 		}
 		if detail != "" {
-			ui.Text(c, detail).FontSize(t.FontSize - 3).TextColor(t.TextMuted).FontFeatures("tnum")
+			mono(ui.Text(c, detail)).FontSize(11).TextColor(p.Ink3)
 		}
 	})
 }

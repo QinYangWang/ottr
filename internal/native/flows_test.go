@@ -167,17 +167,17 @@ func TestFailedTranscriptionDialog(t *testing.T) {
 	tt := ui.NewTester(a.view, 1280, 800)
 	waitFor(t, tt, "Transcribing your recording")
 	close(release)
-	waitFor(t, tt, "Couldn’t finish the transcript")
+	waitFor(t, tt, "Transcription failed")
 	if !tt.HasText("the model ran out of memory") {
 		t.Errorf("the dialog does not say why: %q", tt.Texts())
 	}
 	waitFor(t, tt, "“standup” stopped at 0:15 of 1:01. The video is safe — only the text is incomplete.")
-	if err := tt.Click("Later"); err != nil {
+	if err := tt.Click("Dismiss"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.failedOpen || tt.HasText("Couldn’t finish the transcript") {
-		t.Fatalf("Later left the dialog open: %q", tt.Texts())
+	if a.failedOpen || tt.HasText("Open settings") {
+		t.Fatalf("Dismiss left the dialog open: %q", tt.Texts())
 	}
 	a.closeDetail()
 	a.reload()
@@ -239,7 +239,7 @@ func TestExportDialog(t *testing.T) {
 	if err := tt.Click("Export the transcript"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, tt, "Export transcript")
+	waitFor(t, tt, "SRT subtitles")
 	waitFor(t, tt, "standup · 2 segments · 1 speakers")
 	if !tt.HasText("Export .srt") {
 		t.Fatalf("SRT is not the default: %q", tt.Texts())
@@ -284,8 +284,9 @@ func TestSummaryTab(t *testing.T) {
 	}
 	tt := ui.NewTester(a.view, 1280, 800)
 	waitFor(t, tt, "The team planned the release.")
-	for _, want := range []string{"deepseek-chat", "Chapters", "0:08", "Export dialog blocker",
-		"Action items", "Fix the dialog", "The one thing blocking us."} {
+	// Section labels are set in capitals (kit.Label).
+	for _, want := range []string{"deepseek-chat", "CHAPTERS", "0:08", "Export dialog blocker",
+		"ACTION ITEMS", "Fix the dialog", "The one thing blocking us."} {
 		if !tt.HasText(want) {
 			t.Errorf("the summary lacks %q: %q", want, tt.Texts())
 		}
@@ -304,8 +305,8 @@ func TestEmptyLibraryOffersRecordAndImport(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 		tt.Frame()
 	}
-	waitFor(t, tt, "No recordings yet")
-	if !tt.HasText("Import a video") {
+	waitFor(t, tt, "Record your first screen")
+	if !tt.HasText("Import media") {
 		t.Errorf("no import in the empty library: %q", tt.Texts())
 	}
 }
