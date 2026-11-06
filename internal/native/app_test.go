@@ -87,12 +87,20 @@ func TestWindowShowsTranscript(t *testing.T) {
 	}
 	search, searchOK := tt.Find("Search the subtitles")
 	language, languageOK := tt.Find("Spoken language")
-	again, againOK := tt.Find("Transcribe again")
-	if !searchOK || !languageOK || !againOK || !(search.X < language.X && language.Y <= again.Y) {
-		t.Errorf("language selector is not between search and re-transcribe: %+v %+v %+v", search, language, again)
+	if !searchOK || !languageOK || search.X >= language.X {
+		t.Errorf("the search button is not left of the language selector: %+v %+v", search, language)
 	}
+	if err := tt.Click("Search the subtitles"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	a.trans.Segments = []translate.TranslationSegment{{SegmentID: a.segs[0].ID, TranslatedText: "translated first line"}}
-	if err := tt.Click("Translate"); err != nil {
+	a.transLang = a.trLang
+	if err := tt.Click("Settings"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Translation"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

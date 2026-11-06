@@ -31,6 +31,12 @@ var (
 	iconSpeaker = loadIcon("volume-2")
 	// sliders-horizontal: settings.
 	iconSliders = loadIcon("sliders-horizontal")
+	// settings and clapperboard: the round buttons under the recorder.
+	iconSettings = loadIcon("settings")
+	iconClapper  = loadIcon("clapperboard")
+	// search and x: the transcript toolbar.
+	iconSearch = loadIcon("search")
+	iconClose  = loadIcon("x")
 	// arrow-left and check: going back, and what is chosen.
 	iconBack  = loadIcon("arrow-left")
 	iconCheck = loadIcon("check")
@@ -51,7 +57,6 @@ var (
 	iconLibrary    = loadIcon("library")
 	iconGrid       = loadIcon("layout-grid")
 	iconList       = loadIcon("list")
-	iconPanelOpen  = loadIcon("panel-left-open")
 	iconPanelClose = loadIcon("panel-left-close")
 	// languages and file-text: the two tabs outside Settings' own pages.
 	iconLanguages = loadIcon("languages")

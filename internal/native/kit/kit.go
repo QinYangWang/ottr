@@ -151,3 +151,72 @@ func Select[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []Sel
 		})
 	})
 }
+
+// RoundButton is a circular icon button on the surface colour, used where a
+// page puts an action beside its primary button.
+func RoundButton(c *ui.Context, t *ui.Theme, icon *ui.SVG, label string, onClick func()) {
+	btn := ui.ButtonBase(c).Label(label).Tooltip(label).Size(40, 40).Radius(20).
+		Background(t.Surface).Center().Cursor(ui.CursorPointer)
+	btn.Children(func() { ui.Icon(c, icon).FontSize(t.FontSize + 4) })
+	if btn.Hovered() {
+		btn.Background(t.SurfaceHover)
+	}
+	if btn.Clicked() {
+		onClick()
+	}
+}
+
+// SelectBox is the white, bordered select Settings uses: the value on the left,
+// a chevron on the right, and no inline label.
+func SelectBox[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []SelectOption[T], accessibility string, width float32, onChoose func(T)) {
+	border := ui.RGBA(0, 0, 0, 0.15)
+	if t.Dark {
+		border = ui.RGBA(255, 255, 255, 0.17)
+	}
+	sel := ui.SelectBase(c, selected)
+	trigger := sel.Trigger.Label(accessibility).Width(width).Height(38).Shrink(0).Padding(0, t.Space(3)).
+		Radius(t.Space(2.5)).Border(1, border).Background(t.Background).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if sel.Trigger.Hovered() {
+		trigger.Background(t.Surface)
+	}
+	sel.Trigger.Children(func() {
+		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			name := ""
+			for _, option := range options {
+				if option.Value == *selected {
+					name = option.Label
+					break
+				}
+			}
+			ui.Text(c, name).FontSize(t.FontSize - 1).SingleLine().Grow(1).MinWidth(0)
+			ui.Text(c, "▾").TextColor(t.TextMuted).Shrink(0)
+		})
+	})
+	sel.Popup(func(panel ui.Element) {
+		panel.Width(width).Padding(t.Space(1)).Radius(t.Space(3)).
+			Background(t.Background).Border(1, border).Clip()
+		panel.Shadow(0, 8, 40, 0, ui.RGBA(0, 0, 0, 0.05)).
+			Shadow(0, 12, 32, -16, ui.RGBA(0, 0, 0, 0.15))
+		ui.Scroll(c).MaxHeight(320).Children(func() {
+			ui.Column(c).Gap(1).Children(func() {
+				for _, option := range options {
+					item := sel.Item(option.Value).Height(36).Padding(0, t.Space(2.5)).
+						Radius(t.Space(1.5)).AlignItems(ui.Center)
+					switch {
+					case item.Highlighted():
+						item.Background(t.SurfaceHover)
+					case option.Value == *selected:
+						item.Background(t.Surface)
+					}
+					item.Children(func() {
+						ui.Text(c, option.Label).FontSize(t.FontSize - 1).SingleLine()
+					})
+					if item.Clicked() {
+						onChoose(option.Value)
+					}
+				}
+			})
+		})
+	})
+}

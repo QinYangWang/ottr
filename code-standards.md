@@ -50,8 +50,12 @@ exists; when in doubt, match the surrounding file.
 
 ## Design
 
-- The Doop canvas is the source of truth for look: change it first, confirm with a
-  screenshot, then implement. Snapshots and tokens live in `docs/design`.
+- **The Doop canvas is the source of truth.** Change the frame there, confirm it with
+  `get_frame_screenshot`, regenerate `docs/design` with
+  `node .agents/skills/doop-canvas/scripts/build.js --shots`, and only then write the Go
+  that mirrors it. A screen change that starts in Go is rejected.
+- Snapshots, tokens and component examples live in `docs/design`; keep the mapping table
+  there accurate when a screen moves between files.
 - Do not invent identities or fake data that looks real: speakers are `Speaker N`,
   sample names are clearly placeholders.
 - Any change to a screen updates `docs/design/pages` and `docs/design/screens`.
@@ -80,4 +84,5 @@ exists; when in doubt, match the surrounding file.
 8. Migrations are new files; existing ones are untouched.
 9. The diff is scoped to the issue: no unrelated refactors, reformatting or dependency
    churn.
-10. Design and code agree — if they do not, the PR explains which one will follow.
+10. Design and code agree, and a screen change carries its Doop frame plus the regenerated
+    `docs/design` screenshot — if they do not agree, the PR says which one will follow.

@@ -122,6 +122,9 @@ the full run takes ~25 s.
 
 ## Adding a page
 
+0. Draw the page on the Doop canvas first and sync it into `docs/design` with
+   `node .agents/skills/doop-canvas/scripts/build.js --shots`; see
+   [AGENTS.md](../AGENTS.md).
 1. Add the state it shows to `internal/native.App`, and a `func (a *App) page(c
    *ui.Context)` that draws it.
 2. Wire it into `App.view`, beside the recording and session pages.

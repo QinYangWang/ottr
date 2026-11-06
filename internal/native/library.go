@@ -74,13 +74,13 @@ func (a *App) audioBar(c *ui.Context, t *ui.Theme) {
 }
 
 // startBar is the button that begins the recording, under the form and always
-// in reach.
+// in reach: the library and Settings sit beside it, as round buttons.
 func (a *App) startBar(c *ui.Context, t *ui.Theme) {
 	if a.recording || len(a.sources) == 0 {
 		return
 	}
 	ui.Column(c).Padding(t.Space(2.5), t.Space(4), t.Space(3), t.Space(4)).Gap(t.Space(2)).Children(func() {
-		ui.Row(c).Gap(t.Space(2)).Children(func() {
+		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
 			start := ui.PrimaryButton(c, "").Label(a.tr("Start recording")).Disabled(a.busy).Grow(1)
 			start.Children(func() {
 				ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
@@ -95,10 +95,9 @@ func (a *App) startBar(c *ui.Context, t *ui.Theme) {
 			if start.Clicked() {
 				a.startRecording()
 			}
-			if ui.Button(c, a.tr("Screenshot")).Tooltip(a.tr("Save a PNG of the source")).
-				Disabled(a.busy || a.Shot == nil).Clicked() {
-				a.takeScreenshot()
-			}
+			width, _ := c.Size()
+			kit.RoundButton(c, t, iconClapper, a.tr("Library"), func() { a.toggleLibrary(width) })
+			kit.RoundButton(c, t, iconSettings, a.tr("Settings"), a.openSettings)
 		})
 	})
 }
@@ -725,31 +724,6 @@ func (a *App) startRecording() {
 			a.recording, a.startedAt = st.Recording, st.StartedAt
 			a.late, a.preview = nil, nil
 			a.err = ""
-		})
-	}()
-}
-
-// takeScreenshot saves one frame of the source chosen; the library lists it
-// with the recordings, and nothing transcribes it.
-func (a *App) takeScreenshot() {
-	if a.Shot == nil || a.busy || a.recording {
-		return
-	}
-	a.busy = true
-	source := a.sourceID
-	go func() {
-		shot, err := a.Shot.Screenshot(context.Background(), source)
-		a.update(func() {
-			a.busy = false
-			if err != nil {
-				a.setError(err)
-				return
-			}
-			a.err = ""
-			a.reload()
-			a.selectMedia(shot.ID)
-			// The library shows it as the chosen record, which is the
-			// confirmation; selecting it opens its details.
 		})
 	}()
 }

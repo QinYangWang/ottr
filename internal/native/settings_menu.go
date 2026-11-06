@@ -6,6 +6,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/settings"
 )
@@ -46,12 +47,61 @@ func (a *App) subtitleSettingsMenu(c *ui.Context, t *ui.Theme, m *library.Media)
 				a.toggleSettingsSubmenu("translation")
 			})
 			a.settingsSubmenu(c, t, item, &a.translationMenuOpen, func() { a.translationSubmenu(c, t) })
+			if m != nil {
+				a.settingsValueItem(c, t, "Translation", a.onOff(a.showTranslation), func() {
+					a.showTranslation = !a.showTranslation
+					a.setTranslationVisible(*m, a.showTranslation)
+				})
+			}
 			item = a.settingsMenuItem(c, t, "Subtitle style", fmt.Sprintf("%.0f px", a.subtitleSize()), func() {
 				a.toggleSettingsSubmenu("style")
 			})
 			a.settingsSubmenu(c, t, item, &a.styleMenuOpen, func() { a.styleSubmenu(c, t) })
+			if m != nil {
+				a.settingsValueItem(c, t, "Transcribe again", "", func() {
+					a.closeSettingsMenus()
+					a.startTranscribe(m.ID)
+				})
+				if a.showTranslation && len(a.trans.Segments) > 0 &&
+					!a.transLoading && !a.jobRunning(jobs.KindTranslate) {
+					a.settingsValueItem(c, t, "Translate again", "", func() {
+						a.closeSettingsMenus()
+						a.startTranslate(m.ID)
+					})
+				}
+			}
 		})
 	})
+}
+
+// onOff is the value a toggle menu row shows.
+func (a *App) onOff(on bool) string {
+	if on {
+		return a.tr("On")
+	}
+	return a.tr("Off")
+}
+
+// settingsValueItem is a menu row that acts or toggles in place: no submenu
+// arrow, and an optional value on the right.
+func (a *App) settingsValueItem(c *ui.Context, t *ui.Theme, label, value string, onClick func()) {
+	item := ui.ButtonBase(c).Label(a.tr(label)).FillWidth().Height(44).Padding(0, t.Space(3)).
+		Radius(t.Space(2)).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if item.Hovered() {
+		item.Background(t.SurfaceHover)
+	}
+	item.Children(func() {
+		ui.Row(c).FillWidth().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, a.tr(label)).FontSize(t.FontSize - 1)
+			if value != "" {
+				ui.Spacer(c)
+				ui.Text(c, value).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
+			}
+		})
+	})
+	if item.Clicked() {
+		onClick()
+	}
 }
 
 func (a *App) settingsMenuItem(c *ui.Context, t *ui.Theme, label, value string, onClick func()) ui.Element {

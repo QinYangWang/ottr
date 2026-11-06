@@ -57,6 +57,7 @@ resources/<plat>/  third-party native libraries shipped with the app
 ## Invariants
 
 - The shipped app has **no web UI**: Go/MyGo only. `docs/design` HTML is reference.
+- No visible change starts in Go: Doop frame first, then `docs/design`, then code.
 - The UI layer never touches SQL, FFmpeg or WASAPI; it calls services.
 - Only SenseVoice, FunASR Nano and Qwen3 ASR are accepted models.
 - Every user-facing string goes through `a.tr` / `a.trf` and has an `i18n.go` entry.
@@ -65,7 +66,18 @@ resources/<plat>/  third-party native libraries shipped with the app
 - Background work updates the view only through `a.update`.
 - Tests that need ffmpeg, a model, a device or the network call `t.Skip`, never fake it.
 
-## Working with the design
+## Doop is the source of truth: change the UI there first
 
-Design changes land in the Doop canvas first, then in Go, then in `docs/design`.
-The workflow is the [doop-canvas](.agents/skills/doop-canvas/SKILL.md) skill.
+Every screen lives in the Doop canvas. **A UI change starts in Doop, never in Go.**
+The order is fixed:
+
+1. Change the frame on the canvas and check it with `get_frame_screenshot`.
+2. Run `node .agents/skills/doop-canvas/scripts/build.js --shots` so
+   `docs/design/pages` and `docs/design/screens` match the frame.
+3. Mirror the frame in `internal/native`; tests and the mapping table follow.
+4. Only then update prose docs.
+
+A PR that changes a screen without the matching Doop frame and regenerated
+screenshot is incomplete, even if the Go code looks right. The full workflow,
+including prototype wiring and the CSV of frame sizes, is the
+[doop-canvas skill](.agents/skills/doop-canvas/SKILL.md).

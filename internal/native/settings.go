@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -136,20 +137,42 @@ func (a *App) appearanceSettings(c *ui.Context, t *ui.Theme) {
 		if a.language == "zh" {
 			language = "中文（中国）"
 		}
-		ui.Select(c, &language, []string{"English (United States)", "中文（中国）"}).Label(a.tr("Language")).Width(200).Changed()
-		locale := "en"
-		if language == "中文（中国）" {
-			locale = "zh"
-		}
-		if locale != a.language && !(locale == "en" && a.language == "") {
-			a.setInterfaceLanguage(locale)
-		}
+		kit.SelectBox(c, t, &language, []kit.SelectOption[string]{
+			{Value: "English (United States)", Label: "English (United States)"},
+			{Value: "中文（中国）", Label: "中文（中国）"},
+		}, a.tr("Language"), 220, func(choice string) {
+			locale := "en"
+			if choice == "中文（中国）" {
+				locale = "zh"
+			}
+			if locale != a.language && !(locale == "en" && a.language == "") {
+				a.setInterfaceLanguage(locale)
+			}
+		})
 	})
-	a.settingRow(c, t, "Display font", "Enter an installed font family, or leave empty for Noto Sans.", func() {
-		ui.TextInput(c, &a.font).Placeholder("Noto Sans").Width(220).Label(a.tr("Display font"))
-		if ui.Button(c, a.tr("Apply")).Clicked() {
-			a.saveFont()
+	a.settingRow(c, t, "Display font", "Use the system font, or pick an installed family.", func() {
+		defaultFont := a.tr("System default")
+		font := a.font
+		if font == "" {
+			font = defaultFont
 		}
+		options := []string{defaultFont, "Inter", "Noto Sans", "Noto Sans SC", "Segoe UI", "Georgia", "JetBrains Mono"}
+		if !slices.Contains(options, font) {
+			options = append(options, font)
+		}
+		choices := make([]kit.SelectOption[string], len(options))
+		for i, name := range options {
+			choices[i] = kit.SelectOption[string]{Value: name, Label: name}
+		}
+		kit.SelectBox(c, t, &font, choices, a.tr("Display font"), 220, func(choice string) {
+			if choice == defaultFont {
+				choice = ""
+			}
+			if choice != a.font {
+				a.font = choice
+				a.saveFont()
+			}
+		})
 	})
 	ui.Text(c, a.tr("Match the desktop, or pick a fixed look.")).
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)

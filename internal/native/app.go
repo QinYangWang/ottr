@@ -31,9 +31,8 @@ type App struct {
 	Sum     *summary.Service
 	Jobs    *jobs.Service
 	MM      *models.Manager
-	Preview *capture.Previewer   // the picture of the source, before recording
-	Shot    *capture.Snapshotter // a PNG of the source, one at a time
-	Prefs   *settings.Service    // what the window itself remembers
+	Preview *capture.Previewer // the picture of the source, before recording
+	Prefs   *settings.Service  // what the window itself remembers
 
 	win         *mygo.Window
 	settingsWin *mygo.Window
@@ -114,6 +113,7 @@ type App struct {
 	transLang             string
 	transLoading          bool
 	showTranslation       bool
+	segSearchOpen         bool
 	subtitleSettingsOpen  bool
 	languageMenuOpen      bool
 	transcriptionMenuOpen bool
@@ -325,14 +325,6 @@ func (a *App) titleBar(c *ui.Context, t *ui.Theme) {
 		Background(t.Surface).DragWindow()
 	row.Children(func() {
 		ui.Text(c, "Ottr").FontSize(t.FontSize + 3).Bold()
-		ui.Spacer(c)
-		width, _ := c.Size()
-		icon := iconPanelOpen
-		if a.libraryVisible(width) {
-			icon = iconPanelClose
-		}
-		a.iconButton(c, t, icon, a.tr("Library"), func() { a.toggleLibrary(width) })
-		a.iconButton(c, t, iconSliders, a.tr("Settings"), a.openSettings)
 	})
 }
 

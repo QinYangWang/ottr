@@ -19,9 +19,10 @@ go test ./...
 2. **Branch** from `main`: `feat/live-translation`, `fix/seek-drift`, `docs/design-sync`.
 3. **Keep the diff scoped.** No drive-by refactors, reformatting or dependency bumps in a
    feature PR.
-4. **Design first.** A visible change starts in the Doop canvas (skill:
-   `.agents/skills/doop-canvas/SKILL.md`), is verified with a screenshot, then mirrored in
-   `internal/native`, then snapshotted into `docs/design`.
+4. **Design first, in Doop.** A visible change starts on the canvas (skill:
+   `.agents/skills/doop-canvas/SKILL.md`), is verified with a frame screenshot, then synced
+   with `build.js --shots`, then mirrored in `internal/native`. Go code is never the place a
+   screen change starts.
 5. **Test what you touched.** New branches, loops and parsers need a test at the level the
    codebase uses: services against a real temp database, the view through `ui.NewTester`,
    layout through the opt-in preview test. External dependencies are skipped, not faked.
@@ -40,7 +41,8 @@ go test ./...
 - [ ] `go vet ./...` and `go test ./...` pass with `CGO_ENABLED=1`
 - [ ] New behavior has a test, or the PR says why none is possible
 - [ ] User-facing strings are in `internal/native/i18n.go` for both English and Chinese
-- [ ] Visible UI changes match `docs/design` (canvas screenshot in the description)
+- [ ] Visible UI changes started in the Doop canvas; `docs/design` is regenerated and the
+      frame screenshot is in the description
 - [ ] Dataset/schema changes come with a new migration file, never an edited one
 - [ ] Documentation touched: `docs/`, `AGENTS.md` or `code-standards.md` as appropriate
 - [ ] No secrets, tokens, API keys or personal paths in the diff

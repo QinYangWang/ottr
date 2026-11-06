@@ -60,3 +60,26 @@ func TestInlineSelectKeyboardAndOutsideDismiss(t *testing.T) {
 		t.Fatal("clicking outside did not collapse the select")
 	}
 }
+
+func TestSelectBoxChoosesAnOption(t *testing.T) {
+	chosen := "A"
+	options := []SelectOption[string]{{Value: "A", Label: "Alpha"}, {Value: "B", Label: "Beta"}}
+	tt := ui.NewTester(func(c *ui.Context) {
+		SelectBox(c, ui.LightTheme(), &chosen, options, "Pick a value", 200, func(string) {})
+	}, 320, 240)
+	tt.Frame()
+	if !tt.HasText("Alpha") {
+		t.Fatalf("the trigger does not show the value: %q", tt.Texts())
+	}
+	if err := tt.Click("Pick a value"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Beta"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if chosen != "B" {
+		t.Fatalf("selected %q", chosen)
+	}
+}

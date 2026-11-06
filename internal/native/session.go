@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"ottr/internal/asr"
 	"ottr/internal/jobs"
 	"ottr/internal/library"
+	"ottr/internal/native/kit"
 	"ottr/internal/translate"
 )
 
@@ -331,19 +333,23 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 		return
 	}
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
-		ui.Row(c).Wrap().Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).Grow(1).MinWidth(120)
-			a.spokenLanguageSelect(c, t, m)
-			if ui.Button(c, a.tr("Transcribe again")).Clicked() {
-				a.startTranscribe(m.ID)
+		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			if a.segSearchOpen {
+				ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).Grow(1).MinWidth(120)
+				kit.IconButton(c, t, iconClose, a.tr("Close search"), func() {
+					a.segSearchOpen, a.segQuery = false, ""
+				})
+			} else {
+				kit.IconButton(c, t, iconSearch, a.tr("Search the subtitles"), func() { a.segSearchOpen = true })
+				a.spokenLanguageSelect(c, t, m)
+				if a.showTranslation {
+					a.translationTargetSelect(c, t)
+				}
 			}
-			if ui.Switch(c, &a.showTranslation).Label(a.tr("Translate")).Tooltip(a.tr("Translate")).Changed() {
-				a.setTranslationVisible(m, a.showTranslation)
+			if a.transLoading || a.jobRunning(jobs.KindTranslate) {
+				ui.Spinner(c).Label(a.tr("Translating"))
 			}
 		})
-		if a.showTranslation {
-			a.translationControls(c, t, m)
-		}
 		rows := a.filteredSegments()
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Gap(t.Space(2)).Children(func() {
@@ -390,26 +396,18 @@ func (a *App) setTranslationVisible(m library.Media, visible bool) {
 	}
 }
 
-func (a *App) translationControls(c *ui.Context, t *ui.Theme, m library.Media) {
-	ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
-		ui.Icon(c, iconLanguages).FontSize(t.FontSize + 2).TextColor(t.TextMuted)
-		name := langName(a.trLang)
-		ui.Select(c, &name, langNames()).Label(a.tr("Translate into")).Width(130).Changed()
-		for _, l := range langs {
-			if l.name == name && l.code != a.trLang {
-				a.trLang = l.code
-				a.trans = translate.Translation{}
-				a.loadTranslation()
-			}
+// translationTargetSelect picks the language translations are shown in; it sits
+// in the transcript toolbar, beside the spoken language.
+func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme) {
+	name := langName(a.trLang)
+	ui.Select(c, &name, langNames()).Label(a.tr("Translate into")).Width(130).Shrink(0).Changed()
+	for _, l := range langs {
+		if l.name == name && l.code != a.trLang {
+			a.trLang = l.code
+			a.trans = translate.Translation{}
+			a.loadTranslation()
 		}
-		if a.transLoading || a.jobRunning(jobs.KindTranslate) {
-			ui.Spinner(c).Label(a.tr("Translating"))
-		} else if len(a.trans.Segments) > 0 {
-			if ui.Button(c, a.tr("Translate again")).Clicked() {
-				a.startTranslate(m.ID)
-			}
-		}
-	})
+	}
 }
 
 // subtitleContent is shared by saved and live transcript rows: speaker, time and
@@ -420,7 +418,7 @@ func (a *App) subtitleContent(c *ui.Context, t *ui.Theme, speaker int, at, text,
 	if name == "" {
 		name = a.trf("Speaker %d", speaker+1)
 	}
-	avatar, ink := speakerTint(t, speaker)
+	avatar, ink := speakerTint(t, speakerNumber(name, speaker))
 	ui.Row(c).FillWidth().Gap(t.Space(2.5)).AlignItems(ui.Start).Children(func() {
 		ui.Column(c).Size(32, 32).Shrink(0).Radius(16).Center().Background(avatar).Children(func() {
 			ui.Text(c, speakerInitials(name, speaker)).FontSize(t.FontSize - 3).Bold().TextColor(ink)
@@ -456,17 +454,32 @@ func (a *App) subtitleContent(c *ui.Context, t *ui.Theme, speaker int, at, text,
 }
 
 // speakerTint is the colour of a speaker's avatar: decoration like a chat app's,
-// so two voices are told apart at a glance, not an identity.
-func speakerTint(t *ui.Theme, speaker int) (ui.Color, ui.Color) {
+// so two voices are told apart at a glance, not an identity. The number starts at
+// one, so Speaker 1 takes the first colour.
+func speakerTint(t *ui.Theme, number int) (ui.Color, ui.Color) {
 	colors := []ui.Color{t.Accent, t.Success, t.Warning, t.Danger}
-	c := colors[speaker%len(colors)]
+	c := colors[max(number-1, 0)%len(colors)]
 	return c.Alpha(0.16), c
+}
+
+// speakerNumber is the number a speaker is shown with: the digits of a generated
+// name ("Speaker 3", "讲话者 3"), else one past the zero-based id.
+func speakerNumber(name string, speaker int) int {
+	for i := len(name) - 1; i >= 0; i-- {
+		if name[i] < '0' || name[i] > '9' {
+			if n, err := strconv.Atoi(strings.TrimSpace(name[i+1:])); err == nil && n > 0 {
+				return n
+			}
+			break
+		}
+	}
+	return speaker + 1
 }
 
 func speakerInitials(name string, speaker int) string {
 	parts := strings.Fields(name)
 	if len(parts) == 0 || strings.HasPrefix(name, "Speaker ") {
-		return fmt.Sprintf("S%d", speaker+1)
+		return fmt.Sprintf("S%d", speakerNumber(name, speaker))
 	}
 	var initials strings.Builder
 	for _, part := range parts[:min(2, len(parts))] {

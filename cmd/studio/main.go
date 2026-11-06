@@ -12,12 +12,12 @@ import (
 	"ottr/internal/jobs"
 	"ottr/internal/library"
 	"ottr/internal/models"
+	"ottr/internal/native"
 	"ottr/internal/settings"
 	"ottr/internal/storage"
 	"ottr/internal/summary"
 	"ottr/internal/tools"
 	"ottr/internal/translate"
-	"ottr/internal/native"
 )
 
 func main() {
@@ -53,7 +53,6 @@ func main() {
 	app := &native.App{
 		Lib: lib, Rec: rec, ASR: asrSvc, Trans: trSvc, Sum: sumSvc, Jobs: js, MM: mm,
 		Preview: capture.NewPreviewer(backend), // the picture of a source, before recording
-		Shot:    &capture.Snapshotter{Backend: backend, Lib: lib},
 		Prefs:   prefs,
 	}
 
@@ -76,7 +75,6 @@ func main() {
 		mm.Open(db)
 		prefs.Open(db)
 		rec.Dir = filepath.Join(dir, "recordings")
-		app.Shot.Dir = filepath.Join(dir, "recordings")
 
 		// The encoder is FFmpeg until internal/media replaces it; the path
 		// setting outlives the FFmpeg screens it came from.
