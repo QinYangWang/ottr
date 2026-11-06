@@ -72,6 +72,22 @@ func (a *App) settingsView(c *ui.Context) {
 				for i, item := range settingsSections {
 					a.settingsNav(c, t, i, a.tr(item.label), item.icon)
 				}
+				ui.Spacer(c)
+				back := ui.ButtonBase(c).Label(a.tr("Back to recorder")).FillWidth().
+					Padding(t.Space(2), t.Space(2.5)).Radius(t.Space(2)).TextColor(t.TextMuted).
+					Cursor(ui.CursorPointer)
+				back.Children(func() {
+					ui.Row(c).Grow(1).Gap(t.Space(2.5)).AlignItems(ui.Center).Children(func() {
+						ui.Icon(c, iconBack).FontSize(t.FontSize + 2)
+						ui.Text(c, a.tr("Back to recorder")).FontSize(t.FontSize - 1)
+					})
+				})
+				if back.Hovered() {
+					back.Background(t.SurfaceHover).TextColor(t.Text)
+				}
+				if back.Clicked() {
+					a.closeSettings()
+				}
 			})
 			ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
 				ui.Row(c).Padding(t.Space(5), t.Space(5), t.Space(2), t.Space(5)).Children(func() {
@@ -84,6 +100,20 @@ func (a *App) settingsView(c *ui.Context) {
 	})
 	if a.err != "" {
 		a.banner(c, t)
+	}
+	if c.Shortcut(0, ui.KeyEscape) {
+		a.closeSettings()
+	}
+}
+
+// closeSettings closes the Settings window and brings the recorder forward.
+func (a *App) closeSettings() {
+	if a.settingsWin != nil && !a.settingsWin.IsDestroyed() {
+		a.settingsWin.Close()
+	}
+	a.settingsWin = nil
+	if a.win != nil {
+		a.win.Focus()
 	}
 }
 
