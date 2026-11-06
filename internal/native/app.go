@@ -158,6 +158,28 @@ type App struct {
 
 	confirmDel bool
 	delID      int64
+	keepText   bool // keep the transcript as a .txt beside where the video was
+
+	// The export dialog and what it is set to.
+	exportOpen        bool
+	exportFormat      string
+	exportSpeakers    bool
+	exportTimestamps  bool
+	exportTranslation bool
+
+	// failedJob is the transcription that just failed on the media shown, and
+	// failedOpen the dialog that says so.
+	failedJob  jobs.Job
+	failedOpen bool
+
+	// trErr is why the transcription that follows a recording did not start.
+	trErr string
+	// speech times recognition, for the estimate of the time left.
+	speech speechClock
+	// details is what the card under the recorder says.
+	details recorderDetails
+	// lastJobs is the latest job of each media whose transcript failed.
+	lastJobs map[int64]jobs.Job
 
 	// orphans are files in the recordings folder that no record holds.
 	orphans        []string
@@ -609,6 +631,12 @@ func (a *App) afterJob(job jobs.Job) {
 		a.sumLoaded = false
 		a.loadSummary()
 	}
+	if job.Kind == jobs.KindTranscribe && job.State == jobs.StateFailed && job.MediaID == a.sel {
+		// A failed transcript gets its own dialog: what stopped, and what
+		// to do about it.
+		a.failedJob, a.failedOpen = job, true
+		return
+	}
 	if job.State == jobs.StateFailed && job.Error != "" {
 		a.setError(fmt.Errorf("%s: %s", job.Kind, job.Error))
 	}
@@ -662,6 +690,7 @@ func (a *App) reload() {
 		return
 	}
 	a.media = items
+	a.loadLastJobs()
 	a.ensureThumbnails()
 	if a.Rec != nil && a.Rec.Dir != "" {
 		if orphans, err := a.Lib.Orphans(a.Rec.Dir); err == nil {
@@ -716,6 +745,7 @@ func (a *App) forget() {
 	a.languageMenuOpen, a.transcriptionMenuOpen = false, false
 	a.translationMenuOpen, a.styleMenuOpen = false, false
 	a.lang = a.defaultLanguage
+	a.exportOpen, a.failedOpen, a.trErr = false, false, ""
 }
 
 // pending reports whether something the window shows is still being worked
@@ -773,26 +803,9 @@ func (a *App) dialogs(c *ui.Context, t *ui.Theme) {
 			})
 		})
 	}
-	if a.confirmDel {
-		ui.Modal(c, &a.confirmDel, func() {
-			name := "this file"
-			if m, ok := a.byID(a.delID); ok {
-				name = fmt.Sprintf("%q", m.Name)
-			}
-			ui.Text(c, a.tr("Delete ")+name+a.tr("?")).Bold()
-			keep := true
-			ui.Checkbox(c, &keep, a.tr("Keep the file on disk")).Changed()
-			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				if ui.Button(c, a.tr("Cancel")).Clicked() {
-					a.confirmDel = false
-				}
-				if ui.PrimaryButton(c, a.tr("Delete")).Clicked() {
-					a.confirmDel = false
-					a.removeMedia(a.delID, !keep)
-				}
-			})
-		})
-	}
+	a.deleteDialog(c, t)
+	a.exportDialog(c, t)
+	a.failedDialog(c, t)
 }
 
 func (a *App) banner(c *ui.Context, t *ui.Theme) {

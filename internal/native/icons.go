@@ -69,4 +69,10 @@ var (
 	// server and users: Settings' provider and speaker sections.
 	iconProvider = loadIcon("server")
 	iconSpeakers = loadIcon("users")
+	// clock and circle-alert: a step still queued, and work that failed.
+	iconClock = loadIcon("clock")
+	iconAlert = loadIcon("circle-alert")
+	// copy and refresh-cw: copying a summary, and generating it again.
+	iconCopy    = loadIcon("copy")
+	iconRefresh = loadIcon("refresh-cw")
 )

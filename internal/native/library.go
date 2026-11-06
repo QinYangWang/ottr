@@ -3,7 +3,6 @@ package native
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"image"
 	"strings"
 	"time"
@@ -34,6 +33,7 @@ func (a *App) sidebar(c *ui.Context, t *ui.Theme, besideLibrary bool) {
 		a.audioBar(c, t)
 		a.startBar(c, t)
 		ui.Spacer(c)
+		a.detailsCard(c, t)
 	})
 }
 
@@ -383,7 +383,13 @@ func (a *App) libraryGrid(c *ui.Context, t *ui.Theme) {
 				})
 			} else {
 				ui.Column(c).Gap(t.Space(1)).Children(func() {
+					group, now := "", time.Now()
 					for _, m := range a.media {
+						if g := a.dayGroup(now, m.CreatedAt); g != group {
+							group = g
+							ui.Text(c.Key("group-"+g), a.groupLabel(g)).FontSize(t.FontSize-3).Bold().
+								TextColor(t.TextMuted).Padding(t.Space(2), t.Space(2), t.Space(1), t.Space(2))
+						}
 						a.mediaRow(c, t, m)
 					}
 				})
@@ -396,24 +402,31 @@ func (a *App) libraryGrid(c *ui.Context, t *ui.Theme) {
 }
 
 // emptyLibrary says the library is empty, or that nothing matched, and offers
-// the one thing to do about it.
+// the two ways to fill it: record, or import.
 func (a *App) emptyLibrary(c *ui.Context, t *ui.Theme) {
 	searching := strings.TrimSpace(a.query) != ""
-	ui.Column(c).FillWidth().Padding(t.Space(12), 0).Center().Gap(t.Space(2)).Children(func() {
+	ui.Column(c).FillWidth().Padding(t.Space(12), t.Space(4)).Center().Gap(t.Space(2)).Children(func() {
 		ui.Icon(c, iconLibrary).FontSize(t.FontSize + 18).TextColor(t.TextMuted).Opacity(0.6)
-		title := a.tr("No recordings yet")
-		detail := a.tr("Record the screen, or import a media file to get started.")
 		if searching {
-			title = a.trf("No results for “%s”", strings.TrimSpace(a.query))
-			detail = a.tr("Try a different search.")
+			ui.Text(c, a.trf("No results for “%s”", strings.TrimSpace(a.query))).FontSize(t.FontSize + 3).Bold()
+			ui.Text(c, a.tr("Try a different search.")).FontSize(t.FontSize - 1).TextColor(t.TextMuted).TextAlign(ui.Center)
+			return
 		}
-		ui.Text(c, title).FontSize(t.FontSize + 3).Bold()
-		ui.Text(c, detail).FontSize(t.FontSize - 1).TextColor(t.TextMuted).TextAlign(ui.Center)
-		if !searching {
-			if ui.Button(c, a.tr("Import media")).Clicked() {
+		ui.Text(c, a.tr("No recordings yet")).FontSize(t.FontSize + 3).Bold()
+		ui.Text(c, a.tr("Pick a screen or window on the left and press Start recording. Ottr saves the video and writes the transcript on this computer.")).
+			FontSize(t.FontSize - 1).TextColor(t.TextMuted).TextAlign(ui.Center).MaxWidth(360)
+		ui.Row(c).Gap(t.Space(2)).Padding(t.Space(2), 0, 0, 0).Children(func() {
+			start := ui.PrimaryButton(c, a.tr("Start recording")).Disabled(a.busy || a.sourceID == "")
+			if a.sourceID == "" {
+				start.Tooltip(a.tr("Nothing can be recorded on this system yet."))
+			}
+			if start.Clicked() {
+				a.startRecording()
+			}
+			if ui.Button(c, a.tr("Import a video")).Disabled(a.recording).Clicked() {
 				a.importFiles()
 			}
-		}
+		})
 	})
 }
 
@@ -432,7 +445,12 @@ func (a *App) mediaRow(c *ui.Context, t *ui.Theme, m library.Media) {
 			ui.Column(c).Width(96).Shrink(0).Children(func() { a.mediaThumb(c, t, m, false) })
 			ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(1)).Children(func() {
 				ui.Text(c, m.Name).FontSize(t.FontSize).Bold().MaxLines(2)
-				ui.Text(c, a.cardSubtitle(m)).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine()
+				ui.Row(c).Gap(t.Space(1)).MinWidth(0).Children(func() {
+					ui.Text(c, a.cardSubtitle(m)).FontSize(t.FontSize - 2).TextColor(t.TextMuted).SingleLine().Shrink(0)
+					if m.TranscriptStatus == "error" {
+						ui.Text(c, "· "+a.failedNote(m)).FontSize(t.FontSize - 2).TextColor(t.Danger).SingleLine().MinWidth(0)
+					}
+				})
 			})
 		})
 	})
@@ -488,7 +506,7 @@ func (a *App) mediaMenu(card ui.Element, m library.Media) {
 			mygo.Shell.ShowItemInFolder(m.Path)
 		}
 		if mn.Item(a.tr("Delete…")).Chosen() {
-			a.delID, a.confirmDel = m.ID, true
+			a.askDelete(m.ID)
 		}
 	})
 }
@@ -520,6 +538,9 @@ func (a *App) mediaThumb(c *ui.Context, t *ui.Theme, m library.Media, chosen boo
 		}
 		ui.Row(c).Attach(ui.AnchorBottomLeft, ui.AnchorBottomLeft).FillWidth().Gap(t.Space(1)).
 			AlignItems(ui.Center).Padding(t.Space(1), t.Space(1.5)).Background(ui.RGBA(10, 13, 20, 0.45)).Children(func() {
+			if m.TranscriptStatus == "error" {
+				failedChip(c, t, a.tr("Failed"))
+			}
 			for _, chip := range mediaChips(m) {
 				chipLabel(c, t, chip)
 			}
@@ -540,11 +561,8 @@ func mediaChips(m library.Media) []string {
 	if m.Source == "screenshot" {
 		chips = append(chips, "PNG")
 	}
-	switch m.TranscriptStatus {
-	case "done":
+	if m.TranscriptStatus == "done" {
 		chips = append(chips, "TXT")
-	case "error":
-		chips = append(chips, "TXT!")
 	}
 	if m.SummaryStatus == "done" {
 		chips = append(chips, "AI")
@@ -562,14 +580,24 @@ func chipLabel(c *ui.Context, t *ui.Theme, text string) {
 		})
 }
 
+// failedChip is the red badge of a media whose transcription failed.
+func failedChip(c *ui.Context, t *ui.Theme, text string) {
+	ui.Row(c).Padding(t.Space(0.5), t.Space(1.5)).Radius(t.Space(1.5)).Background(t.Danger).
+		Children(func() {
+			ui.Text(c, text).FontSize(t.FontSize - 5).Bold().TextColor(ui.RGBA(255, 255, 255, 1))
+		})
+}
+
 // cardSubtitle is the line under a card's name: what it is and when it was
 // made.
 func (a *App) cardSubtitle(m library.Media) string {
-	source := a.tr(m.Source)
-	if m.Source == "screenshot" {
-		source = a.tr("Screenshot")
+	switch m.Source {
+	case "screenshot":
+		return a.trf("Screenshot · %s", a.dateTime(m.CreatedAt))
+	case "import":
+		return a.trf("Imported · %s", a.dateTime(m.CreatedAt))
 	}
-	return fmt.Sprintf("%s · %s", source, a.dateTime(m.CreatedAt))
+	return a.trf("Recording · %s", a.dateTime(m.CreatedAt))
 }
 
 // orphanNotice says that recordings on disk are not in the library, and offers
@@ -751,6 +779,9 @@ func (a *App) stopRecording(discard bool) {
 			a.reload()
 			a.selectMedia(m.ID)
 			a.tab = 0
+			a.autoTranscribe(m)
+			a.reload()
+			a.loadDetails() // the recording took room on the disk
 			a.showPreview() // back to showing the source, not the recording
 		})
 	}()

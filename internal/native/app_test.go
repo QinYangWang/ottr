@@ -1,6 +1,7 @@
 package native
 
 import (
+	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,14 @@ import (
 // newTestApp builds an app over a real database, with one transcribed media
 // file in it.
 func newTestApp(t *testing.T) (*App, int64) {
+	t.Helper()
+	a, id, _ := newTestAppDB(t)
+	return a, id
+}
+
+// newTestAppDB is newTestApp with the database, for tests that set up a state
+// no service call reaches.
+func newTestAppDB(t *testing.T) (*App, int64, *sql.DB) {
 	t.Helper()
 	db, err := storage.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -64,7 +73,7 @@ func newTestApp(t *testing.T) (*App, int64) {
 		t.Fatal(err)
 	}
 	a.reload()
-	return a, id
+	return a, id, db
 }
 
 // The library lists what it recorded as cards, and opening one shows its

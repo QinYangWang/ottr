@@ -24,6 +24,10 @@ licensed under the ISC License in [LICENSE](LICENSE).
 | `file-text.svg` | file-text | summary settings |
 | `library.svg` | library | opening Library |
 | `sun.svg` / `moon.svg` | sun / moon | switching light and dark themes |
+| `clock.svg` | clock | a transcription step still queued |
+| `circle-alert.svg` | circle-alert | a transcription that failed |
+| `copy.svg` | copy | copying a summary |
+| `refresh-cw.svg` | refresh-cw | generating a summary again |
 
 `icons.go` embeds them and parses each once with `ui.MustParseSVG`; `ui.Icon`
 paints the shapes in the color of the text around them, so the SVGs' own
