@@ -33,7 +33,11 @@ var (
 	iconSliders = loadIcon("sliders-horizontal")
 	// settings and clapperboard: the round buttons under the recorder.
 	iconSettings = loadIcon("settings")
-	iconClapper  = loadIcon("clapperboard")
+	// Brand marks of the provider cards.
+	iconDeepSeek   = loadIcon("deepseek")
+	iconOpenRouter = loadIcon("openrouter")
+	iconOllama     = loadIcon("ollama")
+	iconClapper    = loadIcon("clapperboard")
 	// search and x: the transcript toolbar.
 	iconSearch = loadIcon("search")
 	iconClose  = loadIcon("x")

@@ -229,7 +229,6 @@ var zhCN = map[string]string{
 	"Sending the subtitles to the provider.": "正在将字幕发送给翻译服务。",
 	"Translate into":                         "翻译为",
 	"Translate again":                        "重新翻译",
-	"Close search":                           "关闭搜索",
 	"Not translated yet":                     "尚未翻译",
 	"Translate the subtitles into %s with the online provider.": "使用在线服务将字幕翻译为%s。",
 	"Summarize this file once it has been transcribed.":         "此文件完成转写后即可生成摘要。",

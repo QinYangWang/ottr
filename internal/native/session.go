@@ -334,16 +334,16 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 	}
 	ui.Column(c).Fill().Gap(t.Space(2)).Children(func() {
 		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(func() {
+			kit.IconButton(c, t, iconSearch, a.tr("Search the subtitles"), func() { a.segSearchOpen = true })
+			a.spokenLanguageSelect(c, t, m)
+			a.translationTargetSelect(c, t, m)
 			if a.segSearchOpen {
-				ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).Grow(1).MinWidth(120)
-				kit.IconButton(c, t, iconClose, a.tr("Close search"), func() {
+				// The field floats over the selects, as the design shows it; it
+				// closes on Escape or when the media changes.
+				field := ui.SearchField(c, &a.segQuery).Label(a.tr("Search the subtitles")).
+					Absolute().Left(t.Space(10)).Right(0).Top(0).Height(32).Background(t.Background).Radius(t.Space(2)).AutoFocus()
+				if field.Shortcut(0, ui.KeyEscape) {
 					a.segSearchOpen, a.segQuery = false, ""
-				})
-			} else {
-				kit.IconButton(c, t, iconSearch, a.tr("Search the subtitles"), func() { a.segSearchOpen = true })
-				a.spokenLanguageSelect(c, t, m)
-				if a.showTranslation {
-					a.translationTargetSelect(c, t)
 				}
 			}
 			if a.transLoading || a.jobRunning(jobs.KindTranslate) {
@@ -398,13 +398,18 @@ func (a *App) setTranslationVisible(m library.Media, visible bool) {
 
 // translationTargetSelect picks the language translations are shown in; it sits
 // in the transcript toolbar, beside the spoken language.
-func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme) {
+func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme, m library.Media) {
 	name := langName(a.trLang)
 	ui.Select(c, &name, langNames()).Label(a.tr("Translate into")).Width(130).Shrink(0).Changed()
 	for _, l := range langs {
 		if l.name == name && l.code != a.trLang {
 			a.trLang = l.code
 			a.trans = translate.Translation{}
+			if !a.showTranslation {
+				// Picking a language is an explicit request to see it.
+				a.setTranslationVisible(m, true)
+				return
+			}
 			a.loadTranslation()
 		}
 	}

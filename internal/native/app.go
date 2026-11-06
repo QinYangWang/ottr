@@ -150,6 +150,7 @@ type App struct {
 	// The speaker library: voices heard across recordings, and the row being
 	// renamed.
 	speakerLib      []asr.Speaker
+	speakerQuery    string
 	loadedSpeakers  bool
 	speakerEditID   int
 	speakerEditText string
@@ -670,7 +671,7 @@ func (a *App) forget() {
 	a.transcript, a.segs = asr.Transcript{}, nil
 	a.trLoaded, a.sumLoaded = false, false
 	a.trans, a.sum = translate.Translation{}, summary.Summary{}
-	a.transLang, a.segQuery = "", ""
+	a.transLang, a.segQuery, a.segSearchOpen = "", "", false
 	a.showTranslation = false
 	a.subtitleSettingsOpen = false
 	a.languageMenuOpen, a.transcriptionMenuOpen = false, false

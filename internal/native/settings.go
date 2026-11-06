@@ -408,10 +408,13 @@ type providerSettings struct {
 }
 
 // providerPresets fill the base URL in with one click; anything else is Custom.
-var providerPresets = []struct{ name, host, baseURL string }{
-	{"DeepSeek", "api.deepseek.com", "https://api.deepseek.com/v1"},
-	{"OpenRouter", "openrouter.ai", "https://openrouter.ai/api/v1"},
-	{"Ollama", "localhost:11434", "http://localhost:11434/v1"},
+var providerPresets = []struct {
+	name, host, baseURL string
+	icon                *ui.SVG
+}{
+	{"DeepSeek", "api.deepseek.com", "https://api.deepseek.com/v1", iconDeepSeek},
+	{"OpenRouter", "openrouter.ai", "https://openrouter.ai/api/v1", iconOpenRouter},
+	{"Ollama", "localhost:11434", "http://localhost:11434/v1", iconOllama},
 }
 
 // providerSettings draws the credentials and prompt templates that translation
@@ -431,9 +434,9 @@ func (a *App) providerSettings(c *ui.Context, t *ui.Theme) {
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)
 	ui.Row(c).Gap(t.Space(2)).Children(func() {
 		for _, preset := range providerPresets {
-			a.providerCard(c, t, preset.name, preset.host, preset.baseURL)
+			a.providerCard(c, t, preset.name, preset.host, preset.baseURL, preset.icon)
 		}
-		a.providerCard(c, t, a.tr("Custom"), a.tr("OpenAI-compatible"), "")
+		a.providerCard(c, t, a.tr("Custom"), a.tr("OpenAI-compatible"), "", iconProvider)
 		ui.Spacer(c)
 	})
 	a.settingRow(c, t, "API base URL", "Any OpenAI-compatible chat endpoint.", func() {
@@ -457,7 +460,7 @@ func (a *App) providerSettings(c *ui.Context, t *ui.Theme) {
 }
 
 // providerCard is one endpoint to pick: its name and the host it talks to.
-func (a *App) providerCard(c *ui.Context, t *ui.Theme, label, host, baseURL string) {
+func (a *App) providerCard(c *ui.Context, t *ui.Theme, label, host, baseURL string, icon *ui.SVG) {
 	chosen := a.providerMatches(baseURL)
 	card := ui.ButtonBase(c).Label(label).Width(158).Shrink(0).Height(56).
 		Padding(t.Space(1.5), t.Space(2)).Radius(t.Space(1)).BorderWidth(1).
@@ -470,6 +473,9 @@ func (a *App) providerCard(c *ui.Context, t *ui.Theme, label, host, baseURL stri
 	card.Children(func() {
 		ui.Column(c).Fill().MinWidth(0).Gap(1).Children(func() {
 			ui.Row(c).Gap(t.Space(1)).AlignItems(ui.Center).Children(func() {
+				if icon != nil {
+					ui.Icon(c, icon).FontSize(t.FontSize + 2).TextColor(t.Text).Shrink(0)
+				}
 				ui.Text(c, label).FontSize(t.FontSize - 2).Bold().SingleLine()
 				ui.Spacer(c)
 				if chosen {
@@ -582,8 +588,17 @@ func (a *App) speakersSettings(c *ui.Context, t *ui.Theme) {
 			FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 		return
 	}
+	ui.SearchField(c, &a.speakerQuery).Label(a.tr("Search speakers")).FillWidth()
+	shown := 0
 	for _, sp := range a.speakerLib {
+		if !strings.Contains(strings.ToLower(sp.Name), strings.ToLower(strings.TrimSpace(a.speakerQuery))) {
+			continue
+		}
+		shown++
 		a.speakerLibraryRow(c, t, sp)
+	}
+	if shown == 0 {
+		ui.Text(c, a.tr("Nothing matches that search.")).FontSize(t.FontSize - 2).TextColor(t.TextMuted)
 	}
 	ui.Text(c, a.tr("Voices are matched locally with an embedding model; no audio leaves this computer.")).
 		FontSize(t.FontSize - 3).TextColor(t.TextMuted)

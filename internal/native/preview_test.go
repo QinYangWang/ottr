@@ -187,6 +187,10 @@ func TestPreview(t *testing.T) {
 	a.libraryGridView = false
 	a.openDetail(id)
 	shot("01-session")
+	a.segSearchOpen = true
+	a.segQuery = "release"
+	shot("21-transcript-search")
+	a.segSearchOpen, a.segQuery = false, ""
 	a.subtitleSettingsOpen = true
 	shot("18-settings-main")
 	a.transcriptionMenuOpen = true
