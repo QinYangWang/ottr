@@ -1,8 +1,10 @@
 # Models
 
-Model management is deliberately minimal: Ottr **discovers and validates** model
-files the user placed on disk. It does not download them, so the installer stays
-small and the user controls model provenance and licensing.
+Ottr **discovers and validates** the model files on disk, and can fetch the
+supported ones itself: Settings ▸ Transcription lists every model Ottr accepts,
+with the archive each download comes from pinned by URL and SHA-256. A model
+placed on disk by hand is found the same way, so provenance stays under the
+user's control.
 
 ## Directory layout
 
@@ -190,13 +192,38 @@ found".
 for every subdirectory, marking `Installed` only when validation passes and
 carrying the validation error otherwise.
 
+`Available` is what the settings page shows: every supported family in catalog
+order, each copy on disk as its own row (the chosen one first), and the size to
+download for a family that has none. A folder that is not one of the three
+supported kinds is not offered.
+
+## Downloading a model
+
+The three supported models are listed whether or not they are on disk. A
+missing one shows a `Download` button; its archive arrives in the background
+while the row shows a progress bar and the bytes fetched, and the model is used
+as soon as it is the only one installed.
+
+`Manager.Download` / `Manager.Install` (`internal/models/download.go`) stream
+the archive to a temporary file in the models directory, hash it, and compare
+the digest with the one in `supported` before unpacking anything. A mismatch,
+a short read or an archive entry that would escape the folder aborts the
+install and leaves nothing behind. The archive's own top folder is dropped, so
+the files land where `inspectASRDir` looks for them, and the result is validated
+again before it is renamed into `<modelsDir>/<model>`.
+
+Only the pinned archives install: another release is a change to the table, not
+a runtime choice. The same table is why a download can be trusted without
+asking the user to check a checksum.
+
 ## Choosing a model
 
-The user chooses in the **Settings** window, Transcription section (the sliders
-icon at the bottom of the sidebar), which lists every directory with its size or the reason it
-cannot be used, says which model transcription uses now, and says which
-native sherpa-onnx version loaded (or why none did). `Open folder` opens the models directory and `Re-check` looks
-again after a model is installed by hand.
+The user chooses in **Settings ▸ Transcription**, in the main window's sidebar.
+The list shows every supported model with its languages and size, `In use`,
+`Use this model`, or `Download`; a running download shows its progress in the
+row and `Try again` if it failed. A first launch with no model opens that
+page on its own, with a callout saying what to download. `Open folder` opens the models directory and
+`Re-check` looks again after a model is placed there by hand.
 
 `Manager.Select(dir)` writes `settings.asr_model_dir` and `Open(db)` reads it
 back, so the choice survives a restart. `FindASRModel` then returns that model

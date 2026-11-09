@@ -347,17 +347,6 @@ type Record struct {
 	Ext        string // written with sources "recording"; defaults to path's
 }
 
-// AddScreenshot adds an image to the library. A screenshot is its own source,
-// has no duration and is never transcribed.
-func (s *Service) AddScreenshot(r Record) (Media, error) {
-	if r.Size == 0 {
-		if st, err := os.Stat(r.Path); err == nil {
-			r.Size = st.Size()
-		}
-	}
-	return s.insert(r, "screenshot")
-}
-
 // AddNativeRecording adds a finished recording from the metadata its writer
 // reported, instead of probing the file.
 func (s *Service) AddNativeRecording(r Record) (Media, error) {

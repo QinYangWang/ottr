@@ -35,8 +35,9 @@ type App struct {
 	Preview *capture.Previewer // the picture of the source, before recording
 	Prefs   *settings.Service  // what the window itself remembers
 
-	win         *mygo.Window
-	settingsWin *mygo.Window
+	win          *mygo.Window
+	settingsOpen bool
+	settingsTab  int
 
 	theme    string // system | light | dark
 	language string // en | zh
@@ -149,12 +150,17 @@ type App struct {
 	// The main window shows the recorder, its library, or one media's details.
 	page string
 
-	// The Settings window and what it shows.
-	settingsTab  int
-	modelList    []models.Info
+	// The Settings section and what it loaded.
+	modelList    []models.Offer
 	modelInUse   string
 	modelLoaded  bool
 	modelLoading bool
+	// The download under way, if any: the model, how much of it has arrived,
+	// and what the last attempt failed with.
+	modelDLID       string
+	modelDLProgress float64
+	modelDLErrID    string
+	modelDLErr      string
 
 	// Provider settings, read when the Settings window opens them. The page
 	// edits what translation and summaries share; the transcript menu still
@@ -250,6 +256,7 @@ func (a *App) Begin(win *mygo.Window) {
 	a.lang = a.defaultLanguage
 	a.reload()
 	a.loadAudioDevices()
+	a.guideToModels()
 	if srcs, err := a.Rec.Sources(); err != nil {
 		a.setError(err)
 	} else {
@@ -334,6 +341,14 @@ func (a *App) frame(c *ui.Context, t *ui.Theme) {
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			m, detail := a.current()
 			switch {
+			case a.settingsOpen && layout == "wide":
+				a.navSidebar(c, t)
+				a.settingsPage(c, t)
+			case a.settingsOpen:
+				if layout != "narrow" {
+					a.rail(c, t)
+				}
+				a.settingsPane(c, t)
 			case detail && !a.recording:
 				if layout != "narrow" {
 					a.rail(c, t)
@@ -359,6 +374,9 @@ func (a *App) frame(c *ui.Context, t *ui.Theme) {
 			}
 		})
 	})
+	if a.settingsOpen && c.Shortcut(0, ui.KeyEscape) {
+		a.closeSettings()
+	}
 	if a.err != "" {
 		a.banner(c, t)
 	}
@@ -395,13 +413,10 @@ func (a *App) windowTitleBar(c *ui.Context, t *ui.Theme, title string, tools fun
 	})
 }
 
-// wordmark is the lowercase name with its amber dot.
+// wordmark is the lowercase name in the title bar.
 func wordmark(c *ui.Context, t *ui.Theme) {
-	p := pal(t)
-	ui.Row(c).Gap(7).AlignItems(ui.Center).Shrink(0).Children(func() {
-		ui.Box(c).Size(9, 9).Radius(3).Background(p.Amber)
-		ui.Text(c, "ottr").Label("Ottr").FontSize(15).FontWeight(600).LetterSpacing(-0.3).TextColor(p.Ink)
-	})
+	ui.Text(c, "ottr").Label("Ottr").FontSize(15).FontWeight(600).LetterSpacing(-0.3).
+		TextColor(pal(t).Ink).Shrink(0)
 }
 
 // backButton is the way out of an inner page: an arrow alone when label is
@@ -463,11 +478,6 @@ func (a *App) update(fn func()) {
 	if a.win != nil {
 		a.win.Update(func() {
 			fn()
-			for _, win := range []*mygo.Window{a.settingsWin} {
-				if win != nil && !win.IsDestroyed() {
-					win.Invalidate()
-				}
-			}
 		})
 		return
 	}

@@ -36,24 +36,17 @@ type StreamConfig struct {
 	Cursor   bool // draw the pointer into the frame
 }
 
-// SnapshotConfig asks for one frame of one source.
-type SnapshotConfig struct {
-	SourceID string
-	Cursor   bool
-}
-
 // Stream is a live capture. Next returns io.EOF on a normal end.
 type Stream interface {
 	Next(context.Context) (Frame, error)
 	Close() error // idempotent; no callback runs once it returns
 }
 
-// Backend is the platform's capture API: what can be captured, live streams,
-// and one-shot frames. One instance serves every product of the process.
+// Backend is the platform's capture API: what can be captured and the live
+// streams of it. One instance serves every product of the process.
 type Backend interface {
 	Sources(context.Context) ([]Source, error)
 	Open(context.Context, StreamConfig) (Stream, error)
-	Snapshot(context.Context, SnapshotConfig) (Frame, error)
 	Close() error
 }
 

@@ -410,7 +410,7 @@ func TestSettingsChooseAModel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tt := ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
+	tt := settingsTester(a, 0, WideWidth, WideHeight)
 	tt.Frame()
 	if err := tt.Click("Transcription"); err != nil {
 		t.Fatal(err)
@@ -422,8 +422,13 @@ func TestSettingsChooseAModel(t *testing.T) {
 	if !tt.HasText("SenseVoice") {
 		t.Fatalf("the installed models are not listed: %q", tt.Texts())
 	}
-	if !tt.HasText("not a supported SenseVoice, FunASR Nano or Qwen3 ASR model") {
-		t.Errorf("the unusable folder does not say why: %q", tt.Texts())
+	// A folder that is not a supported model is not offered at all; the three
+	// families are, whether or not they are on disk.
+	if tt.HasText("not-a-model") {
+		t.Errorf("an unsupported folder is listed: %q", tt.Texts())
+	}
+	if !tt.HasText("FunASR Nano") || !tt.HasText("Qwen3 ASR 0.6B") || !tt.HasText("Download") {
+		t.Errorf("the models that could be downloaded are missing: %q", tt.Texts())
 	}
 	// Without a choice the first valid model is the one in use; the other is
 	// offered.
@@ -599,7 +604,8 @@ func TestTitleBarKeepsClearOfTheWindowControls(t *testing.T) {
 
 func TestSecondaryWindowsUseImmersiveTitleBars(t *testing.T) {
 	a, _ := newTestApp(t)
-	for name, view := range map[string]func(*ui.Context){"Settings": a.settingsView} {
+	a.settingsOpen = true
+	for name, view := range map[string]func(*ui.Context){"Settings": a.view} {
 		tt := ui.NewTester(view, WideWidth, WideHeight)
 		tt.SetTitleBar(ui.TitleBar{Height: TitleBarHeight, Right: 138})
 		tt.Frame()
@@ -624,7 +630,7 @@ func TestMainWindowLayouts(t *testing.T) {
 
 	tt := ui.NewTester(a.view, WideWidth, WideHeight)
 	tt.Frame()
-	for _, want := range []string{"All media", "New capture", "standup", "Start recording", "Settings"} {
+	for _, want := range []string{"All media", "New capture", "standup", "Start recording", "Appearance"} {
 		if !tt.HasText(want) {
 			t.Fatalf("the wide window lacks %q: %q", want, tt.Texts())
 		}
@@ -665,7 +671,7 @@ func TestMainWindowLayouts(t *testing.T) {
 	// The library row already quotes the first line, so wait for the page's
 	// own way back rather than for the text.
 	for i := 0; i < 20; i++ {
-		if _, ok := tt.Find("Back"); ok {
+		if _, ok := tt.Find("Back to library"); ok {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -674,11 +680,11 @@ func TestMainWindowLayouts(t *testing.T) {
 	if !tt.HasText("Transcript") || !tt.HasText("first line") {
 		t.Fatalf("opening a row did not show its page: %q", tt.Texts())
 	}
-	if err := tt.Click("Back"); err != nil {
+	if err := tt.Click("Back to library"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if _, onPage := tt.Find("Back"); onPage || !tt.HasText("All media") || !tt.HasText("standup") {
+	if _, onPage := tt.Find("Back to library"); onPage || !tt.HasText("All media") || !tt.HasText("standup") {
 		t.Errorf("back did not return to the library: %q", tt.Texts())
 	}
 }
@@ -721,7 +727,7 @@ func TestInterfaceLanguageAndFont(t *testing.T) {
 	a, _ := newTestApp(t)
 	a.setInterfaceLanguage("zh")
 	a.font = "Microsoft YaHei"
-	tt := ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
+	tt := settingsTester(a, 0, WideWidth, WideHeight)
 	tt.Frame()
 	for _, text := range []string{"界面语言", "显示字体", "跟随系统", "浅色", "深色"} {
 		if !tt.HasText(text) {
@@ -740,7 +746,7 @@ func TestInterfaceLanguageAndFont(t *testing.T) {
 // The look can be fixed to light or dark, or left to the desktop.
 func TestAppearanceChangesTheLook(t *testing.T) {
 	a, _ := newTestApp(t)
-	tt := ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
+	tt := settingsTester(a, 0, WideWidth, WideHeight)
 	tt.Frame()
 	for _, look := range []string{"System", "Light", "Dark"} {
 		if !tt.HasText(look) {

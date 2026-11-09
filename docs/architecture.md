@@ -8,7 +8,7 @@ cmd/studio/main.go         composition root: opens the database, builds the view
         └── internal/
             native/        the window, drawn by MyGo's toolkit: pages are Go functions of state
             library/       media records, import, remove
-            capture/       capture.Backend + platform backends (cgo), recording session, preview, screenshots
+            capture/       capture.Backend + platform backends (cgo), recording session, preview
             media/         ffprobe probing
             asr/           sherpa-onnx through cgo (native/), PCM conversion, segmentation, export
             translate/     online translation clients, bilingual alignment, export
@@ -19,8 +19,8 @@ cmd/studio/main.go         composition root: opens the database, builds the view
 ```
 
 Capture is native: [Native capture and media redesign](native-capture.md)
-describes it and what is still to come. Its phase 1 (common frame pipeline,
-in-process preview, screenshots) is implemented for Windows; encoding and
+describes it and what is still to come. Its phase 1 (common frame pipeline and
+in-process preview) is implemented for Windows; encoding and
 muxing are still FFmpeg until phase 2. The sections below describe the code as
 it exists today.
 
@@ -37,7 +37,7 @@ Rules the code follows:
   Windows Graphics Capture; Go passes a callback and a `runtime/cgo.Handle`, and
   no Go pointer is retained by native code.
 - `capture.Backend` is constructed once in `cmd/studio/main.go` and shared by
-  `Recorder`, `Previewer` and `Snapshotter`.
+  `Recorder` and `Previewer`.
 
 ## The window
 
@@ -64,26 +64,28 @@ reads the newest job of the media shown each frame while something runs
 event stream. `jobs.Changed` (`job:progress`) describes the same work for the
 roadmapped web views.
 
-## Layout of the windows
+## Layout of the window
 
-The main window configures recording; Library and Settings are separate native
-windows with the same hidden, app-drawn title bar:
+One native window holds everything; it changes shape with its width (1280 wide,
+900, 420 narrow) and never opens a second window of its own:
 
 | Part | Shows |
 |---|---|
-| Main window | source cards, a window dropdown, the preview, full-row speaker/microphone dropdowns, Start recording, and theme/Library/Settings icon buttons |
-| Library title strip | `Ottr` and, on the grid, `Search`, `New recording` and the import icon button; an inner page carries a back arrow beside its own title instead |
-| Library grid (`libraryGrid`) | one card per media: a 16:9 dark thumbnail with status chips and duration in its lower corners, then the name and the source with the date, with a right-click menu of the tabs, Show the file and Delete |
-| Library new recording (`recordPage`) | the recording form in place of the grid: a back arrow and `New recording`, the source preview beside the cards, window and audio dropdowns, and Start |
-| Library recording page (`recorderPage`) | the preview frame in the same dark ground, the live transcript in a panel beside it, and Delete/Stop |
-| Library session page (`sessionPage`) | the name with `Show file` and `Delete`, the dark player stage, a four-cell fact strip, and the Transcript/Translate/Summary tabs in a right-hand pane, opened by a card and left by the arrow |
-| Settings window | which model transcribes, the AI endpoint translation and summaries share, the prompt templates, and the speaker library |
+| Title strip | `ottr`, what the window is when it is not the library, the REC pill while recording, and the page's own tools |
+| Sidebar (`navSidebar`, from 1100 px) | Library, the four Settings sections, and the disk-usage card |
+| Rail (`rail`, from 900 px) | New recording, Library, summaries, Speakers and Settings, as 36 px icon buttons |
+| Library (`libraryPage`) | search, the filter chips and the media list or grid: a 16:9 thumbnail, status chips, the name, the source and the date, with a menu of the actions |
+| Recording form (`sourceSection`, `audioSection`) | source cards, the preview, the display select, and the audio, live-transcript and translate selects |
+| Recording panel (`livePanel`) | the clock, Pause and Stop, and the live transcript with its translation |
+| Session page (`sessionPage`) | the way back, the name with `Show file` and `Delete`, the player stage, the fact strip, and the Transcript/Summary tabs |
+| Settings (`settingsPage`) | the section chosen in the sidebar: the model, the AI endpoint and prompts, the speaker library, or the look |
 
-The main window is always 420 × 800. Library is 1180 × 800 and Settings is
-920 × 660. Starting a recording opens or focuses Library, which shows the live
-capture in place of the grid and then the finished recording's page.
+The wide window lays the sidebar, the library and the 360 px capture panel side by
+side; from 900 px the sidebar becomes the rail and one page shows at a time; at
+420 px the page fills the window. Starting a recording shows the live panel, and
+stopping it opens the finished recording's page.
 
-`internal/native/theme.go` holds the palette all three windows share: it starts from
+`internal/native/theme.go` holds the palette: it starts from
 `ui.LightTheme` / `ui.DarkTheme` and substitutes the prototype's surfaces,
 accent, radii and tight type, so widgets the app does not draw itself — buttons,
 fields, tabs, scroll bars — land on the same look.

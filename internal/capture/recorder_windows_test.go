@@ -213,33 +213,6 @@ func TestBadSource(t *testing.T) {
 	}
 }
 
-// A screenshot is a PNG of the source at its own size, and it lands in the
-// library as a screenshot.
-func TestScreenshotWritesAPNG(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	lib := &library.Service{}
-	lib.Open(db)
-	s := &Snapshotter{Backend: liveBackend(t), Dir: t.TempDir(), Lib: lib}
-	m, err := s.Screenshot(context.Background(), "screen")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.Source != "screenshot" || m.Width == 0 || m.Height == 0 {
-		t.Errorf("record: %+v", m)
-	}
-	data, err := os.ReadFile(m.Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")) {
-		t.Fatal("not a PNG")
-	}
-}
-
 // Repeatedly opening and closing a stream leaves no callback behind, no
 // goroutine growth and no native memory growth.
 func TestStreamsOpenAndCloseRepeatedly(t *testing.T) {

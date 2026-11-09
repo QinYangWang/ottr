@@ -233,10 +233,8 @@ func (a *App) styleSubmenu(c *ui.Context, t *ui.Theme) {
 
 func (a *App) settingsOption(c *ui.Context, t *ui.Theme, label string, selected bool, onClick func()) {
 	item := ui.ButtonBase(c).Role(ui.RoleMenuItem).Label(label).Checked(selected).
-		FillWidth().Height(40).Padding(0, t.Space(3)).Radius(9999).AlignItems(ui.Center)
-	if selected {
-		item.Background(t.Surface)
-	} else if item.Hovered() {
+		FillWidth().Height(36).Padding(0, t.Space(2.5)).Radius(kit.RadiusControl).AlignItems(ui.Center)
+	if selected || item.Hovered() {
 		item.Background(t.SurfaceHover)
 	}
 	item.Children(func() {

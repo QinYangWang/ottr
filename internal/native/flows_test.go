@@ -311,15 +311,19 @@ func TestEmptyLibraryOffersRecordAndImport(t *testing.T) {
 	}
 }
 
-// Settings ends its menu with the way back to the recorder.
-func TestSettingsBackToRecorder(t *testing.T) {
+// Picking a library view leaves Settings for the library.
+func TestSettingsBackToLibrary(t *testing.T) {
 	a, _ := newTestApp(t)
-	tt := ui.NewTester(a.settingsView, settingsWidth, settingsHeight)
-	if !tt.HasText("Back to recorder") {
-		t.Fatalf("no way back: %q", tt.Texts())
+	tt := settingsTester(a, 0, WideWidth, WideHeight)
+	tt.Frame()
+	if !tt.HasText("Appearance") {
+		t.Fatalf("Settings is not open: %q", tt.Texts())
 	}
-	if err := tt.Click("Back to recorder"); err != nil {
+	if err := tt.Click("Library"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
+	if a.settingsOpen {
+		t.Error("the sidebar kept Settings open over the library")
+	}
 }

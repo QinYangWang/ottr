@@ -7,12 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	"image/png"
 	"io"
-	"os"
-	"ottr/internal/library"
-	"ottr/internal/storage"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -49,12 +44,6 @@ func (f *fakeBackend) Open(ctx context.Context, cfg StreamConfig) (Stream, error
 		q.close(nil)
 	}()
 	return &fakeStream{queue: q, backend: f}, nil
-}
-func (f *fakeBackend) Snapshot(ctx context.Context, cfg SnapshotConfig) (Frame, error) {
-	if f.err != nil {
-		return Frame{}, f.err
-	}
-	return syntheticFrame(64, 48, 0x40), nil
 }
 func (f *fakeBackend) Close() error { return nil }
 
@@ -269,56 +258,6 @@ func TestPreviewerShowsAndReports(t *testing.T) {
 	}
 	if failing.Frame() != nil {
 		t.Error("a denied source drew a frame")
-	}
-}
-
-// pngMagic is the signature every PNG starts with.
-var pngMagic = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
-
-// A screenshot is a PNG of the native frame, at its own size, and its record
-// says what it is.
-func TestSnapshotterWritesPNG(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "shot.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	lib := &library.Service{}
-	lib.Open(db)
-	dir := t.TempDir()
-	shot := &Snapshotter{Backend: &fakeBackend{}, Dir: dir, Lib: lib}
-	m, err := shot.Screenshot(context.Background(), "screen")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.Source != "screenshot" || m.Width != 64 || m.Height != 48 || m.HasAudio || m.DurationMs != 0 {
-		t.Errorf("record: %+v", m)
-	}
-	data, err := os.ReadFile(m.Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.HasPrefix(data, pngMagic) {
-		t.Error("the file is not a PNG")
-	}
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b := img.Bounds(); b.Dx() != 64 || b.Dy() != 48 {
-		t.Errorf("PNG is %v", b)
-	}
-	// The backend's failure keeps its kind, and leaves no file behind.
-	denied := &Snapshotter{Backend: &fakeBackend{err: ErrCancelled}, Dir: dir, Lib: lib}
-	if _, err := denied.Screenshot(context.Background(), "screen"); !errors.Is(err, ErrCancelled) {
-		t.Errorf("got %v, want the cancellation", err)
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 {
-		t.Errorf("a failed screenshot left files: %v", entries)
 	}
 }
 

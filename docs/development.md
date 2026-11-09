@@ -68,10 +68,11 @@ docs/design/            tokens.css, component examples, page HTML and screenshot
 
 ## Prepare ASR
 
-1. Download SenseVoice, FunASR Nano or Qwen3 ASR from the sherpa-onnx model
-   documentation. Other model families are not supported yet. Each works for
-   live and file transcription through its offline recognizer.
-2. Extract it under `%APPDATA%\Ottr\models\`.
+1. Install SenseVoice, FunASR Nano or Qwen3 ASR from **Settings ▸ Transcription**
+   with `Download`; the pinned archive is verified and unpacked into
+   `%APPDATA%\Ottr\models\`. Other model families are not supported yet.
+2. To install one by hand instead, download it from the sherpa-onnx model
+   releases and extract it under `%APPDATA%\Ottr\models\`; `Re-check` finds it.
 3. Copy the C API library — `sherpa-onnx-c-api.dll` on Windows,
    `libsherpa-onnx-c-api.dylib` on macOS, `libsherpa-onnx-c-api.so` on Linux —
    with its `onnxruntime` libraries into `%APPDATA%\Ottr\bin\`, from the
@@ -137,5 +138,5 @@ the full run takes ~25 s.
    until the job's result shows.
 5. To look at a page while working on it, run
    `OTTR_PREVIEW=<folder> go test ./internal/native -run TestPreview`: it writes PNGs
-   of the main form, Library, the sources page and the settings window into
-   that folder. See `internal/native/preview_test.go`.
+   of the main window: the library, the recorder, the settings pages and every
+   responsive layout, into that folder. See `internal/native/preview_test.go`.

@@ -1,6 +1,11 @@
 package models
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,7 +47,7 @@ func TestManagerDetectsModel(t *testing.T) {
 	if len(list) != 1 || !list[0].Installed {
 		t.Fatalf("expected 1 installed model, got %+v", list)
 	}
-	if list[0].Name != "SenseVoice" {
+	if list[0].Name != "SenseVoice Small" {
 		t.Errorf("display name = %q", list[0].Name)
 	}
 	mdl, err := m.FindASRModel()
@@ -111,5 +116,81 @@ func TestSelectedModelIsUsedAndRemembered(t *testing.T) {
 	}
 	if _, err := reopened.FindASRModel(); err == nil {
 		t.Error("a broken chosen model was used anyway")
+	}
+}
+
+// Every supported model is offered, whether or not one is on disk.
+func TestAvailableListsEverySupportedModel(t *testing.T) {
+	m := NewManager(t.TempDir(), t.TempDir())
+	offers := m.Available()
+	if len(offers) != len(SupportedModels()) {
+		t.Fatalf("%d offers for %d models", len(offers), len(SupportedModels()))
+	}
+	for _, offer := range offers {
+		if offer.Installed || offer.DownloadSize == 0 || offer.Name == "" {
+			t.Errorf("offer: %+v", offer)
+		}
+	}
+}
+
+// A download is checked, unpacked and validated before it becomes the model.
+func TestInstallDownloadsAndUnpacks(t *testing.T) {
+	archive, err := os.ReadFile("testdata/tiny.tar.bz2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(archive)
+	}))
+	defer srv.Close()
+	sum := sha256.Sum256(archive)
+	dir := t.TempDir()
+	m := NewManager(dir, dir)
+
+	var last float64
+	err = m.Install(context.Background(), Supported{
+		ID: "tiny-model", Kind: KindSenseVoice, Name: "Tiny", Size: int64(len(archive)),
+		URL: srv.URL, SHA256: hex.EncodeToString(sum[:]),
+	}, func(p float64) { last = p })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last != 1 {
+		t.Errorf("progress ended at %v", last)
+	}
+	mdl, err := m.FindASRModel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mdl.Kind != KindSenseVoice || filepath.Base(mdl.Dir) != "tiny-model" {
+		t.Errorf("installed model: %+v", mdl)
+	}
+	offers := m.Available()
+	if len(offers) == 0 || !offers[0].Installed || offers[0].Path != mdl.Dir {
+		t.Errorf("the installed model is not offered: %+v", offers)
+	}
+}
+
+// An archive that does not hash as pinned is dropped and installs nothing.
+func TestInstallRefusesAnotherArchive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not the pinned bytes"))
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	m := NewManager(dir, dir)
+	err := m.Install(context.Background(), Supported{
+		ID: "tiny-model", Kind: KindSenseVoice, Name: "Tiny", Size: 20, URL: srv.URL,
+		SHA256: "0000000000000000000000000000000000000000000000000000000000000000",
+	}, nil)
+	if err == nil {
+		t.Fatal("an archive with another digest was installed")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a failed install left files: %v", entries)
 	}
 }

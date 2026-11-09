@@ -29,7 +29,7 @@ in, casting, streaming, DRM or fullscreen mode in the first implementation.
 ## Current integration points
 
 - `sessionHead` currently exposes `Play` through `mygo.Shell.OpenPath`.
-- `sessionPage` consists of the header and Transcript/Translate/Summary tabs;
+- `sessionPage` consists of the header and Transcript/Summary tabs;
   there is no finished-media surface.
 - `ui.Bitmap` already displays and updates decoded preview frames in
   `grabPreview`, so a custom MyGo video element is not a prerequisite.

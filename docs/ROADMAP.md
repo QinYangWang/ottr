@@ -295,8 +295,6 @@ The Doop frames of 2026-11-06 show two things with no code behind them:
   Ottr registers no system-wide hotkey, so it does nothing from other apps.
 - **Retry from the timestamp a transcription stopped at.** Recognition keeps no
   partial transcript, so the failure dialog offers a full retry.
-- The details card's "about N h of 1080p" estimate: recordings are encoded at
-  constant quality, so there is no fixed bitrate to divide the free space by.
 
 ---
 
@@ -307,19 +305,13 @@ The window follows the "studio console + highlighter" canvas of 2026-11-06
 [docs/design](design/README.md)). These parts of the frames have no code
 behind them yet, or are drawn differently:
 
-- **Level meters.** The System audio row and the live panel show green level
-  bars; the capture service reports no audio level, so none are drawn.
-- **Live transcript switch.** The canvas has a "Live transcript · SenseVoice"
-  row with a switch; live recognition is not optional in Go yet.
+- **Live level meters.** The live panel draws green level bars beside
+  System audio; the capture service reports no audio level, so Go shows the
+  device name alone.
 - **Recording size and format.** The live panel says "1.4 GB · 1080p30"; Go
   shows the resolution only.
-- **Screenshot button beside Start recording.** The frames put a screenshot
-  icon button next to Start. `capture.Snapshotter` can take one, but the
-  window has no button for it (at 420 / 900 a settings button sits there).
 - **Monitor names.** The display select reads "Display 1 — DELL U2723QE";
   the capture backend names displays by number only.
-- **Disk meter.** The status card's bar and "About 61 h of 1080p left" need a
-  bitrate to divide the free space by (§16); Go shows the free space.
 - **中文 flag and "Has 中文" filter.** Rows of translated media carry an amber
   中文 chip and the library has a "Has 中文" chip; translations are not
   counted per media in the library query, so neither exists.

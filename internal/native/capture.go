@@ -84,52 +84,43 @@ func (a *App) audioSection(c *ui.Context, t *ui.Theme) {
 	}
 	ui.Column(c).FillWidth().Gap(8).Padding(6, 0, 0, 0).Children(func() {
 		kit.Label(c, t, a.tr("Audio"))
-		a.audioRow(c, t, &a.speaker, a.speakers, iconSpeaker, iconSpeaker, "System audio")
-		a.audioRow(c, t, &a.microphone, a.microphones, iconMic, iconMicOff, "Microphone")
+		a.audioRow(c, t, &a.speaker, a.speakers, iconSpeaker, "System audio")
+		a.audioRow(c, t, &a.microphone, a.microphones, iconMic, "Microphone")
 	})
 	ui.Column(c).FillWidth().Gap(8).Padding(6, 0, 0, 0).Children(func() {
 		kit.Label(c, t, a.tr("While recording"))
 		a.liveRow(c, t)
 		if a.canTranslateLive() {
-			a.optionRow(c, t, iconLanguages, a.trf("Translate live into %s", langName(a.trLang)), "", func() {
-				if kit.Switch(c, t, &a.liveTranslate, a.tr("Translate")).Changed() {
-					a.restartLiveTranslation()
-				}
-			})
+			a.translateRow(c, t)
 		}
 	})
 }
 
-// optionRow is one bordered row of the capture panel: an icon, a name, a
-// note on the right and a control.
-func (a *App) optionRow(c *ui.Context, t *ui.Theme, icon *ui.SVG, title, note string, control func()) {
-	p := pal(t)
-	ui.Row(c).FillWidth().MinHeight(40).Padding(8, 12).Gap(10).AlignItems(ui.Center).
-		Radius(kit.RadiusCard).Border(1, p.Line).Background(p.Sheet).Children(func() {
-		ui.Icon(c, icon).FontSize(16).TextColor(p.Ink2).Shrink(0)
-		ui.Text(c, title).FontSize(13).TextColor(p.Ink).Grow(1).MinWidth(0).SingleLine()
-		if note != "" {
-			ui.Text(c, note).FontSize(11.5).TextColor(p.Ink3).SingleLine().Shrink(0)
-		}
-		control()
-	})
-}
-
-// liveRow turns the live transcript of the next recording on or off. It is
-// on whenever the build can recognize speech while recording.
+// liveRow chooses the live transcript of the next recording: the model, or
+// none. It is offered whenever the build can recognize speech while recording.
 func (a *App) liveRow(c *ui.Context, t *ui.Theme) {
 	if a.Rec == nil || a.Rec.Live == nil && a.liveStarter == nil {
 		return
 	}
-	on := !a.liveOff
 	model := ""
 	if a.MM != nil {
 		model = shortModel(a.MM.CurrentName())
 	}
-	a.optionRow(c, t, iconCaptions, a.tr("Live transcript"), model, func() {
-		if kit.Switch(c, t, &on, a.tr("Live transcript")).Changed() {
-			a.setLive(on)
-		}
+	if model == "" {
+		model = a.tr("On")
+	}
+	on := !a.liveOff
+	options := []kit.SelectOption[bool]{{Value: false, Label: a.tr("Disabled")}, {Value: true, Label: model}}
+	kit.Select(c, t, &on, options, a.tr("Live transcript"), a.tr("Live transcript"), iconCaptions, a.setLive)
+}
+
+// translateRow chooses the language live speech is translated into, or none.
+func (a *App) translateRow(c *ui.Context, t *ui.Theme) {
+	on := a.liveTranslate
+	options := []kit.SelectOption[bool]{{Value: false, Label: a.tr("Disabled")}, {Value: true, Label: langName(a.trLang)}}
+	kit.Select(c, t, &on, options, a.tr("Translate"), a.tr("Translate"), iconLanguages, func(on bool) {
+		a.liveTranslate = on
+		a.restartLiveTranslation()
 	})
 }
 
@@ -155,40 +146,20 @@ func shortModel(name string) string {
 	return name
 }
 
-// audioRow is one sound a recording can take: on or off with the switch, and
-// which device with the select under its name.
-func (a *App) audioRow(c *ui.Context, t *ui.Theme, selected *capture.AudioDevice, devices []capture.AudioDevice, icon, offIcon *ui.SVG, label string) {
-	p := pal(t)
-	on := selected.ID != ""
-	ui.Row(c).FillWidth().MinHeight(40).Padding(8, 12).Gap(10).AlignItems(ui.Center).
-		Radius(kit.RadiusCard).Border(1, p.Line).Background(p.Sheet).Children(func() {
-		glyph := icon
-		if !on {
-			glyph = offIcon
-		}
-		ui.Icon(c, glyph).FontSize(16).TextColor(p.Ink2).Shrink(0)
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, a.tr(label)).FontSize(13).TextColor(p.Ink).SingleLine()
-			if on && len(devices) > 0 {
-				options := make([]kit.SelectOption[capture.AudioDevice], 0, len(devices))
-				for _, device := range devices {
-					options = append(options, kit.SelectOption[capture.AudioDevice]{Value: device, Label: device.Name})
-				}
-				kit.TextSelect(c, t, selected, options, a.tr(label)+a.tr(" device"), func(capture.AudioDevice) {})
-			}
-		})
-		if !on {
-			ui.Text(c, a.tr("Off")).FontSize(11.5).TextColor(p.Ink3).Shrink(0)
-		}
-		sw := kit.Switch(c, t, &on, a.tr(label))
-		if len(devices) == 0 {
-			sw.Disabled(true).Tooltip(a.tr("No device found"))
-		}
-		if sw.Changed() {
-			if on && len(devices) > 0 {
-				*selected = devices[0]
-			} else {
-				*selected = capture.AudioDevice{}
+// audioRow is one sound a recording can take: the device to listen to, or
+// none.
+func (a *App) audioRow(c *ui.Context, t *ui.Theme, selected *capture.AudioDevice, devices []capture.AudioDevice, icon *ui.SVG, label string) {
+	options := make([]kit.SelectOption[string], 0, len(devices)+1)
+	options = append(options, kit.SelectOption[string]{Value: "", Label: a.tr("Disabled")})
+	for _, device := range devices {
+		options = append(options, kit.SelectOption[string]{Value: device.ID, Label: device.Name})
+	}
+	id := selected.ID
+	kit.Select(c, t, &id, options, a.tr(label), a.tr(label)+a.tr(" device"), icon, func(id string) {
+		*selected = capture.AudioDevice{}
+		for _, device := range devices {
+			if device.ID == id {
+				*selected = device
 			}
 		}
 	})

@@ -18,12 +18,11 @@ import (
 	"ottr/internal/translate"
 )
 
-// Tabs of an item page, in their indices; the bar shows them in the order
-// Transcript, translation, Summary.
+// Tabs of an item page, in their indices; the bar shows Transcript then
+// Summary.
 const (
-	tabTranscript  = 0
-	tabSummary     = 1
-	tabTranslation = 2
+	tabTranscript = 0
+	tabSummary    = 1
 )
 
 // sessionPage is one media's page, the reading desk: the media, its seek bar
@@ -58,12 +57,7 @@ func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
 			ui.Column(c).Padding(16, 24, 24, 24).Gap(16).Children(func() {
 				a.sessionHead(c, t, m, layout == "mid")
 				a.playerStage(c, t, m)
-				if layout == "wide" {
-					a.chapterCards(c, t, m)
-					a.factStrip(c, t, m)
-				} else {
-					a.chapterList(c, t, m)
-				}
+				a.factStrip(c, t, m)
 			})
 		})
 		ui.Column(c).Width(panel).Shrink(0).FillHeight().MinWidth(0).
@@ -73,14 +67,33 @@ func (a *App) sessionPage(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 }
 
-// sessionHead is back, the title (a click renames it) and its meta, and what
-// to do with the file: show it, export, delete.
+// sessionHead is the way back, then the title (a click renames it) and its
+// meta, with what to do with the file — show it, export, delete — on the right.
 func (a *App) sessionHead(c *ui.Context, t *ui.Theme, m library.Media, compact bool) {
 	p := pal(t)
-	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-		if a.backButton(c, t, "") {
+	ui.Column(c).FillWidth().Gap(4).Children(func() {
+		back := ui.ButtonBase(c).Label(a.tr("Back to library")).Height(32).Padding(0, 10).Gap(6).
+			Radius(kit.RadiusControl).AlignItems(ui.Center).AlignSelf(ui.Start).TextColor(p.Ink2).
+			Cursor(ui.CursorPointer)
+		if back.Hovered() {
+			back.Background(p.Hover).TextColor(p.Ink)
+		}
+		back.Children(func() {
+			ui.Icon(c, iconBack).FontSize(16)
+			ui.Text(c, a.tr("Back to library")).FontSize(13)
+		})
+		if back.Clicked() {
 			a.closeDetail()
 		}
+		a.sessionTitle(c, t, m, compact)
+	})
+}
+
+// sessionTitle is the name (a click renames it), its meta and the file's
+// actions.
+func (a *App) sessionTitle(c *ui.Context, t *ui.Theme, m library.Media, compact bool) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 		if a.renameID == m.ID {
 			input := ui.TextInput(c, &a.renameText).Label(a.tr("Media name")).Grow(1).MinWidth(0)
 			if input.Submitted() {
@@ -154,97 +167,6 @@ func (a *App) playerStage(c *ui.Context, t *ui.Theme, m library.Media) {
 	a.nativePlayerStage(c, t, m)
 }
 
-// chapterCards are the summary's chapters as cards under the player: a click
-// seeks there, and the one playing is in the highlighter.
-func (a *App) chapterCards(c *ui.Context, t *ui.Theme, m library.Media) {
-	p := pal(t)
-	ui.Column(c).FillWidth().Gap(8).Children(func() {
-		kit.Label(c, t, a.tr("Chapters"))
-		chapters := a.sum.Chapters
-		if len(chapters) == 0 {
-			ui.Row(c).FillWidth().Height(52).Gap(8).Radius(kit.RadiusCard).BorderStyle(ui.BorderDashed).
-				Border(1, p.Line2).Center().Children(func() {
-				ui.Icon(c, iconSparkles).FontSize(14).TextColor(p.Ink3)
-				ui.Text(c, a.tr("Chapters appear once the summary is ready")).FontSize(12).TextColor(p.Ink3)
-			})
-			return
-		}
-		at := a.playbackPosition(m).Milliseconds()
-		current := -1
-		for i, ch := range chapters {
-			if at >= ch.StartMs {
-				current = i
-			}
-		}
-		ui.Row(c).FillWidth().Gap(8).Children(func() {
-			for i, ch := range chapters[:min(len(chapters), 4)] {
-				on := i == current && a.playback.id == m.ID
-				clock := fmtDuration(ch.StartMs)
-				card := ui.ButtonBase(c.Key(i)).Label(a.tr("Seek to ")+clock).Tooltip(ch.Title).Grow(1).Width(0).
-					MinWidth(0).Padding(10, 12).Gap(4).Radius(kit.RadiusCard).Cursor(ui.CursorPointer)
-				switch {
-				case on:
-					card.Background(p.AmberSoft).Border(1, p.AmberLine)
-				case card.Hovered():
-					card.Background(p.Sunk).Border(1, p.Line)
-				default:
-					card.Background(p.Sheet).Border(1, p.Line)
-				}
-				card.Children(func() {
-					ui.Column(c).FillWidth().Gap(4).Children(func() {
-						ink := p.Ink3
-						if on {
-							ink = p.AmberInk
-						}
-						mono(ui.Text(c, clock)).FontSize(11.5).TextColor(ink)
-						ui.Text(c, ch.Title).FontSize(12.5).TextColor(p.Ink).SingleLine().MinWidth(0)
-					})
-				})
-				if card.Clicked() {
-					a.seekPlayback(m, time.Duration(ch.StartMs)*time.Millisecond)
-				}
-			}
-		})
-	})
-}
-
-// chapterList is the chapters of the 900px window: a mono time and the
-// title per row, the one playing in amber.
-func (a *App) chapterList(c *ui.Context, t *ui.Theme, m library.Media) {
-	p := pal(t)
-	if len(a.sum.Chapters) == 0 {
-		return
-	}
-	at := a.playbackPosition(m).Milliseconds()
-	current := -1
-	for i, ch := range a.sum.Chapters {
-		if at >= ch.StartMs {
-			current = i
-		}
-	}
-	ui.Column(c).FillWidth().Gap(2).Children(func() {
-		kit.Label(c, t, a.tr("Chapters"))
-		for i, ch := range a.sum.Chapters {
-			clock := fmtDuration(ch.StartMs)
-			on := i == current && a.playback.id == m.ID
-			row := ui.ButtonBase(c.Key(i)).Label(a.tr("Seek to ") + clock).FillWidth().Height(30).Gap(16).
-				AlignItems(ui.Center).Justify(ui.Start).Cursor(ui.CursorPointer)
-			row.Children(func() {
-				ink := p.Ink3
-				title := p.Ink
-				if on {
-					ink, title = p.AmberInk, p.AmberInk
-				}
-				mono(ui.Text(c, clock)).FontSize(11.5).TextColor(ink).Width(42).Shrink(0).SingleLine()
-				ui.Text(c, ch.Title).FontSize(12.5).TextColor(title).SingleLine().MinWidth(0)
-			})
-			if row.Clicked() {
-				a.seekPlayback(m, time.Duration(ch.StartMs)*time.Millisecond)
-			}
-		}
-	})
-}
-
 // factStrip is the media's four facts under a hairline: where it came from,
 // the file, where it is saved, and its languages.
 func (a *App) factStrip(c *ui.Context, t *ui.Theme, m library.Media) {
@@ -294,11 +216,6 @@ func (a *App) docPanel(c *ui.Context, t *ui.Theme, m library.Media) {
 		ui.Row(c).FillWidth().Height(48).Shrink(0).Padding(0, 8, 0, pad).Gap(gap).AlignItems(ui.Stretch).
 			BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
 			a.docTab(c, t, tabTranscript, a.tr("Transcript"), "", kit.ChipNeutral)
-			chip, kind := a.translationState(m)
-			if layoutOf(width) == "mid" {
-				chip = "" // 344 wide, the chip pushes the tools out of the panel
-			}
-			a.docTab(c, t, tabTranslation, langName(a.trLang), chip, kind)
 			a.docTab(c, t, tabSummary, a.tr("Summary"), "", kit.ChipNeutral)
 			ui.Spacer(c)
 			ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
@@ -319,26 +236,12 @@ func (a *App) docPanel(c *ui.Context, t *ui.Theme, m library.Media) {
 		switch a.tab {
 		case tabSummary:
 			a.summaryTab(c, t, m)
-		case tabTranslation:
-			a.translationTab(c, t, m)
 		default:
 			a.transcriptTab(c, t, m)
 		}
 	})
 }
 
-// translationState is the chip beside the translation tab's name.
-func (a *App) translationState(m library.Media) (string, kit.ChipKind) {
-	switch {
-	case a.transLoading || a.jobRunning(jobs.KindTranslate):
-		return a.tr("Translating"), kit.ChipAmber
-	case len(a.trans.Segments) > 0:
-		return a.tr("Translated"), kit.ChipAmber
-	case m.TranscriptStatus != "done":
-		return a.tr("Waiting"), kit.ChipNeutral
-	}
-	return "", kit.ChipNeutral
-}
 
 // docTab is one tab: its name, an optional chip, and the ink underline when
 // chosen.
@@ -367,11 +270,6 @@ func (a *App) docTab(c *ui.Context, t *ui.Theme, index int, label, chip string, 
 	})
 	if tab.Clicked() && !on {
 		a.tab = index
-		if index == tabTranslation {
-			if mm, ok := a.current(); ok && mm.TranscriptStatus == "done" {
-				a.setTranslationVisible(mm, true)
-			}
-		}
 	}
 }
 
@@ -392,11 +290,8 @@ func (a *App) exportButton(c *ui.Context, t *ui.Theme, m library.Media) {
 			return
 		}
 		a.openExport(m)
-		switch a.tab {
-		case tabSummary:
+		if a.tab == tabSummary {
 			a.exportKind = 2
-		case tabTranslation:
-			a.exportKind = 1
 		}
 	})
 }
@@ -672,65 +567,6 @@ func (a *App) searchBar(c *ui.Context, t *ui.Theme, m library.Media, hits []int6
 	})
 }
 
-// translationTab is the transcript in the target language: each line's
-// translation, with the original under it.
-func (a *App) translationTab(c *ui.Context, t *ui.Theme, m library.Media) {
-	p := pal(t)
-	ui.Row(c).FillWidth().Height(48).Shrink(0).Padding(0, 20).Gap(8).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
-		ui.Text(c, a.tr("Translate into")).FontSize(12).TextColor(p.Ink3)
-		a.translationTargetSelect(c, t, m)
-		ui.Spacer(c)
-		if len(a.trans.Segments) > 0 && !a.transLoading && !a.jobRunning(jobs.KindTranslate) {
-			if kit.Button(c, t, kit.Ghost, iconRefresh, a.tr("Translate again"), false).Clicked() {
-				a.startTranslate(m.ID)
-			}
-		}
-	})
-	switch {
-	case m.TranscriptStatus != "done":
-		a.emptyTab(c, t, "A transcript comes first", "Translate this file once it has been transcribed.", nil)
-		return
-	case a.transLoading || a.jobRunning(jobs.KindTranslate):
-		a.working(c, t, "Translating", "Sending the transcript to the provider chosen in Settings.")
-		return
-	case len(a.trans.Segments) == 0:
-		a.emptyTab(c, t, "Not translated yet",
-			"The provider in Settings translates the transcript; the lines stay timed to the video.",
-			[]action{{"Translate", true, func() {
-				a.showTranslation = true
-				a.transLang = a.trLang
-				a.startTranslate(m.ID)
-			}}})
-		return
-	}
-	if !a.trLoaded {
-		a.loadTranscript()
-	}
-	original := map[int64]asr.Segment{}
-	for _, seg := range a.segs {
-		original[seg.ID] = seg
-	}
-	ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Column(c).Padding(10, 10, 16, 10).Gap(2).Children(func() {
-			for _, tr := range a.trans.Segments {
-				seg := original[tr.SegmentID]
-				at := fmtDuration(seg.StartMs)
-				row := ui.ButtonBase(c.Key(tr.SegmentID)).Label(a.tr("Seek to ")+at).FillWidth().Padding(9, 10).
-					Radius(kit.RadiusCard).Cursor(ui.CursorPointer)
-				if row.Hovered() {
-					row.Background(p.Sunk)
-				}
-				row.Children(func() {
-					a.lineContent(c, t, seg.Speaker, at, tr.TranslatedText, seg.Text, false, false)
-				})
-				if row.Clicked() {
-					a.seekPlayback(m, time.Duration(seg.StartMs)*time.Millisecond)
-				}
-			}
-		})
-	})
-}
 
 // translationTargetSelect picks the language translations are shown in.
 func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme, m library.Media) {

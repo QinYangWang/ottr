@@ -66,7 +66,7 @@ func (a *App) libraryPage(c *ui.Context, t *ui.Theme) {
 				ui.Row(c).FillWidth().Gap(6).ClipX().Children(func() {
 					for _, f := range []struct{ label, filter string }{
 						{"All", filterAll}, {"Recordings", filterRecordings}, {"Imports", filterImports},
-						{"Screenshots", filterShots}, {"Has summary", filterSummary},
+						{"Has summary", filterSummary}, {"Failed", filterAttention},
 					} {
 						if kit.FilterChip(c.Key(f.filter), t, a.tr(f.label), a.filter == f.filter).Clicked() {
 							a.filter = f.filter
@@ -86,12 +86,10 @@ func (a *App) filterTitle() string {
 		return "Recordings"
 	case filterImports:
 		return "Imports"
-	case filterShots:
-		return "Screenshots"
 	case filterSummary:
 		return "Has summary"
 	case filterAttention:
-		return "Needs attention"
+		return "Failed"
 	}
 	return "All media"
 }

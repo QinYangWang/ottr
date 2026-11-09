@@ -39,10 +39,10 @@ const pages = [
   ["09-search.html", "aEhVbltVSK", 1280, 800],
   ["10-library-grid.html", "Alz_JKGcah", 1280, 800],
   ["11-library-empty.html", "qzEP255Sdt", 1280, 800],
-  ["12-settings-appearance.html", "K5zn4aFdP4", 920, 660],
-  ["13-settings-transcription.html", "Ld93QswHO6", 920, 660],
-  ["14-settings-provider.html", "oLhMUylrdm", 920, 660],
-  ["15-settings-speakers.html", "oM7uRXDq4A", 920, 660],
+  ["12-settings-appearance.html", "K5zn4aFdP4", 1280, 800],
+  ["13-settings-transcription.html", "Ld93QswHO6", 1280, 800],
+  ["14-settings-provider.html", "oLhMUylrdm", 1280, 800],
+  ["15-settings-speakers.html", "oM7uRXDq4A", 1280, 800],
   ["16-dialog-delete.html", "AwxltPO8hH", 440, 252],
   ["17-dialog-export.html", "iovV_bKivj", 460, 452],
   ["18-dialog-failed.html", "v364cb5VvV", 460, 256],
@@ -50,6 +50,8 @@ const pages = [
   ["20-recorder-420.html", "LY2G4tQbU7", 420, 800],
   ["21-playback-900.html", "_DbSE_3soq", 900, 620],
   ["22-playback-420.html", "yihV5ej8VG", 420, 800],
+  ["23-settings-transcription-download.html", "TjEwUnvB29", 1280, 800],
+  ["24-settings-transcription-first-run.html", "AwzHZjAGsR", 1280, 800],
 ];
 
 const client = process.env.DOOP_CLIENT ? process.env.DOOP_CLIENT.split(" ").filter(Boolean) : null;

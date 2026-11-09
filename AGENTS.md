@@ -18,7 +18,7 @@ SQLite stores everything; FFmpeg decodes and probes media; sherpa-onnx (cgo) doe
 | [docs/development.md](docs/development.md) | Prerequisites, run commands, tests, adding a page or migration |
 | [docs/design/README.md](docs/design/README.md) | Screens, breakpoints, "studio console" tokens, Go file mapping |
 | [docs/recording.md](docs/recording.md) | Capture pipeline, sources, lifecycle |
-| [docs/native-capture.md](docs/native-capture.md) | Native cgo capture, preview, screenshots, encoding plan |
+| [docs/native-capture.md](docs/native-capture.md) | Native cgo capture, preview, encoding plan |
 | [docs/native-playback.md](docs/native-playback.md) | In-window video/audio playback |
 | [docs/transcription.md](docs/transcription.md) | ASR integration, segmentation, live subtitles |
 | [docs/asr-cgo.md](docs/asr-cgo.md) | sherpa-onnx C API shim |

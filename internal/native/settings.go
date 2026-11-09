@@ -1,8 +1,10 @@
 package native
 
 import (
+	"context"
 	"fmt"
 	"slices"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,27 +20,12 @@ import (
 	"ottr/internal/translate"
 )
 
-const (
-	settingsWidth  = 920
-	settingsHeight = 660
-)
-
-// openSettings gives Settings its own native window, leaving the main window
-// exactly as it was.
+// openSettings shows the Settings section in this window.
 func (a *App) openSettings() {
-	if a.settingsWin != nil && !a.settingsWin.IsDestroyed() {
-		a.settingsWin.Focus()
-		return
-	}
-	a.settingsWin = mygo.NewWindow(mygo.WindowOptions{
-		Title: "Ottr Settings", Width: settingsWidth, Height: settingsHeight,
-		MinWidth: 800, MinHeight: 480, Parent: a.win,
-		TitleBarStyle: mygo.TitleBarHidden, TitleBarHeight: TitleBarHeight,
-		BackgroundColor: themeBackground(), Content: ui.View(a.settingsView),
-	})
-	a.settingsWin.OnClosed(func() { a.settingsWin = nil })
+	a.settingsOpen = true
 }
 
+// themeBackground is the window background of the look chosen.
 func themeBackground() string {
 	if mygo.Theme.IsDark() {
 		return "#16181B"
@@ -50,99 +37,37 @@ func themeBackground() string {
 // with the line under each page's title.
 var settingsSections = []struct {
 	label, detail string
-	icon          *ui.SVG
 }{
-	{"Appearance", "The window redraws at once, and remembers the choice.", iconPalette},
-	{"Transcription", "Transcription runs offline, with the model chosen here.", iconCaptions},
-	{"Provider", "Used for translation and summaries. Audio and transcription never leave this computer.", iconProvider},
-	{"Speakers", "Voices Ottr has heard. A new name applies to every transcript.", iconSpeakers},
+	{"Appearance", "The window redraws at once, and remembers the choice."},
+	{"Transcription", "Transcription runs offline, with the model chosen here."},
+	{"Provider", "Used for translation and summaries. Audio and transcription never leave this computer."},
+	{"Speakers", "Voices Ottr has heard. A new name applies to every transcript."},
 }
 
-// settingsView draws the sections on the left, on paper, and the chosen one
-// on the sheet to the right.
-func (a *App) settingsView(c *ui.Context) {
-	t := a.applyTheme(c)
-	p := pal(t)
-	a.drain()
-	ui.Column(c).Fill().Background(p.Sheet).Children(func() {
-		a.windowTitleBar(c, t, a.tr("Settings"), nil)
-		ui.Row(c).Grow(1).MinHeight(0).Children(func() {
-			ui.Column(c).Width(200).Shrink(0).FillHeight().Padding(16, 10, 14, 10).Gap(2).
-				Background(p.Paper).BorderWidth(0, 1, 0, 0).BorderColor(p.Line).Children(func() {
-				ui.Row(c).Padding(4, 10, 8, 10).Children(func() { kit.Label(c, t, a.tr("Settings")) })
-				for i, item := range settingsSections {
-					a.settingsNav(c, t, i, a.tr(item.label), item.icon)
-				}
-				ui.Spacer(c)
-				back := ui.ButtonBase(c).Label(a.tr("Back to recorder")).FillWidth().Height(32).Padding(0, 10).
-					Gap(10).Radius(kit.RadiusControl).AlignItems(ui.Center).Justify(ui.Start).TextColor(p.Ink2).
-					Cursor(ui.CursorPointer)
-				if back.Hovered() {
-					back.Background(p.Hover).TextColor(p.Ink)
-				}
-				back.Children(func() {
-					ui.Icon(c, iconBack).FontSize(16)
-					ui.Text(c, a.tr("Back to recorder")).FontSize(13)
-				})
-				if back.Clicked() {
-					a.closeSettings()
-				}
-				mono(ui.Text(c, "Ottr "+Version)).FontSize(11).TextColor(p.Ink3).Padding(12, 10, 0, 10)
-			})
-			ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
-				a.settingsPage(c, t)
-			})
-		})
-	})
-	if a.err != "" {
-		a.banner(c, t)
-	}
-	if c.Shortcut(0, ui.KeyEscape) {
-		a.closeSettings()
-	}
-}
-
-// Version is the app's version, as Settings shows it; the build sets it.
-var Version = "0.6.1"
-
-// closeSettings closes the Settings window and brings the recorder forward.
+// closeSettings shows the library again.
 func (a *App) closeSettings() {
-	if a.settingsWin != nil && !a.settingsWin.IsDestroyed() {
-		a.settingsWin.Close()
-	}
-	a.settingsWin = nil
-	if a.win != nil {
-		a.win.Focus()
-	}
+	a.settingsOpen = false
 }
 
-func (a *App) settingsNav(c *ui.Context, t *ui.Theme, tab int, label string, icon *ui.SVG) {
+// settingsPane is the Settings section where the window has no sidebar for it:
+// the way back and the section chosen on top, its page under it.
+func (a *App) settingsPane(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
-	on := a.settingsTab == tab
-	nav := ui.ButtonBase(c).Label(label).FillWidth().Height(32).Padding(0, 10).Gap(10).
-		Radius(kit.RadiusControl).AlignItems(ui.Center).Justify(ui.Start).Cursor(ui.CursorPointer)
-	switch {
-	case on && t.Dark:
-		nav.Background(p.Hover)
-	case on:
-		nav.Background(p.Sheet).Border(1, p.Line)
-	case nav.Hovered():
-		nav.Background(p.Hover)
-	}
-	nav.Children(func() {
-		ink := p.Ink2
-		if on {
-			ink = p.Ink
-		}
-		ui.Icon(c, icon).FontSize(16).TextColor(ink)
-		text := ui.Text(c, label).FontSize(13).TextColor(ink)
-		if on {
-			text.FontWeight(500)
-		}
+	ui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(p.Sheet).Children(func() {
+		ui.Row(c).FillWidth().Shrink(0).Height(52).Padding(0, 16).Gap(8).AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+			if a.backButton(c, t, "") {
+				a.closeSettings()
+			}
+			tab := a.settingsTab
+			options := make([]kit.SelectOption[int], len(settingsSections))
+			for i, section := range settingsSections {
+				options[i] = kit.SelectOption[int]{Value: i, Label: a.tr(section.label)}
+			}
+			kit.SelectBox(c, t, &tab, options, a.tr("Settings"), 220, func(tab int) { a.settingsTab = tab })
+		})
+		a.settingsPage(c, t)
 	})
-	if nav.Clicked() {
-		a.settingsTab = tab
-	}
 }
 
 // settingsPage is the scrollable page chosen on the window's left: its title
@@ -323,11 +248,6 @@ func (a *App) setTheme(source string) {
 		mygo.Theme.SetSource(mygo.ThemeSource(source))
 		a.win.SetBackgroundColor(themeBackground())
 	}
-	for _, win := range []*mygo.Window{a.settingsWin} {
-		if win != nil {
-			win.SetBackgroundColor(themeBackground())
-		}
-	}
 	if a.Prefs != nil {
 		prefs := a.Prefs
 		go prefs.Set(settings.Theme, source)
@@ -370,6 +290,16 @@ func (a *App) transcriptionSettings(c *ui.Context, t *ui.Theme) {
 	if !a.modelLoaded {
 		a.loadModels()
 	}
+	if a.modelLoaded && !a.modelLoading && a.modelInUse == "" {
+		ui.Row(c).FillWidth().Padding(12, 14).Gap(10).AlignItems(ui.Start).
+			Radius(kit.RadiusCard).Border(1, p.AmberLine).Background(p.AmberSoft).Children(func() {
+			ui.Icon(c, iconDownload).FontSize(16).TextColor(p.AmberInk).Shrink(0)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+				ui.Text(c, a.tr("No speech recognition model yet")).FontSize(13).FontWeight(600).TextColor(p.Ink)
+				ui.Text(c, a.tr("Download one below to transcribe on this computer.")).FontSize(12.5).TextColor(p.Ink2)
+			})
+		})
+	}
 	ui.Column(c).FillWidth().Gap(8).Children(func() {
 		kit.Label(c, t, a.tr("Speech recognition model"))
 		kit.Group(c, t, func() {
@@ -378,15 +308,9 @@ func (a *App) transcriptionSettings(c *ui.Context, t *ui.Theme) {
 					ui.Spinner(c).Label(a.tr("Looking for models")).Size(14, 14)
 					ui.Text(c, a.tr("Looking for models…")).FontSize(12.5).TextColor(p.Ink3)
 				})
-			} else if len(a.modelList) == 0 {
-				ui.Column(c).Padding(14, 16).Gap(4).Children(func() {
-					ui.Text(c, a.trf("No models in %s yet.", a.MM.ModelsDir())).FontSize(13).TextColor(p.Ink).Selectable()
-					ui.Text(c, a.tr("Install SenseVoice, FunASR Nano or Qwen3 ASR. Other model families are not supported yet.")).
-						FontSize(12).TextColor(p.Ink3)
-				})
 			}
-			for i, info := range a.modelList {
-				a.modelRow(c.Key(info.Path), t, info, i == 0 && !a.modelLoading)
+			for i, offer := range a.modelList {
+				a.modelRow(c.Key(offer.ID), t, offer, i == 0 && !a.modelLoading)
 			}
 			ui.Row(c).FillWidth().Padding(10, 16).Gap(10).AlignItems(ui.Center).Background(p.Sunk).
 				BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
@@ -423,71 +347,139 @@ func (a *App) transcriptionSettings(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// modelRow is one model on disk: its name and languages, and In use, Use this
-// model, or why it cannot be used.
-func (a *App) modelRow(c *ui.Context, t *ui.Theme, info models.Info, first bool) {
+// modelRow is one supported model: In use, Use this model, Download, how far
+// its download has come, or what the last attempt failed with.
+func (a *App) modelRow(c *ui.Context, t *ui.Theme, offer models.Offer, first bool) {
 	p := pal(t)
 	row := ui.Row(c).FillWidth().MinHeight(58).Padding(10, 16).Gap(14).AlignItems(ui.Center)
 	if !first {
 		row.BorderWidth(1, 0, 0, 0).BorderColor(p.Line)
 	}
+	detail := a.modelDetail(offer)
 	row.Children(func() {
 		ui.Column(c).Size(32, 32).Radius(kit.RadiusControl).Center().Background(p.Hover).Shrink(0).Children(func() {
 			ui.Icon(c, iconWaveform).FontSize(16).TextColor(p.Ink2)
 		})
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, info.Name).FontSize(13).FontWeight(500).TextColor(p.Ink).SingleLine()
-			mono(ui.Text(c, modelDetail(info))).FontSize(11).TextColor(p.Ink3).SingleLine().Tooltip(modelDetail(info))
+			ui.Text(c, a.tr(offer.Name)).FontSize(13).FontWeight(500).TextColor(p.Ink).SingleLine()
+			mono(ui.Text(c, detail)).FontSize(11).TextColor(p.Ink3).SingleLine().Tooltip(detail)
 		})
 		switch {
-		case info.Path == a.modelInUse:
+		case offer.Installed && offer.Path == a.modelInUse:
 			ui.Row(c).Height(22).Padding(0, 8).Gap(4).Radius(9999).AlignItems(ui.Center).Background(p.GreenSoft).Children(func() {
 				ui.Icon(c, iconCheck).FontSize(12).TextColor(p.Green)
 				ui.Text(c, a.tr("In use")).FontSize(11.5).FontWeight(500).TextColor(p.Green)
 			})
-		case info.Installed && info.Error == "":
+		case offer.Installed:
 			if kit.Button(c, t, kit.Secondary, nil, a.tr("Use this model"), false).Clicked() {
-				a.useModel(info)
+				a.useModel(offer)
+			}
+		case a.modelDLID == offer.ID:
+			meter(c, t, float32(a.modelDLProgress), 150)
+			mono(ui.Text(c, a.trf("%d%%", int(a.modelDLProgress*100)))).FontSize(11.5).
+				TextColor(p.Ink2).Width(36).TextAlign(ui.End)
+		case a.modelDLErrID == offer.ID:
+			kit.Chip(c, t, kit.ChipBad, a.tr("Download failed")).Tooltip(a.modelDLErr)
+			if kit.Button(c, t, kit.Secondary, nil, a.tr("Try again"), false).Clicked() {
+				a.downloadModel(offer)
 			}
 		default:
-			kit.Chip(c, t, kit.ChipBad, a.tr("Can’t be used"))
+			button := kit.Button(c, t, kit.Secondary, iconDownload, a.tr("Download"), false)
+			button.Disabled(a.modelDLID != "")
+			if button.Clicked() && a.modelDLID == "" {
+				a.downloadModel(offer)
+			}
 		}
 	})
 }
 
-func modelDetail(info models.Info) string {
-	if info.Error != "" {
-		return info.Error
+// modelDetail is the line under a model's name: what it hears, how big it is,
+// and what a running download has fetched so far.
+func (a *App) modelDetail(offer models.Offer) string {
+	size := offer.SizeBytes
+	if !offer.Installed {
+		size = offer.DownloadSize
 	}
-	return fmtSize(info.SizeBytes)
+	parts := []string{a.tr(offer.Detail), fmtSize(size)}
+	if a.modelDLID == offer.ID {
+		parts[1] = a.trf("Downloading %s of %s", fmtSize(int64(a.modelDLProgress*float64(size))), fmtSize(size))
+	}
+	if a.modelDLErrID == offer.ID && a.modelDLErr != "" {
+		parts = append(parts, a.modelDLErr)
+	}
+	return strings.Join(parts, " · ")
 }
 
-// loadModels reads the models on disk, and which one transcription would use.
+// guideToModels opens the download page when nothing can transcribe yet: on a
+// first launch, that is the one thing the window can ask for.
+func (a *App) guideToModels() {
+	if a.MM == nil {
+		return
+	}
+	go func() {
+		if mdl, _ := a.MM.FindASRModel(); mdl != nil {
+			return
+		}
+		a.update(func() {
+			a.settingsTab = 1
+			a.openSettings()
+		})
+	}()
+}
+
+// loadModels reads the models Ottr supports and which one it would use.
 func (a *App) loadModels() {
 	a.modelLoaded, a.modelLoading = true, true
 	if a.MM == nil {
 		return
 	}
 	go func() {
-		list, err := a.MM.ListModels()
+		list := a.MM.Available()
 		mdl, _ := a.MM.FindASRModel() // nil when none is usable
 		inUse := ""
 		if mdl != nil {
 			inUse = mdl.Dir
 		}
 		a.update(func() {
-			if err != nil {
-				a.setError(err)
-			}
 			a.modelList, a.modelInUse, a.modelLoading = list, inUse, false
 		})
 	}()
 }
 
-// useModel makes transcription use this model from now on.
-func (a *App) useModel(info models.Info) {
+// downloadModel fetches one model in the background, showing how far it has
+// come and using it when it is the first one installed.
+func (a *App) downloadModel(offer models.Offer) {
+	if a.MM == nil || a.modelDLID != "" {
+		return
+	}
+	mm, id := a.MM, offer.ID
+	inUse := a.modelInUse
+	a.modelDLID, a.modelDLProgress, a.modelDLErrID, a.modelDLErr = id, 0, "", ""
 	go func() {
-		err := a.MM.Select(info.Path)
+		last := -1
+		err := mm.Download(context.Background(), id, func(p float64) {
+			if pct := int(p * 100); pct != last {
+				last = pct
+				a.update(func() { a.modelDLProgress = p })
+			}
+		})
+		if err == nil && inUse == "" {
+			_ = mm.Select(filepath.Join(mm.ModelsDir(), id))
+		}
+		a.update(func() {
+			a.modelDLID = ""
+			if err != nil {
+				a.modelDLErrID, a.modelDLErr = id, err.Error()
+			}
+			a.loadModels()
+		})
+	}()
+}
+
+// useModel makes transcription use this model from now on.
+func (a *App) useModel(offer models.Offer) {
+	go func() {
+		err := a.MM.Select(offer.Path)
 		a.update(func() {
 			if err != nil {
 				a.setError(err)

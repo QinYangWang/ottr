@@ -9,49 +9,36 @@ import (
 	"ottr/internal/library"
 )
 
-// recorderDetails is what the details card under the recorder says: where
-// recordings go, how much room is left there, and which model transcribes.
-// Each is read off the main thread: the volume and the models folder are
-// disk work.
+// recorderDetails is where recordings go, how much room is left there, and
+// which model transcribes. Each is read off the main thread: the volume and
+// the models folder are disk work.
 type recorderDetails struct {
 	loaded  bool
 	free    uint64
+	total   uint64
 	freeErr string
 	model   string
-	ready   bool   // native ASR can run
-	why     string // why it cannot, when it cannot
 }
 
 // loadDetails reads the details card's facts in the background.
 func (a *App) loadDetails() {
 	a.details.loaded = true
-	rec, asrSvc, mm := a.Rec, a.ASR, a.MM
+	rec, mm := a.Rec, a.MM
 	go func() {
 		var d recorderDetails
 		d.loaded = true
 		if rec != nil && rec.Dir != "" {
-			if free, err := rec.FreeSpace(); err != nil {
+			if free, total, err := rec.Space(); err != nil {
 				d.freeErr = err.Error()
 			} else {
-				d.free = free
+				d.free, d.total = free, total
 			}
 		}
 		if mm != nil {
 			d.model = mm.CurrentName()
 		}
-		if asrSvc != nil {
-			rt := asrSvc.RuntimeStatus()
-			d.ready, d.why = rt.OK(), rt.Err
-		}
 		a.update(func() { a.details = d })
 	}()
-}
-
-func (a *App) recordingsDir() string {
-	if a.Rec == nil {
-		return ""
-	}
-	return a.Rec.Dir
 }
 
 // shortDir names a folder by its last two parts, the way the design writes

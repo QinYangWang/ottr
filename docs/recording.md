@@ -56,8 +56,7 @@ handle still names a visible window with a title.
 
 The full screen is the bounding box of every display; per-display sources are
 listed alongside it, not instead of it. `Detail` carries the size in physical
-pixels. The pointer is drawn in recordings and screenshots, and left out of the
-idle preview.
+pixels. The pointer is drawn in recordings and left out of the idle preview.
 
 The backend releases every native object on the thread that made it, and
 `Stream.Close` waits for a callback already in flight before it returns, so no
@@ -72,8 +71,7 @@ parser and no second process: the first frame appears in about 180 ms, and a
 slower window only causes frames to be skipped.
 
 The idle preview asks for no pointer — the display's own pointer already sits
-over the picture, and a second one would lag behind it. Recordings and
-screenshots take the pointer.
+over the picture, and a second one would lag behind it. Recordings take the pointer.
 
 Library's recording page shows the recorder's own preview the same way; that
 stream only runs while a recording does.
@@ -82,17 +80,8 @@ Starting a recording stops the previewer — the recording draws its own frames 
 and stopping it starts the previewer again. Switching sources restarts it.
 
 A source that cannot be opened reports the backend's error in the panel, with
-`Try again` to retry. `OTTR_LIVE=1 go test ./internal/capture -run
-'TestPreviewerDrawsTheSource|TestScreenshotWritesAPNG'` uses the real desktop.
-
-## Screenshots
-
-`capture.Snapshotter.Screenshot(ctx, sourceID)` takes one frame of the current
-source, converts BGRA to `image.RGBA`, and writes a PNG through a temporary file
-and a rename, so a crash leaves either a whole image or none. The record is
-inserted with `source = "screenshot"`, its native size, and no duration; nothing
-transcribes it. A screenshot is taken from the WGC stream's first frame, since
-Windows Graphics Capture has no one-shot read.
+`Try again` to retry. `OTTR_LIVE=1 go test ./internal/capture -run 'TestPreviewerDrawsTheSource'`
+uses the real desktop.
 
 ## Where FFmpeg and ffprobe come from
 
@@ -228,7 +217,7 @@ the duration and streams, and `asr.ExtractWav` extracts the audio as before.
 `backend_test.go` needs no desktop and no media program: it uses a fake backend
 of synthetic frames and covers the bounded queue (newest two, oldest dropped,
 cancellation), BGRA→RGBA channel order, stride removal, aspect-fit letterboxing,
-the JPEG preview rate, the previewer's error reporting, and PNG screenshots.
+the JPEG preview rate and the previewer's error reporting.
 
 `recorder_windows_test.go` performs real recordings, all behind `OTTR_LIVE=1`:
 

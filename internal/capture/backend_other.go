@@ -22,8 +22,4 @@ func (unsupportedBackend) Open(context.Context, StreamConfig) (Stream, error) {
 	return nil, fmt.Errorf("%w: %s", ErrUnsupported, runtime.GOOS)
 }
 
-func (unsupportedBackend) Snapshot(context.Context, SnapshotConfig) (Frame, error) {
-	return Frame{}, fmt.Errorf("%w: %s", ErrUnsupported, runtime.GOOS)
-}
-
 func (unsupportedBackend) Close() error { return nil }

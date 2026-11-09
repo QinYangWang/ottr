@@ -79,24 +79,6 @@ func (b *windowsBackend) Open(ctx context.Context, cfg StreamConfig) (Stream, er
 	return st, nil
 }
 
-func (b *windowsBackend) Snapshot(ctx context.Context, cfg SnapshotConfig) (Frame, error) {
-	stream, err := b.Open(ctx, StreamConfig{SourceID: cfg.SourceID, Cursor: cfg.Cursor})
-	if err != nil {
-		return Frame{}, err
-	}
-	defer stream.Close()
-
-	// The first frame of a fresh stream is the current desktop: WGC has no
-	// one-shot read, and a stream that never delivers is a failed capture.
-	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	frame, err := stream.Next(cctx)
-	if errors.Is(err, context.DeadlineExceeded) {
-		return Frame{}, fmt.Errorf("%w: %s", ErrNoFrame, cfg.SourceID)
-	}
-	return frame, err
-}
-
 func (b *windowsBackend) Close() error { return nil }
 
 // wgcStream is one open WGC stream. The native callback only enqueues.

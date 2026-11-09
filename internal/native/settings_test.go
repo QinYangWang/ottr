@@ -14,7 +14,7 @@ import (
 // one endpoint into both services that talk to it.
 func TestProviderSettingsSaveBothServices(t *testing.T) {
 	a, _ := newTestApp(t)
-	tt := ui.NewTester(a.settingsView, settingsWidth, 1100)
+	tt := settingsTester(a, 2, WideWidth, 1100)
 	tt.Frame()
 	for _, section := range []string{"Appearance", "Transcription", "Provider", "Speakers"} {
 		if !tt.HasText(section) {
@@ -22,7 +22,6 @@ func TestProviderSettingsSaveBothServices(t *testing.T) {
 		}
 	}
 
-	a.settingsTab = 2
 	for i := 0; i < 100 && !tt.HasText("Prompt templates"); i++ {
 		time.Sleep(5 * time.Millisecond)
 		tt.Frame()
@@ -62,8 +61,7 @@ func TestSpeakerLibraryPage(t *testing.T) {
 		LastHeard: "2026-11-05T13:55:00Z",
 	}}
 	a.loadedSpeakers = true
-	a.settingsTab = 3
-	tt := ui.NewTester(a.settingsView, settingsWidth, 1100)
+	tt := settingsTester(a, 3, WideWidth, 1100)
 	tt.Frame()
 	for _, text := range []string{"Speakers", "Ana Ruiz", "2 recordings · 41m · last heard Nov 5"} {
 		if !tt.HasText(text) {
@@ -87,5 +85,28 @@ func TestSpeakerLibraryPage(t *testing.T) {
 			t.Fatalf("the renamed speaker is %q", a.speakerLib[0].Name)
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// settingsTester draws the main window with one Settings section open.
+func settingsTester(a *App, tab, width, height int) *ui.Tester {
+	a.settingsOpen, a.settingsTab = true, tab
+	return ui.NewTester(a.view, width, height)
+}
+
+// With nothing installed, the transcription page says what to do and offers
+// every supported model to download.
+func TestTranscriptionPageWithoutAModel(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.settingsOpen, a.settingsTab = true, 1
+	tt := ui.NewTester(a.view, WideWidth, WideHeight)
+	for i := 0; i < 40 && !tt.HasText("No speech recognition model yet"); i++ {
+		tt.Frame()
+	}
+	if !tt.HasText("No speech recognition model yet") || !tt.HasText("Download one below to transcribe on this computer.") {
+		t.Fatalf("no guidance: %q", tt.Texts())
+	}
+	if !tt.HasText("SenseVoice Small") || !tt.HasText("Download") {
+		t.Errorf("the models to download are missing: %q", tt.Texts())
 	}
 }

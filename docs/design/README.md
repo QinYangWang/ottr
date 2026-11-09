@@ -20,22 +20,24 @@ Open any file in `pages/` in a browser. Each one is the frame's own HTML, self-c
 | `03-recording` | 1280×800 | The capture panel as the live panel: clock, meters, Pause/Stop, live transcript; REC pill in the title bar |
 | `04-recording-dark` | 1280×800 | Same, dark |
 | `05-transcribing` | 1280×800 | Item page after Stop: the pipeline card (transcribe → translate → summarize) |
-| `06-playback` | 1280×800 | Item page: stage, chapter-segmented seek bar, chapter cards, facts strip, document panel |
+| `06-playback` | 1280×800 | Item page: way back, stage, chapter-segmented seek bar, facts strip, document panel |
 | `07-playback-dark` | 1280×800 | Same, dark |
 | `08-summary` | 1280×800 | Document panel on the Summary tab |
 | `09-search` | 1280×800 | Transcript search with hit ticks on the seek bar |
 | `10-library-grid` | 1280×800 | Library as a grid |
 | `11-library-empty` | 1280×800 | First run: record or import, three steps |
-| `12-settings-appearance` | 920×660 | Settings window: language, font, theme, highlighter |
-| `13-settings-transcription` | 920×660 | Speech recognition models and the spoken language |
-| `14-settings-provider` | 920×660 | Provider tiles, bordered fields, import chain, prompts |
-| `15-settings-speakers` | 920×660 | Speaker library with search and rename |
+| `12-settings-appearance` | 1280×800 | Settings in the main window: language, font, theme, highlighter |
+| `13-settings-transcription` | 1280×800 | Speech recognition models and the spoken language |
+| `14-settings-provider` | 1280×800 | Provider tiles, bordered fields, import chain, prompts |
+| `15-settings-speakers` | 1280×800 | Speaker library with search and rename |
+| `23-settings-transcription-download` | 1280×800 | The Qwen3 download in progress: model row with a progress bar |
+| `24-settings-transcription-first-run` | 1280×800 | First run without a model: the download callout and three Download buttons |
 | `16-dialog-delete` | 440×252 | Delete recording |
 | `17-dialog-export` | 460×452 | Export: transcript / translation / summary, formats |
 | `18-dialog-failed` | 460×256 | Transcription failed |
 | `19-recorder-900` | 900×620 | Rail + recorder, last recording under the audio rows |
 | `20-recorder-420` | 420×800 | Narrow recorder, library button in the header |
-| `21-playback-900` | 900×620 | Rail + item page, chapter list, 344px document panel |
+| `21-playback-900` | 900×620 | Rail + item page, 344px document panel |
 | `22-playback-420` | 420×800 | Narrow item page, document under the player |
 
 ### Breakpoints
@@ -111,17 +113,17 @@ machines without a CJK font (Linux containers), where 中文 would otherwise dra
 | Buttons, chips, switches, groups, selects, bordered `Field`, avatars | [`kit/kit.go`](../../internal/native/kit/kit.go) |
 | ui.Theme mapping, font registration, the one shadow | [`theme.go`](../../internal/native/theme.go), [`fonts/`](../../internal/native/fonts) |
 | Window frame, breakpoints, title bar and REC pill, rail, back button | [`app.go`](../../internal/native/app.go) |
-| Sidebar: library views, Views, Workspace, status card | [`shell.go`](../../internal/native/shell.go) |
+| Sidebar: Library, Settings sections, disk card | [`shell.go`](../../internal/native/shell.go) |
 | New capture panel: source tiles, preview, audio rows, last recording, Ctrl+Shift+R | [`capture.go`](../../internal/native/capture.go) |
 | Live panel while recording (clock, sounds, Pause/Stop, live transcript) | [`recorder.go`](../../internal/native/recorder.go) |
 | Library page: title, search (Ctrl+K), filter chips, list/grid, day groups | [`library.go`](../../internal/native/library.go), [`details.go`](../../internal/native/details.go) |
 | A library row's first line and speaker count | [`rowfacts.go`](../../internal/native/rowfacts.go) |
 | Thumbnails | [`thumbnail.go`](../../internal/native/thumbnail.go) |
-| Item page: stage, chapters, facts strip, document panel and its tabs, summary | [`session.go`](../../internal/native/session.go) |
+| Item page: stage, facts strip, document panel and its two tabs, summary | [`session.go`](../../internal/native/session.go) |
 | Transport and seek bar | [`player.go`](../../internal/native/player.go) |
 | Pipeline card after Stop | [`transcribing.go`](../../internal/native/transcribing.go) |
 | Dialogs: delete, export, transcription failed | [`dialogs.go`](../../internal/native/dialogs.go) |
-| Settings window and its four pages | [`settings.go`](../../internal/native/settings.go) |
+| Settings pages in the sidebar | [`settings.go`](../../internal/native/settings.go) |
 | Subtitle settings menu (document panel) | [`settings_menu.go`](../../internal/native/settings_menu.go) |
 | Icons (Lucide) | [`icons.go`](../../internal/native/icons.go), [`icons/`](../../internal/native/icons) |
 | Strings, English and 中文 | [`i18n.go`](../../internal/native/i18n.go) |

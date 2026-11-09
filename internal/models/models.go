@@ -16,7 +16,7 @@ import (
 type Info struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Kind      string `json:"kind"` // asr | llm | translation
+	Kind      string `json:"kind"` // the family, sense_voice etc.; "asr" when unknown
 	Path      string `json:"path"`
 	SizeBytes int64  `json:"sizeBytes"`
 	Installed bool   `json:"installed"`
@@ -292,11 +292,11 @@ func findOnnx(dir, prefix string) (string, error) {
 func modelDisplayName(kind string) string {
 	switch kind {
 	case KindSenseVoice:
-		return "SenseVoice"
+		return "SenseVoice Small"
 	case KindFunASRNano:
 		return "FunASR Nano"
 	case KindQwen3ASR:
-		return "Qwen3 ASR"
+		return "Qwen3 ASR 0.6B"
 	default:
 		return kind
 	}
@@ -339,6 +339,7 @@ func (m *Manager) ListModels() ([]Info, error) {
 		}
 		if mdl, err := inspectASRDir(sub); err == nil {
 			info.Installed = true
+			info.Kind = mdl.Kind
 			info.Name = modelDisplayName(mdl.Kind)
 			info.SizeBytes = mdl.Size
 		} else {

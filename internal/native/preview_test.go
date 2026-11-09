@@ -172,7 +172,7 @@ func TestPreview(t *testing.T) {
 	shoot("19-recorder-900", a.view, 900, 620, false)
 	shoot("20-recorder-420", a.view, CompactWidth, CompactHeight, false)
 
-	// Settings, a window of its own.
+	// Settings, in the main window.
 	a.loadedProvider = true
 	a.provider = providerSettings{
 		BaseURL: "https://api.deepseek.com/v1", Model: "deepseek-chat", APIKey: "sk-preview",
@@ -180,8 +180,10 @@ func TestPreview(t *testing.T) {
 	}
 	for i, name := range []string{"12-settings-appearance", "13-settings-transcription", "14-settings-provider", "15-settings-speakers"} {
 		a.settingsTab = i
-		shoot(name, a.settingsView, settingsWidth, settingsHeight, false)
+		a.settingsOpen = true
+		shoot(name, a.view, WideWidth, WideHeight, false)
 	}
+	a.settingsOpen = false
 
 	// The first run: nothing in the library.
 	empty, _ := newTestApp(t)

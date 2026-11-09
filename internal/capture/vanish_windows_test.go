@@ -73,8 +73,4 @@ func (vanishingBackend) Open(ctx context.Context, cfg StreamConfig) (Stream, err
 	return &fakeStream{queue: q, backend: &fakeBackend{}}, nil
 }
 
-func (vanishingBackend) Snapshot(context.Context, SnapshotConfig) (Frame, error) {
-	return Frame{}, ErrSourceGone
-}
-
 func (vanishingBackend) Close() error { return nil }

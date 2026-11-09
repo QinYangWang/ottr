@@ -1,7 +1,7 @@
 # Native capture and media redesign
 
 Status: **in progress**. Phase 0 (native ABI proof) and the capture half of
-phase 1 (common frame pipeline, preview, screenshots) are implemented on
+phase 1 (common frame pipeline, preview) are implemented on
 Windows. This supersedes the capture direction in `ROADMAP.md` items 5, 6 and
 12.
 
@@ -10,12 +10,12 @@ this document under [Status](#status).
 
 ## Goal and hard constraints
 
-Record displays/windows and take screenshots on macOS, Windows and Linux using
-native capture APIs through cgo.
+Record displays and windows on macOS, Windows and Linux using native capture
+APIs through cgo.
 
 The target has **no FFmpeg or ffprobe dependency**: no executable is searched,
 configured, spawned or bundled, and no `libav*` library is used. Capture,
-preview, encoding, MP4 muxing, screenshots, media metadata and ASR audio decode
+preview, encoding, MP4 muxing, media metadata and ASR audio decode
 must all work in a clean environment without FFmpeg.
 
 Keep the current product behavior: one recording at a time, live preview,
@@ -33,10 +33,10 @@ so changing `resolveSource` alone cannot remove it.
 
 The replacement has three independent boundaries:
 
-1. **Capture backend**: sources, permissions, native streams and one-shot frames.
+1. **Capture backend**: sources, permissions and native streams.
 2. **Media writer**: audio conversion/mixing, native encoding and shared MP4
    muxing. It knows nothing about windows, displays or the UI.
-3. **Products**: `Recorder`, `Previewer` and `Screenshotter`, which keep the UI
+3. **Products**: `Recorder` and `Previewer`, which keep the UI
    contract and orchestrate capture, media and Library services.
 
 `Library.AddRecording` currently probes the finished file. Native recording
@@ -49,8 +49,8 @@ replaced before the dependency can be removed repository-wide.
 ```text
 internal/native
    ├── Recorder ───────┐
-   ├── Previewer ──────┼── one capture.Backend per process
-   └── Screenshotter ──┘             │
+   └── Previewer ──────┴── one capture.Backend per process
+                                     │
                                      ▼
                     ┌─────────────────────────────────┐
                     │ macOS: ScreenCaptureKit         │
@@ -93,7 +93,6 @@ this small:
 type Backend interface {
     Sources(context.Context) ([]Source, error)
     Open(context.Context, StreamConfig) (Stream, error)
-    Snapshot(context.Context, SnapshotConfig) (Frame, error)
     Close() error
 }
 
@@ -141,16 +140,14 @@ rules and keeps all native encoders behind the same testable contract.
 ## Platform backends
 
 Proposed baselines are macOS 14+, Windows 10 1903+, and current Wayland or X11
-Linux desktops. macOS 14 provides both `SCStream` and `SCScreenshotManager`; do
-not add a second legacy screenshot path for older systems unless supporting
-them is an explicit requirement.
+Linux desktops.
 
-| Platform | Source and stream | Screenshot | H.264 / AAC |
-|---|---|---|---|
-| macOS | `SCShareableContent`, `SCContentFilter`, `SCStream` | `SCScreenshotManager`, falling back to the first stream frame only where needed | VideoToolbox / AudioToolbox |
-| Windows | `GraphicsCaptureItem`, `Direct3D11CaptureFramePool`, D3D11 readback | Same WGC path, one frame | Media Foundation `IMFTransform` encoders |
-| Wayland | XDG ScreenCast portal + PipeWire | First frame from the authorized PipeWire stream | OpenH264 / FDK-AAC |
-| X11 | XCB + XShm | Same X11 stream, one frame | OpenH264 / FDK-AAC |
+| Platform | Source and stream | H.264 / AAC |
+|---|---|---|
+| macOS | `SCShareableContent`, `SCContentFilter`, `SCStream` | VideoToolbox / AudioToolbox |
+| Windows | `GraphicsCaptureItem`, `Direct3D11CaptureFramePool`, D3D11 readback | Media Foundation `IMFTransform` encoders |
+| Wayland | XDG ScreenCast portal + PipeWire | OpenH264 / FDK-AAC |
+| X11 | XCB + XShm | OpenH264 / FDK-AAC |
 
 ### macOS
 
@@ -188,7 +185,7 @@ external capture programs.
 Wayland capture must use `org.freedesktop.portal.ScreenCast` and PipeWire;
 there is no supported direct Wayland desktop-read API. The portal owns source
 selection and consent, so `Sources` exposes a logical “Screen or window…”
-picker entry rather than pretending to enumerate windows. `Open`/`Snapshot`
+picker entry rather than pretending to enumerate windows. `Open`
 performs selection when necessary and reuses the authorized session. A portal
 restore token is treated as a credential: never log it, and invalidate it when
 the portal rejects it.
@@ -221,8 +218,7 @@ The muxer owns:
   playable after a crash.
 
 Recording canvas dimensions are fixed after the first valid frame. A resized
-window is aspect-fit into that canvas; raw screenshots keep their current native
-size. This prevents mid-file codec/configuration changes. Odd dimensions are
+window is aspect-fit into that canvas. This prevents mid-file codec/configuration changes. Odd dimensions are
 handled by the canvas/conversion path rather than passed to H.264 accidentally.
 
 All video and audio use a common monotonic epoch captured at session start.
@@ -260,13 +256,6 @@ Library. It does not probe its own output.
 There is no subprocess watchdog and no `q` command. The session owner, not an
 `exec.Cmd.Wait` goroutine, owns cancellation and finalization.
 
-### Screenshot
-
-`Screenshotter` uses the currently selected source, obtains one native frame,
-converts BGRA to `image.RGBA`, and writes PNG through a temporary file plus
-atomic rename. Add `png` and `screenshot` to Library support; screenshots do not
-start ASR. Clipboard export, annotations and region selection are out of scope.
-
 ## File layout after migration
 
 ```text
@@ -274,7 +263,6 @@ internal/capture/
     backend.go             common Source/Frame/Backend contracts and errors
     recorder.go            session ownership; no platform API or exec calls
     livepreview.go         raw-frame preview, no TCP or subprocess
-    screenshot.go          one-shot PNG and Library integration
     backend_darwin.go      cgo entry points
     backend_windows.go
     backend_linux.go       runtime Wayland/X11 selection
@@ -312,18 +300,15 @@ Each phase ends with a usable vertical slice; no phase requires FFmpeg.
 
 Exit: one BGRA frame with correct pixels, dimensions and PTS on each OS/toolchain.
 
-### 1. Common frame pipeline, preview and screenshots
+### 1. Common frame pipeline and preview
 
 - Introduce `Backend`, `Stream`, `Frame`, typed errors and the shared backend in
   the composition root.
 - Replace MJPEG/TCP with bounded raw frames and Go JPEG preview.
-- Implement one-frame capture and atomic PNG output, plus the Library metadata
-  path. The recorder no longer shows a Screenshot button: the design dropped it, so
-  only `capture.Snapshotter` and `Library.AddScreenshot` remain.
 - Test color conversion, stride, Retina/HiDPI, odd sizes and latest-frame-only
   backpressure.
 
-Exit: native preview and screenshots without FFmpeg; old recording remains
+Exit: native preview without FFmpeg; old recording remains
 temporarily available only until the next phase replaces it.
 
 ### 2. Encoders, PCM and fragmented MP4
@@ -342,8 +327,8 @@ Exit: repeatable H.264/AAC fragmented MP4 on all platforms, including video-only
 ### 3. Windows recording vertical slice
 
 - Connect WGC, WASAPI, MF encoders and the muxer through `Recorder`.
-- Replace old capture tests with real native display/window recording and
-  screenshots. Include covered windows, resizing, minimizing, device unplug,
+- Replace old capture tests with real native display/window recording.
+  Include covered windows, resizing, minimizing, device unplug,
   secure-desktop/session loss and unexpected source closure.
 - Remove the FFmpeg/DDA/GDI recording implementation after parity.
 
@@ -357,7 +342,7 @@ memory, no accumulating A/V drift, and normal Stop/failure/Library behavior.
 - Verify Retina dimensions, display changes, window resize/close, Screen
   Recording denial, microphone denial and app sleep/wake.
 
-Exit: the same recording and screenshot acceptance suite passes on macOS.
+Exit: the same recording acceptance suite passes on macOS.
 
 ### 5. Linux Wayland, then X11
 
@@ -366,7 +351,7 @@ Exit: the same recording and screenshot acceptance suite passes on macOS.
 - Test portal cancel/deny, token expiry, stream reconnect, compositor restart,
   multi-monitor selection and X11 source close.
 
-Exit: recording and screenshot work on Wayland and X11 with clear unsupported /
+Exit: recording works on Wayland and X11 with clear unsupported /
 permission errors rather than fallback executables.
 
 ### 6. Remove the remaining ffprobe/FFmpeg users
@@ -383,8 +368,8 @@ permission errors rather than fallback executables.
   old docs/tests and all production `exec` media calls once unused.
 
 Exit: `rg -n 'ffmpeg|ffprobe' --glob '!docs/**' .` has no production callers,
-and a clean machine/container with no FFmpeg can build, record, screenshot,
-import supported media and transcribe.
+and a clean machine/container with no FFmpeg can build, record, import
+supported media and transcribe.
 
 ## Acceptance and non-negotiable tests
 
@@ -406,13 +391,13 @@ import supported media and transcribe.
 | Phase | State |
 |---|---|
 | 0. Lock behavior, prove the native ABI | **done on Windows.** WGC + D3D11 staging readback delivers BGRA physical pixels with monotonic PTS; built by mingw cgo, no MSVC DLL needed. |
-| 1. Common frame pipeline, preview, screenshots | **done on Windows.** `capture.Backend`/`Stream`/`Frame`, typed errors, bounded queue, native JPEG preview (no TCP, no subprocess), PNG screenshots with atomic rename, `Library.AddScreenshot` (the design keeps the button out of the recorder). |
+| 1. Common frame pipeline and preview | **done on Windows.** `capture.Backend`/`Stream`/`Frame`, typed errors, bounded queue and the native JPEG preview (no TCP, no subprocess). |
 | 2. Encoders, PCM, fragmented MP4 | **not started.** Recording still hands raw BGRA to FFmpeg over a named pipe; no `internal/media` yet. |
 
 ### What phase 1 changed
 
 - `internal/capture/backend.go` holds the contracts: `Backend`, `Stream`,
-  `Frame`, `StreamConfig`, `SnapshotConfig`, the typed errors, the two-frame
+  `Frame`, `StreamConfig`, the typed errors, the two-frame
   queue and the BGRA helpers.
 - `backend_windows.go` + `wgc_windows.c`/`wgc.h` are the Windows backend. The C
   bridge keeps every C++/WinRT object on its own side and only passes
@@ -426,9 +411,7 @@ import supported media and transcribe.
   of hanging the recorder.
 - `livepreview.go` replaces the MJPEG/TCP preview: the newest raw frame is
   encoded to a 1600-wide, quality-90 JPEG in process, at most five times a second.
-- `screenshot.go` writes PNG through a temporary file plus rename.
-- `Library.AddScreenshot`/`AddNativeRecording` insert metadata instead of
-  probing.
+- `Library.AddNativeRecording` inserts metadata instead of probing.
 - The old DDA/GDI `resolveSource`, `mpjpeg` `previewHub` and their tests are
   deleted rather than kept behind a build tag.
 
