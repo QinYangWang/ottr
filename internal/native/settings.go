@@ -619,9 +619,10 @@ func (a *App) providerCard(c *ui.Context, t *ui.Theme, label, host, baseURL stri
 			ui.Text(c, host).FontSize(11.5).TextColor(p.Ink3).SingleLine()
 		})
 	})
-	// Custom is the state of an endpoint that matches no preset, so it is
-	// shown rather than clicked.
-	if card.Clicked() && baseURL != "" && !chosen {
+	// A click chooses the endpoint: a preset fills its URL in, Custom clears
+	// the field so the user types their own. An endpoint that matches no
+	// preset already shows Custom as chosen, and clicking it keeps the URL.
+	if card.Clicked() && !chosen {
 		a.provider.BaseURL = baseURL
 	}
 }

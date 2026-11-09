@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"ottr/internal/asr"
+	"ottr/internal/summary"
 	"ottr/internal/translate"
 )
 
@@ -108,5 +109,39 @@ func TestTranscriptionPageWithoutAModel(t *testing.T) {
 	}
 	if !tt.HasText("SenseVoice Small") || !tt.HasText("Download") {
 		t.Errorf("the models to download are missing: %q", tt.Texts())
+	}
+}
+
+// The Custom tile is a choice like the presets: it clears the endpoint so one
+// can be typed, and an endpoint of one's own shows it as chosen.
+func TestProviderCustomIsSelectable(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.loadedProvider = true
+	a.provider = providerSettings{
+		BaseURL: "https://api.deepseek.com/v1", Model: "deepseek-chat",
+		TranslatePrompt: translate.DefaultPrompt, SummaryPrompt: summary.DefaultPrompt,
+	}
+	tt := settingsTester(a, 2, WideWidth, WideHeight)
+	tt.Frame()
+	if !tt.HasText("Custom") {
+		t.Fatalf("no Custom tile: %q", tt.Texts())
+	}
+	if err := tt.Click("Custom"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.provider.BaseURL != "" {
+		t.Fatalf("Custom kept the preset endpoint %q", a.provider.BaseURL)
+	}
+
+	// Typing an endpoint of one's own keeps Custom chosen.
+	a.provider.BaseURL = "https://api.moonshot.cn/v1"
+	tt.Frame()
+	if err := tt.Click("Custom"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.provider.BaseURL != "https://api.moonshot.cn/v1" {
+		t.Errorf("clicking the chosen Custom tile wiped the URL: %q", a.provider.BaseURL)
 	}
 }
