@@ -335,7 +335,7 @@ func nameOf[T comparable](selected T, options []SelectOption[T]) string {
 func Select[T comparable](c *ui.Context, t *ui.Theme, selected *T, options []SelectOption[T], label, accessibility string, icon *ui.SVG, onChoose func(T)) {
 	p := P(t)
 	root := ui.Column(c).FillWidth().MinWidth(0).Radius(RadiusControl).Border(1, p.Line2).
-		Background(p.Sheet)
+		Background(p.Sheet).Clip()
 	open := ui.Local(root, "select-open", func() bool { return false })
 	if *open {
 		root.Radius(RadiusControl, RadiusControl, 0, 0)
