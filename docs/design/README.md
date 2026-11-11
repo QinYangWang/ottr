@@ -17,7 +17,7 @@ Open any file in `pages/` in a browser. Each one is the frame's own HTML, self-c
 | --- | --- | --- |
 | `01-recorder` | 1280×800 | Sidebar, library list and the New capture panel |
 | `02-recorder-dark` | 1280×800 | Same, dark |
-| `03-recording` | 1280×800 | The capture panel as the live panel: clock, meters, Pause/Stop, live transcript; REC pill in the title bar |
+| `03-recording` | 1280×800 | Recording, in the item page's shell: the live picture in the stage, `Recording` with the clock and Pause/Stop, the facts strip, the live transcript on the right |
 | `04-recording-dark` | 1280×800 | Same, dark |
 | `05-transcribing` | 1280×800 | Item page after Stop: the pipeline card (transcribe → translate → summarize) |
 | `06-playback` | 1280×800 | Item page: way back, stage, chapter-segmented seek bar, facts strip, document panel |
@@ -115,7 +115,7 @@ machines without a CJK font (Linux containers), where 中文 would otherwise dra
 | Window frame, breakpoints, title bar and REC pill, rail, back button | [`app.go`](../../internal/native/app.go) |
 | Sidebar: Library, Settings sections, disk card | [`shell.go`](../../internal/native/shell.go) |
 | New capture panel: source tiles, preview, audio rows, last recording, Ctrl+Shift+R | [`capture.go`](../../internal/native/capture.go) |
-| Live panel while recording (clock, sounds, Pause/Stop, live transcript) | [`recorder.go`](../../internal/native/recorder.go) |
+| Recording page while it runs (stage with the live picture, clock, Pause/Stop, facts, live transcript) | [`recorder.go`](../../internal/native/recorder.go) |
 | Library page: title, search (Ctrl+K), filter chips, list/grid, day groups | [`library.go`](../../internal/native/library.go), [`details.go`](../../internal/native/details.go) |
 | A library row's first line and speaker count | [`rowfacts.go`](../../internal/native/rowfacts.go) |
 | Thumbnails | [`thumbnail.go`](../../internal/native/thumbnail.go) |

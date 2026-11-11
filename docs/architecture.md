@@ -76,14 +76,15 @@ One native window holds everything; it changes shape with its width (1280 wide,
 | Rail (`rail`, from 900 px) | New recording, Library, summaries, Speakers and Settings, as 36 px icon buttons |
 | Library (`libraryPage`) | search, the filter chips and the media list or grid: a 16:9 thumbnail, status chips, the name, the source and the date, with a menu of the actions |
 | Recording form (`sourceSection`, `audioSection`) | source cards, the preview, the display select, and the audio, live-transcript and translate selects |
-| Recording panel (`livePanel`) | the clock, Pause and Stop, and the live transcript with its translation |
+| Recording page (`recordingPage`, while a recording runs) | the whole window in the item page's shell: `Recording` with the running clock and Pause/Stop, the live picture in the stage, the facts strip, and the live transcript with its translation on the right |
 | Session page (`sessionPage`) | the way back, the name with `Show file` and `Delete`, the player stage, the fact strip, and the Transcript/Summary tabs |
 | Settings (`settingsPage`) | the section chosen in the sidebar: the model, the AI endpoint and prompts, the speaker library, or the look |
 
 The wide window lays the sidebar, the library and the 360 px capture panel side by
-side; from 900 px the sidebar becomes the rail and one page shows at a time; at
-420 px the page fills the window. Starting a recording shows the live panel, and
-stopping it opens the finished recording's page.
+to side; from 900 px the sidebar becomes the rail and one page shows at a time; at
+420 px the page fills the window. A recording running takes the whole window over —
+the rail and the library come back when it stops — and stopping it opens the
+finished recording's page.
 
 `internal/native/theme.go` holds the palette: it starts from
 `ui.LightTheme` / `ui.DarkTheme` and substitutes the prototype's surfaces,

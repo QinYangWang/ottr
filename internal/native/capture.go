@@ -12,15 +12,11 @@ import (
 )
 
 // capturePanel is the 360px panel docked at the right of the wide window: a
-// new capture, which becomes the live panel while recording.
+// new capture. While a recording runs the whole window is its page.
 func (a *App) capturePanel(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
 	ui.Column(c).Width(captureWidth).Shrink(0).FillHeight().MinHeight(0).
 		Background(p.Sheet).BorderWidth(0, 0, 0, 1).BorderColor(p.Line).Children(func() {
-		if a.recording {
-			a.livePanel(c, t, false)
-			return
-		}
 		a.captureHead(c, t, false)
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c).Padding(16, 20, 20, 20).Gap(12).Children(func() {
@@ -319,20 +315,7 @@ func (a *App) recorderPage(c *ui.Context, t *ui.Theme) {
 	narrow := layoutOf(width) == "narrow"
 	ui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(p.Sheet).Children(func() {
 		if a.recording {
-			if narrow {
-				a.livePanel(c, t, true)
-				return
-			}
-			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-				ui.Scroll(c).Grow(1).MinWidth(0).Children(func() {
-					ui.Column(c).Padding(20, 24).Gap(12).Children(func() {
-						kit.Label(c, t, a.tr("Recording"))
-						a.recordingStage(c, t)
-					})
-				})
-				ui.Column(c).Width(captureWidth).Shrink(0).FillHeight().BorderWidth(0, 0, 0, 1).
-					BorderColor(p.Line).Children(func() { a.livePanel(c, t, false) })
-			})
+			a.recordingPage(c, t)
 			return
 		}
 		a.captureHead(c, t, narrow)

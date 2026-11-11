@@ -116,7 +116,7 @@ The canvas may only use what `internal/native` can paint:
 | Frame, breakpoints (`layoutOf`: wide ≥1100, mid ≥560, narrow), title bar, rail | `app.go` |
 | Sidebar and status card | `shell.go` |
 | Capture panel, source tiles, audio rows, shortcuts | `capture.go` |
-| Live panel while recording | `recorder.go` |
+| Recording page while it runs (item-page shell: stage, clock, Pause/Stop, facts, live transcript) | `recorder.go` |
 | Library page, rows, day groups, row facts | `library.go`, `details.go`, `rowfacts.go` |
 | Item page, document panel, summary | `session.go`, `player.go`, `transcribing.go` |
 | Dialogs / Settings / subtitle menu | `dialogs.go` / `settings.go` / `settings_menu.go` |

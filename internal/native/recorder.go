@@ -10,59 +10,115 @@ import (
 	"ottr/internal/native/kit"
 )
 
-// livePanel is the capture panel while recording: the clock, what is heard,
-// Pause and Stop, and the live transcript with its translation under each
-// final line. full lays it out as the whole window (the narrow layout), with
-// the picture of what is recorded on top.
-func (a *App) livePanel(c *ui.Context, t *ui.Theme, full bool) {
+// recordingPage is the window while a recording runs, in the shell of the item
+// page it becomes after Stop: the stage with the live picture, the facts under
+// it, and the document panel with the live transcript. The picture is the
+// biggest thing in the window, which is the point of recording in it.
+func (a *App) recordingPage(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
-	ui.Column(c).Fill().MinHeight(0).Background(p.Sheet).Children(func() {
-		ui.Column(c).FillWidth().Shrink(0).Padding(18, 20, 16, 20).Gap(12).
-			BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
+	width, _ := c.Size()
+	layout := layoutOf(width)
+	if layout == "narrow" {
+		ui.Column(c).Grow(1).MinWidth(0).FillHeight().Background(p.Sheet).Children(func() {
+			ui.Column(c).Shrink(0).Padding(12, 16).Gap(12).Children(func() {
+				a.recordingHead(c, t)
+				a.recordingStage(c, t)
+			})
+			ui.Column(c).Grow(1).MinHeight(0).BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
+				a.liveTranscript(c, t)
+			})
+		})
+		a.recordShortcut(c)
+		return
+	}
+	panel := float32(docWidth)
+	if layout == "mid" {
+		panel = docWidthMid
+	}
+	ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch).Background(p.Sheet).Children(func() {
+		ui.Scroll(c).Grow(1).MinWidth(0).Children(func() {
+			ui.Column(c).Padding(16, 24, 24, 24).Gap(16).Children(func() {
+				a.recordingHead(c, t)
+				a.recordingStage(c, t)
+				a.recordingFacts(c, t)
+			})
+		})
+		ui.Column(c).Width(panel).Shrink(0).FillHeight().MinWidth(0).
+			BorderWidth(0, 0, 0, 1).BorderColor(p.Line).Children(func() {
+			a.liveTranscript(c, t)
+		})
+	})
+	a.recordShortcut(c)
+}
+
+// recordingHead is what records, for how long and where it goes, with the two
+// controls a running recording needs.
+func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
+	p := pal(t)
+	label := a.tr("Recording")
+	if a.recordingPaused {
+		label = a.tr("Paused")
+	}
+	line := a.liveSourceLine()
+	if a.Rec != nil && a.Rec.Dir != "" {
+		line += " · " + shortDir(a.Rec.Dir)
+	}
+	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				label := a.tr("Recording")
-				if a.recordingPaused {
-					label = a.tr("Paused")
-				}
-				kit.Chip(c, t, kit.ChipRec, label)
-				ui.Text(c, a.liveSourceLine()).FontSize(12).TextColor(p.Ink3).SingleLine().MinWidth(0)
-				ui.Spacer(c)
+				ui.Text(c, label).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink)
+				kit.Chip(c, t, kit.ChipRec, fmtClock(a.recordingElapsed().Milliseconds()))
 				if a.busy {
 					ui.Spinner(c).Label(a.tr("Finishing")).Size(14, 14)
 				}
 			})
-			ui.Row(c).AlignItems(ui.End).Gap(8).Children(func() {
-				mono(ui.Text(c, fmtClock(a.recordingElapsed().Milliseconds()))).FontSize(34).
-					FontWeight(500).LetterSpacing(-0.5).TextColor(p.Ink).Grow(1)
-				if a.previewW > 0 {
-					mono(ui.Text(c, a.trf("%dp", a.previewH))).FontSize(11.5).TextColor(p.Ink3).
-						Padding(0, 0, 6, 0)
-				}
-			})
-			if full {
-				a.recordingStage(c, t)
-			}
-			ui.Column(c).Gap(4).Children(func() {
-				a.liveSoundRow(c, t, iconSpeaker, iconSpeaker, "System audio", a.speaker)
-				a.liveSoundRow(c, t, iconMic, iconMicOff, "Microphone", a.microphone)
-			})
-			ui.Row(c).FillWidth().Gap(8).Children(func() {
-				pauseLabel, pauseIcon := a.tr("Pause"), iconPause
-				if a.recordingPaused {
-					pauseLabel, pauseIcon = a.tr("Resume"), iconPlay
-				}
-				if kit.Button(c, t, kit.Secondary, pauseIcon, pauseLabel, true).Grow(1).Basis(0).
-					Disabled(a.busy).Clicked() && !a.busy {
-					a.Rec.SetPaused(!a.recordingPaused)
-				}
-				if kit.Button(c, t, kit.Danger, iconStop, a.tr("Stop"), true).Grow(1).Basis(0).
-					Disabled(a.busy).Clicked() && !a.busy {
-					a.stopRecording(false)
-				}
-			})
+			ui.Text(c, line).FontSize(12).TextColor(p.Ink3).SingleLine()
 		})
-		a.liveTranscript(c, t)
+		pauseLabel, pauseIcon := a.tr("Pause"), iconPause
+		if a.recordingPaused {
+			pauseLabel, pauseIcon = a.tr("Resume"), iconPlay
+		}
+		if kit.Button(c, t, kit.Secondary, pauseIcon, pauseLabel, false).Disabled(a.busy).Clicked() && !a.busy {
+			if a.Rec != nil {
+				a.Rec.SetPaused(!a.recordingPaused)
+			}
+		}
+		if kit.Button(c, t, kit.Danger, iconStop, a.tr("Stop"), false).Disabled(a.busy).Clicked() && !a.busy {
+			a.stopRecording(false)
+		}
 	})
+}
+
+// recordingFacts is the media's four facts as they stand while it is written:
+// where it comes from, what it hears, and with which model.
+func (a *App) recordingFacts(c *ui.Context, t *ui.Theme) {
+	p := pal(t)
+	model := ""
+	if a.MM != nil {
+		model = shortModel(a.MM.CurrentName())
+	}
+	facts := [][2]string{
+		{a.tr("Source"), a.sourceName()},
+		{a.tr("System audio"), deviceOr(a.speaker, a.tr("Off"))},
+		{a.tr("Microphone"), deviceOr(a.microphone, a.tr("Off"))},
+		{a.tr("Model"), model},
+	}
+	ui.Row(c).FillWidth().Padding(14, 0, 0, 0).Gap(16).BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
+		for i, fact := range facts {
+			ui.Column(c.Key(i)).Grow(1).Width(0).MinWidth(0).Gap(4).Children(func() {
+				ui.Text(c, fact[0]).FontSize(11.5).TextColor(p.Ink3).SingleLine()
+				ui.Text(c, fact[1]).FontSize(12.5).TextColor(p.Ink).SingleLine().Tooltip(fact[1])
+			})
+		}
+	})
+}
+
+// deviceOr names a device, or the word for taking none.
+func deviceOr(device capture.AudioDevice, off string) string {
+	if device.ID == "" {
+		return off
+	}
+	return device.Name
 }
 
 // liveSourceLine is what is recorded, said briefly: "Display 1 · System audio".
@@ -75,20 +131,6 @@ func (a *App) liveSourceLine() string {
 		parts = append(parts, a.tr("Microphone"))
 	}
 	return strings.Join(parts, " · ")
-}
-
-// liveSoundRow is one sound the recording takes, or Off.
-func (a *App) liveSoundRow(c *ui.Context, t *ui.Theme, icon, offIcon *ui.SVG, label string, device capture.AudioDevice) {
-	p := pal(t)
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		glyph, value := icon, device.Name
-		if device.ID == "" {
-			glyph, value = offIcon, a.tr("Off")
-		}
-		ui.Icon(c, glyph).FontSize(14).TextColor(p.Ink3)
-		ui.Text(c, a.tr(label)).FontSize(11.5).TextColor(p.Ink3).Width(84).SingleLine()
-		ui.Text(c, value).FontSize(11.5).TextColor(p.Ink2).SingleLine().MinWidth(0)
-	})
 }
 
 // recordingStage is the picture of what is being recorded.

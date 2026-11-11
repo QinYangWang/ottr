@@ -550,6 +550,28 @@ func TestSourceCardsAndPicker(t *testing.T) {
 	}
 }
 
+// A recording takes the whole window over, in the item page's shell: the stage
+// with the live picture, the clock and the two controls, the facts, and the live
+// transcript beside it. The library comes back when the recording stops.
+func TestRecordingTakesTheWindow(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.recording = true
+	a.startedAt = time.Now().Add(-23 * time.Second)
+	tt := ui.NewTester(func(c *ui.Context) { a.frame(c, a.applyTheme(c)) }, WideWidth, WideHeight)
+	tt.Frame()
+	if _, ok := tt.Find("Recording preview"); !ok {
+		t.Fatalf("the recording page has no live picture: %q", tt.Texts())
+	}
+	if tt.HasText("All media") {
+		t.Error("the library is still drawn beside the recording")
+	}
+	for _, want := range []string{"Recording", "Pause", "Stop", "LIVE TRANSCRIPT", "System audio"} {
+		if !tt.HasText(want) {
+			t.Errorf("the recording page has no %q: %q", want, tt.Texts())
+		}
+	}
+}
+
 func TestCompactRecordingShowsTimerOnce(t *testing.T) {
 	a, _ := newTestApp(t)
 	a.recording = true

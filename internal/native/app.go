@@ -349,7 +349,10 @@ func (a *App) frame(c *ui.Context, t *ui.Theme) {
 					a.rail(c, t)
 				}
 				a.settingsPane(c, t)
-			case detail && !a.recording:
+			case a.recording:
+				// The item page's shell, with the screen being recorded in it.
+				a.recordingPage(c, t)
+			case detail:
 				if layout != "narrow" {
 					a.rail(c, t)
 				}
@@ -360,13 +363,13 @@ func (a *App) frame(c *ui.Context, t *ui.Theme) {
 				a.capturePanel(c, t)
 			case layout == "mid":
 				a.rail(c, t)
-				if a.libraryOpen && !a.recording {
+				if a.libraryOpen {
 					a.libraryPage(c, t)
 				} else {
 					a.recorderPage(c, t)
 				}
 			default:
-				if a.libraryOpen && !a.recording {
+				if a.libraryOpen {
 					a.libraryPage(c, t)
 				} else {
 					a.recorderPage(c, t)

@@ -89,6 +89,7 @@ func TestPreview(t *testing.T) {
 	still := func(c *ui.Context) { a.frame(c, a.applyTheme(c)) }
 	shoot("03-recording", still, WideWidth, WideHeight, false)
 	shoot("04-recording-dark", still, WideWidth, WideHeight, true)
+	shoot("19b-recording-900", still, 900, 620, false)
 	shoot("20b-recording-420", still, CompactWidth, CompactHeight, false)
 	a.recording, a.late, a.liveTrans = false, nil, nil
 

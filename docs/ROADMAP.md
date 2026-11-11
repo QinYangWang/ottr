@@ -305,13 +305,6 @@ The window follows the "studio console + highlighter" canvas of 2026-11-06
 [docs/design](design/README.md)). These parts of the frames have no code
 behind them yet, or are drawn differently:
 
-- **Live level meters.** The live panel draws green level bars beside
-  System audio; the capture service reports no audio level, so Go shows the
-  device name alone.
-- **Recording size and format.** The live panel says "1.4 GB · 1080p30"; Go
-  shows the resolution only.
-- **Monitor names.** The display select reads "Display 1 — DELL U2723QE";
-  the capture backend names displays by number only.
 - **中文 flag and "Has 中文" filter.** Rows of translated media carry an amber
   中文 chip and the library has a "Has 中文" chip; translations are not
   counted per media in the library query, so neither exists.
