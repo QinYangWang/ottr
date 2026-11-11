@@ -242,7 +242,6 @@ func (a *App) docPanel(c *ui.Context, t *ui.Theme, m library.Media) {
 	})
 }
 
-
 // docTab is one tab: its name, an optional chip, and the ink underline when
 // chosen.
 func (a *App) docTab(c *ui.Context, t *ui.Theme, index int, label, chip string, kind kit.ChipKind) {
@@ -566,7 +565,6 @@ func (a *App) searchBar(c *ui.Context, t *ui.Theme, m library.Media, hits []int6
 		})
 	})
 }
-
 
 // translationTargetSelect picks the language translations are shown in.
 func (a *App) translationTargetSelect(c *ui.Context, t *ui.Theme, m library.Media) {
