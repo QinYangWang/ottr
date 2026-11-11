@@ -188,6 +188,16 @@ func TestPreview(t *testing.T) {
 	}
 	a.settingsOpen = false
 
+	// First run, with no model installed: the page that asks for one.
+	a.onboarding, a.modelLoaded = true, true
+	a.modelList = []models.Offer{
+		{ID: "sensevoice", Name: "SenseVoice", Detail: "Fast, four languages", DownloadSize: 160 << 20},
+		{ID: "funasr_nano", Name: "FunASR Nano", Detail: "Small, accurate in Chinese", DownloadSize: 240 << 20},
+		{ID: "qwen3_asr", Name: "Qwen3 ASR 0.6B", Detail: "Large, the most accurate", DownloadSize: 900 << 20},
+	}
+	shoot("25-first-run", a.view, WideWidth, WideHeight, false)
+	a.onboarding, a.modelList = false, nil
+
 	// The first run: nothing in the library.
 	empty, _ := newTestApp(t)
 	for _, m := range empty.media {

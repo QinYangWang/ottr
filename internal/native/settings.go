@@ -410,8 +410,9 @@ func (a *App) modelDetail(offer models.Offer) string {
 	return strings.Join(parts, " · ")
 }
 
-// guideToModels opens the download page when nothing can transcribe yet: on a
-// first launch, that is the one thing the window can ask for.
+// guideToModels shows the first-run page when nothing can transcribe yet: on a
+// launch without a model, downloading one is the one thing the window can ask
+// for. "Later" is remembered for the session, so the page does not come back.
 func (a *App) guideToModels() {
 	if a.MM == nil {
 		return
@@ -421,8 +422,9 @@ func (a *App) guideToModels() {
 			return
 		}
 		a.update(func() {
-			a.settingsTab = 1
-			a.openSettings()
+			if !a.onboardLater {
+				a.onboarding = true
+			}
 		})
 	}()
 }
@@ -442,6 +444,9 @@ func (a *App) loadModels() {
 		}
 		a.update(func() {
 			a.modelList, a.modelInUse, a.modelLoading = list, inUse, false
+			if inUse != "" {
+				a.onboarding = false
+			}
 		})
 	}()
 }

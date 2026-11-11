@@ -55,14 +55,19 @@ func (a *App) recordingPage(c *ui.Context, t *ui.Theme) {
 // written, and the two controls a running recording needs.
 func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
+	width, _ := c.Size()
 	name := a.recName
 	if name == "" {
 		name = a.tr("Recording")
 	}
 	ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
 		a.recordingPill(c, t)
-		ui.Text(c, name).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
-			Grow(1).MinWidth(0).SingleLine()
+		if layoutOf(width) == "narrow" {
+			ui.Spacer(c)
+		} else {
+			ui.Text(c, name).Height(24).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
+				Grow(1).MinWidth(0).SingleLine()
+		}
 		if a.busy {
 			ui.Spinner(c).Label(a.tr("Finishing")).Size(14, 14)
 		}
@@ -79,6 +84,11 @@ func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
 			a.stopRecording(false)
 		}
 	})
+	if layoutOf(width) == "narrow" {
+		// 420px: the file has a line of its own under the strip.
+		ui.Text(c, name).FontSize(15).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
+			SingleLine().MinWidth(0).Padding(0, 0, 2, 0)
+	}
 }
 
 // recordingFacts is the media's four facts as they stand while it is written:
@@ -134,21 +144,25 @@ func (a *App) recordingStage(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// liveTranscript is the live text: its controls, the lines, and what the text
-// is worth.
+// liveTranscript is the live text: the two selects that say what it listens to
+// and what it is translated into, the lines, and what the text is worth.
 func (a *App) liveTranscript(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
+	width, _ := c.Size()
 	ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Row(c).FillWidth().Padding(14, 20, 6, 20).Gap(6).AlignItems(ui.Center).Children(func() {
-			kit.Label(c, t, a.tr("Live transcript")).Grow(1)
-			if a.canTranslateLive() {
-				a.liveTranslateChip(c, t)
+		ui.Row(c).FillWidth().Padding(14, 20, 6, 20).Gap(8).AlignItems(ui.Center).Children(func() {
+			if width >= wideMinWidth {
+				kit.Label(c, t, a.tr("Live transcript")).Grow(1)
+			} else {
+				// 344px and 420px: the two selects need the row more than the
+				// title does.
+				ui.Spacer(c)
 			}
 			a.liveLanguageSelect(c, t)
+			if a.canTranslateLive() {
+				a.liveTranslateSelect(c, t)
+			}
 		})
-		if a.liveTranslate && a.canTranslateLive() {
-			a.liveTranslationControls(c, t)
-		}
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c).Padding(6, 20, 16, 20).Gap(14).Children(func() {
 				shown := 0
@@ -175,27 +189,54 @@ func (a *App) liveTranscript(c *ui.Context, t *ui.Theme) {
 	})
 }
 
-// liveTranslateChip turns the translation of final lines on and off: amber
-// when on.
-func (a *App) liveTranslateChip(c *ui.Context, t *ui.Theme) {
-	p := pal(t)
-	label := a.trf("%s on", langName(a.trLang))
-	if !a.liveTranslate {
-		// Off names the switch, not a language: nothing is translated.
-		label = a.trf("%s off", a.tr("Translate"))
-	}
-	chip := ui.ButtonBase(c).Label(a.tr("Translate")).Tooltip(a.tr("Translate")).Role(ui.RoleSwitch).
-		Checked(a.liveTranslate).Height(22).Padding(0, 8).Radius(9999).Center().Cursor(ui.CursorPointer)
+// liveTranslateSelect turns the translation of final lines on and off: the
+// language they are shown in, or Off.
+func (a *App) liveTranslateSelect(c *ui.Context, t *ui.Theme) {
+	off := a.tr("Off")
+	name := off
 	if a.liveTranslate {
-		chip.Background(p.AmberSoft).TextColor(p.AmberInk)
-	} else {
-		chip.Background(p.Hover).TextColor(p.Ink2)
+		name = langName(a.trLang)
 	}
-	chip.Children(func() { ui.Text(c, label).FontSize(11).FontWeight(500).SingleLine() })
-	if chip.Clicked() {
-		a.liveTranslate = !a.liveTranslate
-		a.restartLiveTranslation()
+	options := make([]kit.SelectOption[string], 0, len(langs)+1)
+	options = append(options, kit.SelectOption[string]{Value: off, Label: off})
+	for _, l := range langs {
+		options = append(options, kit.SelectOption[string]{Value: l.name, Label: l.name})
 	}
+	ui.Column(c).Width(selectWidth).Shrink(0).Children(func() {
+		kit.Select(c, t, &name, options, a.tr("Translate into"), a.tr("Translate into"), iconLanguages, func(choice string) {
+			if choice == off {
+				a.liveTranslate = false
+				a.restartLiveTranslation()
+				return
+			}
+			for _, l := range langs {
+				if l.name == choice {
+					a.trLang, a.liveTranslate = l.code, true
+					a.restartLiveTranslation()
+				}
+			}
+		})
+	})
+}
+
+// liveLanguageSelect sets the spoken language of the recording in progress, as
+// the same select does on the recorder before it starts.
+func (a *App) liveLanguageSelect(c *ui.Context, t *ui.Theme) {
+	names, codes := a.langChoices()
+	lang := a.langLabel(a.defaultLanguage)
+	options := make([]kit.SelectOption[string], len(names))
+	for i, name := range names {
+		options[i] = kit.SelectOption[string]{Value: name, Label: name}
+	}
+	ui.Column(c).Width(selectWidth).Shrink(0).Children(func() {
+		kit.Select(c, t, &lang, options, a.tr("Spoken language"), a.tr("Spoken language"), iconCaptions, func(choice string) {
+			for i, name := range names {
+				if name == choice && codes[i] != a.defaultLanguage {
+					a.setDefaultLanguage(codes[i], nil)
+				}
+			}
+		})
+	})
 }
 
 // liveLineRow is one live line: its time, the text, and the translation under
@@ -222,58 +263,19 @@ func (a *App) liveLineRow(c *ui.Context, t *ui.Theme, line liveLine, translated 
 	})
 }
 
-// liveLanguageSelect sets the spoken language of the recording in progress, as
-// the same control does on a saved transcript.
-func (a *App) liveLanguageSelect(c *ui.Context, t *ui.Theme) {
-	names, codes := a.langChoices()
-	lang := a.langLabel(a.defaultLanguage)
-	options := make([]kit.SelectOption[string], len(names))
-	for i, name := range names {
-		options[i] = kit.SelectOption[string]{Value: name, Label: name}
-	}
-	kit.CompactSelect(c, t, &lang, options, a.tr("Spoken language"), 96, nil, func(choice string) {
-		for i, name := range names {
-			if name == choice && codes[i] != a.defaultLanguage {
-				a.setDefaultLanguage(codes[i], nil)
-			}
-		}
-	})
-}
-
 // liveMatches filters live text by the transcript search query.
 func (a *App) liveMatches(text string) bool {
 	q := strings.ToLower(strings.TrimSpace(a.segQuery))
 	return q == "" || strings.Contains(strings.ToLower(text), q)
 }
 
+// selectWidth is the width of the two selects beside the live transcript: the
+// spoken language and the language it is translated into.
+const selectWidth = 132
+
 // canTranslateLive reports whether a provider is there to translate with.
 func (a *App) canTranslateLive() bool {
 	return a.liveTranslator != nil || a.Trans != nil
-}
-
-// liveTranslationControls picks the target language of the live lines. It is
-// the same target the saved transcript uses, so switching one switches both.
-func (a *App) liveTranslationControls(c *ui.Context, t *ui.Theme) {
-	p := pal(t)
-	ui.Row(c).Padding(0, 20, 4, 20).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, a.tr("Translate into")).FontSize(11.5).TextColor(p.Ink3)
-		name := langName(a.trLang)
-		options := make([]kit.SelectOption[string], len(langs))
-		for i, l := range langs {
-			options[i] = kit.SelectOption[string]{Value: l.name, Label: l.name}
-		}
-		kit.CompactSelect(c, t, &name, options, a.tr("Translate into"), 120, nil, func(choice string) {
-			for _, l := range langs {
-				if l.name == choice && l.code != a.trLang {
-					a.trLang = l.code
-					a.restartLiveTranslation()
-				}
-			}
-		})
-		if len(a.liveTransBusy) > 0 {
-			ui.Spinner(c).Label(a.tr("Translating")).Size(12, 12)
-		}
-	})
 }
 
 // restartLiveTranslation drops every translated line and, when the switch is

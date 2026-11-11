@@ -32,6 +32,7 @@ Open any file in `pages/` in a browser. Each one is the frame's own HTML, self-c
 | `15-settings-speakers` | 1280×800 | Speaker library with search and rename |
 | `23-settings-transcription-download` | 1280×800 | The Qwen3 download in progress: model row with a progress bar |
 | `24-settings-transcription-first-run` | 1280×800 | First run without a model: the download callout and three Download buttons |
+| `25-first-run` | 1280×800 | The first-run guide: set up transcription, the three models with their download, Later |
 | `16-dialog-delete` | 440×252 | Delete recording |
 | `17-dialog-export` | 460×452 | Export: transcript / translation / summary, formats |
 | `18-dialog-failed` | 460×256 | Transcription failed |
@@ -124,6 +125,7 @@ machines without a CJK font (Linux containers), where 中文 would otherwise dra
 | Pipeline card after Stop | [`transcribing.go`](../../internal/native/transcribing.go) |
 | Dialogs: delete, export, transcription failed | [`dialogs.go`](../../internal/native/dialogs.go) |
 | Settings pages in the sidebar | [`settings.go`](../../internal/native/settings.go) |
+| First-run guide before a model is installed | [`onboarding.go`](../../internal/native/onboarding.go) |
 | Subtitle settings menu (document panel) | [`settings_menu.go`](../../internal/native/settings_menu.go) |
 | Icons (Lucide) | [`icons.go`](../../internal/native/icons.go), [`icons/`](../../internal/native/icons) |
 | Strings, English and 中文 | [`i18n.go`](../../internal/native/i18n.go) |

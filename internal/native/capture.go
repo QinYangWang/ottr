@@ -94,29 +94,66 @@ func (a *App) audioSection(c *ui.Context, t *ui.Theme) {
 
 // liveRow chooses the live transcript of the next recording: the model, or
 // none. It is offered whenever the build can recognize speech while recording.
+// liveRow chooses the language the next recording's live transcript listens
+// for, or none. Which model does the listening is set once, in Settings ▸
+// Transcription.
 func (a *App) liveRow(c *ui.Context, t *ui.Theme) {
 	if a.Rec == nil || a.Rec.Live == nil && a.liveStarter == nil {
 		return
 	}
-	model := ""
-	if a.MM != nil {
-		model = shortModel(a.MM.CurrentName())
+	names, codes := a.langChoices()
+	off := a.tr("Disabled")
+	current := off
+	if !a.liveOff {
+		current = a.langLabel(a.defaultLanguage)
 	}
-	if model == "" {
-		model = a.tr("On")
+	options := make([]kit.SelectOption[string], 0, len(names)+1)
+	options = append(options, kit.SelectOption[string]{Value: off, Label: off})
+	for _, name := range names {
+		options = append(options, kit.SelectOption[string]{Value: name, Label: name})
 	}
-	on := !a.liveOff
-	options := []kit.SelectOption[bool]{{Value: false, Label: a.tr("Disabled")}, {Value: true, Label: model}}
-	kit.Select(c, t, &on, options, a.tr("Live transcript"), a.tr("Live transcript"), iconCaptions, a.setLive)
+	kit.Select(c, t, &current, options, a.tr("Live transcript"), a.tr("Live transcript language"), iconCaptions, func(choice string) {
+		if choice == off {
+			a.setLive(false)
+			return
+		}
+		for i, name := range names {
+			if name != choice {
+				continue
+			}
+			a.setLive(true)
+			if codes[i] != a.defaultLanguage {
+				a.setDefaultLanguage(codes[i], nil)
+			}
+		}
+	})
 }
 
 // translateRow chooses the language live speech is translated into, or none.
+// translateRow chooses what the spoken words are translated into, or none.
 func (a *App) translateRow(c *ui.Context, t *ui.Theme) {
-	on := a.liveTranslate
-	options := []kit.SelectOption[bool]{{Value: false, Label: a.tr("Disabled")}, {Value: true, Label: langName(a.trLang)}}
-	kit.Select(c, t, &on, options, a.tr("Translate"), a.tr("Translate"), iconLanguages, func(on bool) {
-		a.liveTranslate = on
-		a.restartLiveTranslation()
+	off := a.tr("Disabled")
+	current := off
+	if a.liveTranslate {
+		current = langName(a.trLang)
+	}
+	options := make([]kit.SelectOption[string], 0, len(langs)+1)
+	options = append(options, kit.SelectOption[string]{Value: off, Label: off})
+	for _, l := range langs {
+		options = append(options, kit.SelectOption[string]{Value: l.name, Label: l.name})
+	}
+	kit.Select(c, t, &current, options, a.tr("Translate"), a.tr("Translate into"), iconLanguages, func(choice string) {
+		if choice == off {
+			a.liveTranslate = false
+			a.restartLiveTranslation()
+			return
+		}
+		for _, l := range langs {
+			if l.name == choice {
+				a.trLang, a.liveTranslate = l.code, true
+				a.restartLiveTranslation()
+			}
+		}
 	})
 }
 

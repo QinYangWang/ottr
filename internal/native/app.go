@@ -163,6 +163,11 @@ type App struct {
 	modelDLErrID    string
 	modelDLErr      string
 
+	// The first-run guide: the window asks for a model until one is installed
+	// or the user says later.
+	onboarding   bool
+	onboardLater bool
+
 	// Provider settings, read when the Settings window opens them. The page
 	// edits what translation and summaries share; the transcript menu still
 	// picks between the free and the AI translator.
@@ -342,6 +347,11 @@ func (a *App) frame(c *ui.Context, t *ui.Theme) {
 		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			m, detail := a.current()
 			switch {
+			case a.recording:
+				// The item page's shell, with the screen being recorded in it.
+				a.recordingPage(c, t)
+			case a.onboarding:
+				a.onboardingPage(c, t)
 			case a.settingsOpen && layout == "wide":
 				a.navSidebar(c, t)
 				a.settingsPage(c, t)
@@ -350,9 +360,6 @@ func (a *App) frame(c *ui.Context, t *ui.Theme) {
 					a.rail(c, t)
 				}
 				a.settingsPane(c, t)
-			case a.recording:
-				// The item page's shell, with the screen being recorded in it.
-				a.recordingPage(c, t)
 			case detail:
 				if layout != "narrow" {
 					a.rail(c, t)

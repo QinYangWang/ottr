@@ -720,9 +720,9 @@ func TestRecordingSettingsTab(t *testing.T) {
 		a.recorderPage(c, a.applyTheme(c))
 	}, CompactWidth, CompactHeight)
 	tt.Frame()
-	// The redesign puts the live transcript's settings on the page itself:
-	// the spoken language and the translation, without a menu between.
-	if !tt.HasText("Spoken language") || !tt.HasText("Live transcript") && !tt.HasText("LIVE TRANSCRIPT") {
+	// The live transcript's settings are two selects on the page itself: what it
+	// listens for and what it is translated into, without a menu between.
+	if !tt.HasText("Spoken language") || !tt.HasText("Translate into") {
 		t.Fatalf("the recording page has no live transcript settings: %q", tt.Texts())
 	}
 	if err := tt.Click("Spoken language"); err != nil {
@@ -732,6 +732,22 @@ func TestRecordingSettingsTab(t *testing.T) {
 	tt.Frame()
 	if !tt.HasText("English") {
 		t.Fatalf("the spoken language select offers %q", tt.Texts())
+	}
+	if err := tt.Click("English"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	tt.Frame()
+	if a.defaultLanguage != "en" {
+		t.Errorf("choosing English left the spoken language %q", a.defaultLanguage)
+	}
+	if err := tt.Click("Translate into"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(250 * time.Millisecond)
+	tt.Frame()
+	if !tt.HasText("Español") {
+		t.Errorf("the translation targets stop at %q", tt.Texts())
 	}
 }
 
@@ -798,5 +814,36 @@ func TestRecordingSwitchLabelsInChinese(t *testing.T) {
 	}
 	if got := a.trf("%s on", langName("zh")); got != "中文已开启" {
 		t.Errorf("a translation turned on reads %q, want 中文已开启", got)
+	}
+}
+
+// A launch without a model asks for one, in a page of its own: the three
+// models with their download, and Later, which records without a transcript
+// rather than asking again every frame.
+func TestOnboardingAsksForAModelOnce(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.onboarding, a.modelLoaded = true, true
+	a.modelList = []models.Offer{{
+		ID: "sensevoice", Name: "SenseVoice", Detail: "Fast, four languages", DownloadSize: 240 << 20,
+	}}
+	tt := ui.NewTester(func(c *ui.Context) { a.frame(c, a.applyTheme(c)) }, WideWidth, WideHeight)
+	tt.Frame()
+	for _, want := range []string{"Set up transcription", "SenseVoice", "Download", "Later"} {
+		if !tt.HasText(want) {
+			t.Fatalf("the first-run page has no %q: %q", want, tt.Texts())
+		}
+	}
+	if tt.HasText("All media") {
+		t.Error("the library is drawn behind the first-run page")
+	}
+	if err := tt.Click("Later"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.onboarding || !a.onboardLater {
+		t.Errorf("Later left onboarding=%v later=%v", a.onboarding, a.onboardLater)
+	}
+	if tt.HasText("Set up transcription") {
+		t.Errorf("the first-run page is still drawn: %q", tt.Texts())
 	}
 }

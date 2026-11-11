@@ -79,6 +79,7 @@ One native window holds everything; it changes shape with its width (1280 wide,
 | Recording page (`recordingPage`, while a recording runs) | the whole window in the item page's shell: the REC strip and the file being written on one line, Pause/Stop, the live picture in the stage, the facts strip, and the live transcript with its translation on the right |
 | Session page (`sessionPage`) | the way back, the name with `Show file` and `Delete`, the player stage, the fact strip, and the Transcript/Summary tabs |
 | Settings (`settingsPage`) | the section chosen in the sidebar: the model, the AI endpoint and prompts, the speaker library, or the look |
+| First run (`onboardingPage`) | before a model is installed: the three models with their download, Later, and the models folder |
 
 The wide window lays the sidebar, the library and the 360 px capture panel side by
 to side; from 900 px the sidebar becomes the rail and one page shows at a time; at

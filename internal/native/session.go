@@ -823,10 +823,25 @@ func progressBar(c *ui.Context, t *ui.Theme, value float64, width float32) {
 	})
 }
 
-var langs = []struct{ code, name string }{
-	{"en", "English"},
-	{"zh", "中文"},
-	{"ja", "日本語"},
+// langs are the languages Ottr names. spoken is true for the ones the
+// recognizer can be told to listen for; every one of them can be a translation
+// target.
+var langs = []struct {
+	code, name string
+	spoken     bool
+}{
+	{"en", "English", true},
+	{"zh", "中文", true},
+	{"ja", "日本語", true},
+	{"ko", "한국어", false},
+	{"es", "Español", false},
+	{"fr", "Français", false},
+	{"de", "Deutsch", false},
+	{"it", "Italiano", false},
+	{"pt", "Português", false},
+	{"ru", "Русский", false},
+	{"ar", "العربية", false},
+	{"hi", "हिन्दी", false},
 }
 
 func langName(code string) string {
@@ -839,11 +854,15 @@ func langName(code string) string {
 }
 
 // langChoices are the spoken languages the user can set, in the order the
-// select shows them: what was detected first, then the ones this app knows.
+// select shows them: what was detected first, then the ones the recognizer
+// knows.
 func (a *App) langChoices() (names, codes []string) {
 	names = append(names, a.tr("Auto"))
 	codes = append(codes, asr.DefaultLanguage)
 	for _, l := range langs {
+		if !l.spoken {
+			continue
+		}
 		names = append(names, l.name)
 		codes = append(codes, l.code)
 	}

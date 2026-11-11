@@ -52,6 +52,7 @@ const pages = [
   ["22-playback-420.html", "yihV5ej8VG", 420, 800],
   ["23-settings-transcription-download.html", "TjEwUnvB29", 1280, 800],
   ["24-settings-transcription-first-run.html", "AwzHZjAGsR", 1280, 800],
+  ["25-first-run.html", "D4FeKkG6in", 1280, 800],
 ];
 
 const client = process.env.DOOP_CLIENT ? process.env.DOOP_CLIENT.split(" ").filter(Boolean) : null;
