@@ -78,6 +78,7 @@ Read the row that matches, then stop.
 | Model discovery, validation, packaging | [docs/models.md](docs/models.md) |
 | Schema, migrations, cascades | [docs/storage.md](docs/storage.md) |
 | A screen, its tokens or its Go file | [docs/design/README.md](docs/design/README.md) |
+| The 中性 direction, its frames and how to carry on | [docs/design/neutral/README.md](docs/design/neutral/README.md) |
 | What is not implemented yet | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | Branch, commit and PR conventions | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | The whole docs tree | [docs/README.md](docs/README.md) |
