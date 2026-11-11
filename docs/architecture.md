@@ -71,12 +71,12 @@ One native window holds everything; it changes shape with its width (1280 wide,
 
 | Part | Shows |
 |---|---|
-| Title strip | `ottr`, what the window is when it is not the library, the REC pill while recording, and the page's own tools |
+| Title strip | `ottr`, what the window is when it is not the library, and the page's own tools |
 | Sidebar (`navSidebar`, from 1100 px) | Library, the four Settings sections, and the disk-usage card |
 | Rail (`rail`, from 900 px) | New recording, Library, summaries, Speakers and Settings, as 36 px icon buttons |
 | Library (`libraryPage`) | search, the filter chips and the media list or grid: a 16:9 thumbnail, status chips, the name, the source and the date, with a menu of the actions |
 | Recording form (`sourceSection`, `audioSection`) | source cards, the preview, the display select, and the audio, live-transcript and translate selects |
-| Recording page (`recordingPage`, while a recording runs) | the whole window in the item page's shell: `Recording` with the running clock and Pause/Stop, the live picture in the stage, the facts strip, and the live transcript with its translation on the right |
+| Recording page (`recordingPage`, while a recording runs) | the whole window in the item page's shell: the file being written as the title with the REC strip under it, Pause/Stop, the live picture in the stage, the facts strip, and the live transcript with its translation on the right |
 | Session page (`sessionPage`) | the way back, the name with `Show file` and `Delete`, the player stage, the fact strip, and the Transcript/Summary tabs |
 | Settings (`settingsPage`) | the section chosen in the sidebar: the model, the AI endpoint and prompts, the speaker library, or the look |
 

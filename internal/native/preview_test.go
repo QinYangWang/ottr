@@ -75,6 +75,7 @@ func TestPreview(t *testing.T) {
 
 	// A recording under way, with live text and a translated final line.
 	a.recording, a.startedAt = true, time.Now().Add(-12*time.Minute-48*time.Second)
+	a.recName = "Recording 2026-11-11 13.27.04.mp4"
 	a.late = []liveLine{
 		{at: 731000, utterance: 1, text: "So the export dialog is the last thing blocking 0.6.1.", final: true},
 		{at: 735000, utterance: 2, text: "I'll take it and pair with you tomorrow morning.", final: true},
@@ -92,6 +93,7 @@ func TestPreview(t *testing.T) {
 	shoot("19b-recording-900", still, 900, 620, false)
 	shoot("20b-recording-420", still, CompactWidth, CompactHeight, false)
 	a.recording, a.late, a.liveTrans = false, nil, nil
+	a.recName = ""
 
 	// Transcribing after Stop: a job in recognition, the live lines kept.
 	pending := ids["Bug triage"]

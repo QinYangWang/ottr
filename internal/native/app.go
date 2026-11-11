@@ -90,6 +90,7 @@ type App struct {
 	// The recording in progress, mirrored from the recorder each frame.
 	recording       bool
 	recordingPaused bool
+	recName         string // the file being written, while it is being written
 	startedAt       time.Time
 	pauseStarted    time.Time
 	pausedTotal     time.Duration
@@ -408,8 +409,6 @@ func (a *App) windowTitleBar(c *ui.Context, t *ui.Theme, title string, tools fun
 			ui.Text(c, title).FontSize(12).TextColor(p.Ink3).Padding(0, 0, 0, 14).SingleLine()
 		}
 		ui.Spacer(c)
-		a.recordingPill(c, t)
-		ui.Spacer(c)
 		if tools != nil {
 			tools()
 		}
@@ -448,21 +447,18 @@ func (a *App) backButton(c *ui.Context, t *ui.Theme, label string) bool {
 	return btn.Clicked()
 }
 
-// recordingPill says a recording runs, and for how long, in the middle of the
-// title bar.
+// recordingPill is the strip that says a recording runs, and for how long. It
+// sits on the recording page, under the file being written.
 func (a *App) recordingPill(c *ui.Context, t *ui.Theme) {
-	if !a.recording {
-		return
+	label := a.tr("Recording")
+	if a.recordingPaused {
+		label = a.tr("Paused")
 	}
 	p := pal(t)
-	ui.Row(c).Height(24).Padding(0, 10).Radius(9999).Gap(7).AlignItems(ui.Center).
+	ui.Row(c).Height(24).Padding(0, 10).Radius(9999).Gap(7).AlignItems(ui.Center).AlignSelf(ui.Start).
 		Background(p.RedSoft).Children(func() {
 		dot := ui.Box(c).Size(8, 8).Radius(4).Background(p.Red)
 		dot.Opacity(float32(0.35 + 0.65*dot.Loop("pulse", 1100*time.Millisecond, ui.EaseInOut)))
-		label := "REC"
-		if a.recordingPaused {
-			label = a.tr("Paused")
-		}
 		ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(p.RedInk)
 		mono(ui.Text(c, fmtClock(a.recordingElapsed().Milliseconds()))).FontSize(12).FontWeight(600).
 			TextColor(p.RedInk)
@@ -512,12 +508,14 @@ func (a *App) mirror(c *ui.Context) {
 	case a.recording && !st.Recording && !a.busy:
 		// Stopped by something other than this window's Stop button.
 		a.recording, a.late, a.preview = false, nil, nil
+		a.recName = ""
 		a.resetLiveTranslation()
 		a.reload()
 		a.showLatest()
 		a.showPreview()
 	case st.Recording && !a.recording:
 		a.recording, a.startedAt, a.late, a.preview = true, st.StartedAt, nil, nil
+		a.recName = st.Name
 		a.resetLiveTranslation()
 		a.recordingPaused, a.pauseStarted, a.pausedTotal = false, time.Time{}, 0
 	}

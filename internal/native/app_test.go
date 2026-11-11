@@ -556,6 +556,7 @@ func TestSourceCardsAndPicker(t *testing.T) {
 func TestRecordingTakesTheWindow(t *testing.T) {
 	a, _ := newTestApp(t)
 	a.recording = true
+	a.recName = "Recording 2026-11-11 13.27.04.mp4"
 	a.startedAt = time.Now().Add(-23 * time.Second)
 	tt := ui.NewTester(func(c *ui.Context) { a.frame(c, a.applyTheme(c)) }, WideWidth, WideHeight)
 	tt.Frame()
@@ -565,7 +566,7 @@ func TestRecordingTakesTheWindow(t *testing.T) {
 	if tt.HasText("All media") {
 		t.Error("the library is still drawn beside the recording")
 	}
-	for _, want := range []string{"Recording", "Pause", "Stop", "LIVE TRANSCRIPT", "System audio"} {
+	for _, want := range []string{a.recName, "Recording", "Pause", "Stop", "LIVE TRANSCRIPT", "System audio"} {
 		if !tt.HasText(want) {
 			t.Errorf("the recording page has no %q: %q", want, tt.Texts())
 		}
@@ -584,8 +585,8 @@ func TestCompactRecordingShowsTimerOnce(t *testing.T) {
 		})
 	}, CompactWidth, CompactHeight)
 	tt.Frame()
-	// The clock is shown twice by design: in the title bar's REC pill and as
-	// the page's large clock. Nothing else repeats it.
+	// The clock is shown once, on the recording page. Nothing else repeats it:
+	// the title bar no longer carries a REC pill.
 	count := 0
 	for _, text := range tt.Texts() {
 		if strings.HasSuffix(text, "0:23") {
@@ -595,7 +596,7 @@ func TestCompactRecordingShowsTimerOnce(t *testing.T) {
 			}
 		}
 	}
-	if count != 2 {
+	if count != 1 {
 		t.Fatalf("recording timer appears %d times: %q", count, tt.Texts())
 	}
 	preview, ok := tt.Find("Recording preview")

@@ -46,7 +46,10 @@ type State struct {
 	Recording bool      `json:"recording"`
 	Paused    bool      `json:"paused,omitempty"`
 	StartedAt time.Time `json:"startedAt,omitempty"`
-	Error     string    `json:"error,omitempty"`
+	// Name is the file being written, so a window can show where the
+	// recording is going while it is still going there.
+	Name  string `json:"name,omitempty"`
+	Error string `json:"error,omitempty"`
 	// Live is the current line of live text, as the live sink last revised
 	// it. Nil when there is none.
 	Live *LiveLine `json:"live,omitempty"`
@@ -150,7 +153,7 @@ func (r *Recorder) stateLocked() State {
 	if r.current == nil {
 		return State{}
 	}
-	return State{Recording: true, Paused: r.current.sink.paused.Load(), StartedAt: r.current.started, Live: r.current.live}
+	return State{Recording: true, Paused: r.current.sink.paused.Load(), StartedAt: r.current.started, Name: filepath.Base(r.current.file), Live: r.current.live}
 }
 
 // SetPaused suspends encoded video and audio while leaving the source preview

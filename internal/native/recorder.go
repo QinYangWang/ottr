@@ -51,28 +51,24 @@ func (a *App) recordingPage(c *ui.Context, t *ui.Theme) {
 	a.recordShortcut(c)
 }
 
-// recordingHead is what records, for how long and where it goes, with the two
-// controls a running recording needs.
+// recordingHead is the file being written, the strip that says it is being
+// written, and the two controls a running recording needs.
 func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
-	label := a.tr("Recording")
-	if a.recordingPaused {
-		label = a.tr("Paused")
-	}
-	line := a.liveSourceLine()
-	if a.Rec != nil && a.Rec.Dir != "" {
-		line += " · " + shortDir(a.Rec.Dir)
+	name := a.recName
+	if name == "" {
+		name = a.tr("Recording")
 	}
 	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
+			ui.Text(c, name).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
+				SingleLine().MinWidth(0)
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, label).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink)
-				kit.Chip(c, t, kit.ChipRec, fmtClock(a.recordingElapsed().Milliseconds()))
+				a.recordingPill(c, t)
 				if a.busy {
 					ui.Spinner(c).Label(a.tr("Finishing")).Size(14, 14)
 				}
 			})
-			ui.Text(c, line).FontSize(12).TextColor(p.Ink3).SingleLine()
 		})
 		pauseLabel, pauseIcon := a.tr("Pause"), iconPause
 		if a.recordingPaused {
@@ -119,18 +115,6 @@ func deviceOr(device capture.AudioDevice, off string) string {
 		return off
 	}
 	return device.Name
-}
-
-// liveSourceLine is what is recorded, said briefly: "Display 1 · System audio".
-func (a *App) liveSourceLine() string {
-	parts := []string{a.sourceName()}
-	if a.speaker.ID != "" {
-		parts = append(parts, a.tr("System audio"))
-	}
-	if a.microphone.ID != "" {
-		parts = append(parts, a.tr("Microphone"))
-	}
-	return strings.Join(parts, " · ")
 }
 
 // recordingStage is the picture of what is being recorded.
@@ -191,12 +175,6 @@ func (a *App) liveTranscript(c *ui.Context, t *ui.Theme) {
 					ui.Text(c, a.liveTransErr).FontSize(11.5).TextColor(p.Ink3)
 				}
 			})
-		})
-		ui.Row(c).FillWidth().Shrink(0).Padding(12, 20).Gap(8).AlignItems(ui.Start).
-			BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
-			ui.Icon(c, iconCPU).FontSize(14).TextColor(p.Ink3).Shrink(0)
-			ui.Text(c, a.tr("Provisional. When you stop, the full pass on this computer replaces it and adds speakers.")).
-				FontSize(11.5).TextColor(p.Ink3)
 		})
 	})
 }
