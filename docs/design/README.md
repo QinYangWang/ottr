@@ -17,7 +17,7 @@ Open any file in `pages/` in a browser. Each one is the frame's own HTML, self-c
 | --- | --- | --- |
 | `01-recorder` | 1280×800 | Sidebar, library list and the New capture panel |
 | `02-recorder-dark` | 1280×800 | Same, dark |
-| `03-recording` | 1280×800 | Recording, in the item page's shell: the file being written as the title with the REC strip under it, Pause/Stop, the live picture in the stage, the facts strip, and the live transcript on the right |
+| `03-recording` | 1280×800 | Recording, in the item page's shell: the REC strip and the file being written on one line, Pause/Stop, the live picture in the stage, the facts strip, and the live transcript on the right |
 | `04-recording-dark` | 1280×800 | Same, dark |
 | `05-transcribing` | 1280×800 | Item page after Stop: the pipeline card (transcribe → translate → summarize) |
 | `06-playback` | 1280×800 | Item page: way back, stage, chapter-segmented seek bar, facts strip, document panel |

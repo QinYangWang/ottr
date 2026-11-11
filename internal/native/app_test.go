@@ -784,3 +784,19 @@ func TestAppearanceChangesTheLook(t *testing.T) {
 		t.Errorf("the app kept the look %q", a.theme)
 	}
 }
+
+// The two switches the recording page shows read in the interface's own words:
+// the spoken language falls back to "自动" in Chinese, and a translation that is
+// off names the switch, not a language nobody is seeing.
+func TestRecordingSwitchLabelsInChinese(t *testing.T) {
+	a := &App{language: "zh"}
+	if got := a.tr("Auto"); got != "自动" {
+		t.Errorf("the spoken language fallback reads %q, want 自动", got)
+	}
+	if got := a.trf("%s off", a.tr("Translate")); got != "翻译已关闭" {
+		t.Errorf("a translation turned off reads %q, want 翻译已关闭", got)
+	}
+	if got := a.trf("%s on", langName("zh")); got != "中文已开启" {
+		t.Errorf("a translation turned on reads %q, want 中文已开启", got)
+	}
+}

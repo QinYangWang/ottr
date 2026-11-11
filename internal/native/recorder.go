@@ -59,17 +59,13 @@ func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
 	if name == "" {
 		name = a.tr("Recording")
 	}
-	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
-			ui.Text(c, name).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
-				SingleLine().MinWidth(0)
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				a.recordingPill(c, t)
-				if a.busy {
-					ui.Spinner(c).Label(a.tr("Finishing")).Size(14, 14)
-				}
-			})
-		})
+	ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+		a.recordingPill(c, t)
+		ui.Text(c, name).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
+			Grow(1).MinWidth(0).SingleLine()
+		if a.busy {
+			ui.Spinner(c).Label(a.tr("Finishing")).Size(14, 14)
+		}
 		pauseLabel, pauseIcon := a.tr("Pause"), iconPause
 		if a.recordingPaused {
 			pauseLabel, pauseIcon = a.tr("Resume"), iconPlay
@@ -185,7 +181,8 @@ func (a *App) liveTranslateChip(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
 	label := a.trf("%s on", langName(a.trLang))
 	if !a.liveTranslate {
-		label = a.trf("%s off", langName(a.trLang))
+		// Off names the switch, not a language: nothing is translated.
+		label = a.trf("%s off", a.tr("Translate"))
 	}
 	chip := ui.ButtonBase(c).Label(a.tr("Translate")).Tooltip(a.tr("Translate")).Role(ui.RoleSwitch).
 		Checked(a.liveTranslate).Height(22).Padding(0, 8).Radius(9999).Center().Cursor(ui.CursorPointer)
