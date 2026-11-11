@@ -5,6 +5,10 @@ are drawn with. These pages are **design references only**: the shipped app is n
 in [`internal/native`](../../internal/native) and never renders HTML. Use this folder to check
 spacing, colour and state behaviour, then mirror the change in Go.
 
+An alternative look — a neutral, shadcn-style direction with its own six frames, tokens and
+open questions — is recorded in [neutral/README.md](neutral/README.md). It is not shipped: the
+pages and screens in this folder are still what the window draws.
+
 The system is **"ink and marks"**: graphite ink on near-white paper, and three quiet
 marks — teal for what is current (the playing line, the playhead, a search hit, a focused
 field), olive only for "done", red only for recording and destruction.
