@@ -202,13 +202,13 @@ the in-memory live event. Do not write provisional results to SQLite.
 - `Final=false`: update the current live line **in place**, including its text
   and end time.
 - `Final=true`: freeze that line and make the next partial a new line.
-- Keep the newest six finalized lines plus at most one current partial.
+- Keep every finalized line plus the current partial.
 - Native timestamps are relative to the continuous stream; after an endpoint
   reset, add the stored stream-base offset rather than a chunk offset.
 - `Recorder.State` carries the same current-line identity/finality so polling
   the native window cannot append duplicate revisions.
 
-The existing final transcript still replaces provisional live text after Stop.
+A full pass started from the transcript tab replaces the live text when it lands.
 
 ## Settings and cleanup
 

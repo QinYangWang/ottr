@@ -847,3 +847,30 @@ func TestOnboardingAsksForAModelOnce(t *testing.T) {
 		t.Errorf("the first-run page is still drawn: %q", tt.Texts())
 	}
 }
+
+// A recording that stops keeps the lines the live pass already heard, and the
+// full pass is asked for rather than started: the transcript tab shows the live
+// text with one button, not an empty page under a running job.
+func TestTranscriptTabShowsTheLiveLines(t *testing.T) {
+	a, id := newTestApp(t)
+	a.provisional = []liveLine{
+		{at: 1000, utterance: 1, text: "the export dialog", final: true},
+		{at: 4000, utterance: 2, text: "is the last blocker", final: true},
+	}
+	a.provisionalID = id
+	m, _ := a.byID(id)
+	m.TranscriptStatus = "none"
+	a.trLoaded = true
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.transcriptTab(c, a.applyTheme(c), m)
+	}, WideWidth, WideHeight)
+	tt.Frame()
+	for _, want := range []string{"the export dialog", "is the last blocker", "Transcribe again", "No speakers yet."} {
+		if !tt.HasText(want) {
+			t.Fatalf("the transcript tab has no %q: %q", want, tt.Texts())
+		}
+	}
+	if tt.HasText("No transcript yet") {
+		t.Errorf("the tab shows the empty state under the live lines: %q", tt.Texts())
+	}
+}

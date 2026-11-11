@@ -22,7 +22,7 @@ What it still does not do:
   dropping live audio when inference falls behind is reported instead of hidden.
 - Only the first audio stream is transcribed, so system audio plus microphone
   gives live text from one of them.
-- The live pass is provisional by design: the post-recording pass replaces it.
+- The live pass is provisional by design: the full pass, run on request, replaces it.
 Finalized lines are translated into the target language as they arrive, but a line
 still being spoken is not sent until it freezes, and live translations are never
 saved — the stored transcript is translated again after the recording stops.

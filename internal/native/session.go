@@ -307,6 +307,10 @@ func (a *App) transcriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
 		a.working(c, t, "Transcribing", "Recognizing the speech in this file on this computer.")
 		return
 	}
+	if m.TranscriptStatus != "done" && a.provisionalID == m.ID && len(a.provisional) > 0 {
+		a.liveTranscriptTab(c, t, m)
+		return
+	}
 	if m.TranscriptStatus != "done" {
 		detail := "Offline speech recognition turns the audio into timestamped subtitles."
 		switch {
@@ -1018,6 +1022,11 @@ func (a *App) startTranscribe(id int64) {
 	if _, err := a.ASR.Transcribe(id); err != nil {
 		a.setError(err)
 		return
+	}
+	// The full pass replaces the live lines; keeping them would show two
+	// transcripts for one recording once it lands.
+	if a.provisionalID == id {
+		a.provisional, a.provisionalID = nil, 0
 	}
 	a.reload()
 }

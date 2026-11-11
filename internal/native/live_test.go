@@ -33,20 +33,17 @@ func TestLiveRevisionsUpdateInPlace(t *testing.T) {
 	}
 }
 
-func TestLivePaneKeepsSixFinalLinesAndTheLiveOne(t *testing.T) {
+func TestLivePaneKeepsEveryLine(t *testing.T) {
 	a := &App{}
-	for i := int64(1); i <= 9; i++ {
+	for i := int64(1); i <= 40; i++ {
 		a.reviseLive(asr.LiveSubtitle{Utterance: i, StartMs: i * 1000, Text: "line", Final: true})
 	}
-	a.reviseLive(asr.LiveSubtitle{Utterance: 10, StartMs: 10000, Text: "live"})
-	if len(a.late) != 7 {
-		t.Fatalf("want six final lines plus the live one, got %d: %+v", len(a.late), a.late)
+	a.reviseLive(asr.LiveSubtitle{Utterance: 41, StartMs: 41000, Text: "live"})
+	if len(a.late) != 41 {
+		t.Fatalf("the pane dropped history: got %d lines", len(a.late))
 	}
-	if a.late[len(a.late)-1].text != "live" {
-		t.Errorf("the live line was dropped: %+v", a.late)
-	}
-	if a.late[0].utterance != 4 {
-		t.Errorf("want the oldest kept line to be utterance 4, got %d", a.late[0].utterance)
+	if a.late[0].utterance != 1 || a.late[len(a.late)-1].text != "live" {
+		t.Errorf("the pane keeps %d..%d, want 1..41", a.late[0].utterance, a.late[len(a.late)-1].utterance)
 	}
 }
 

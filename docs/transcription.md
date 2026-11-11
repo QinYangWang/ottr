@@ -198,11 +198,12 @@ text is behind. The post-recording pass remains the transcript of record.
 
 - the same number again: replace that line's text, in place;
 - `Final: true`: freeze the line; the next utterance is a new line;
-- the pane keeps the newest six finalized lines plus the one being spoken.
+- the pane keeps every line, the one being spoken last; the document panel scrolls.
 
 `Recorder.State.Live` carries the same revision, so a window that polls State
 cannot append the same line twice. Provisional text is never written to SQLite:
-the recorded file's transcript replaces it after Stop.
+after Stop the window shows the live lines it kept, and the full pass (speakers,
+mistakes fixed) runs when the user asks for it.
 
 ## Not implemented
 

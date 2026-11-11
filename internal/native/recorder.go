@@ -91,36 +91,84 @@ func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
 	}
 }
 
-// recordingFacts is the media's four facts as they stand while it is written:
-// where it comes from, what it hears, and with which model.
+// recordingFacts are the choices a recording makes, one row each: what it
+// films, what it hears, and the model that reads it. A change here is the
+// choice for the next recording; the model also changes this one's full pass.
 func (a *App) recordingFacts(c *ui.Context, t *ui.Theme) {
+	if !a.modelLoaded {
+		a.loadModels()
+	}
 	p := pal(t)
-	model := ""
-	if a.MM != nil {
-		model = shortModel(a.MM.CurrentName())
+	ui.Column(c).FillWidth().Padding(14, 0, 0, 0).Gap(4).BorderWidth(1, 0, 0, 0).
+		BorderColor(p.Line).Children(func() {
+		a.factRow(c, t, a.tr("Source"), func() { a.sourceSelect(c, t) })
+		a.factRow(c, t, a.tr("System audio"), func() {
+			a.deviceSelect(c, t, &a.speaker, a.speakers, iconSpeaker, "System audio")
+		})
+		a.factRow(c, t, a.tr("Microphone"), func() {
+			a.deviceSelect(c, t, &a.microphone, a.microphones, iconMic, "Microphone")
+		})
+		a.factRow(c, t, a.tr("Model"), func() { a.modelSelect(c, t) })
+	})
+}
+
+// factRow is one of those choices: its name on the left, the select that
+// changes it on the right.
+func (a *App) factRow(c *ui.Context, t *ui.Theme, label string, control func()) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Gap(12).Height(40).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(12.5).TextColor(p.Ink3).Grow(1).SingleLine()
+		ui.Column(c).Width(240).Shrink(0).Children(control)
+	})
+}
+
+// deviceSelect chooses one of the sounds a recording takes, or none.
+func (a *App) deviceSelect(c *ui.Context, t *ui.Theme, selected *capture.AudioDevice, devices []capture.AudioDevice, icon *ui.SVG, label string) {
+	options := make([]kit.SelectOption[string], 0, len(devices)+1)
+	options = append(options, kit.SelectOption[string]{Value: "", Label: a.tr("Disabled")})
+	for _, device := range devices {
+		options = append(options, kit.SelectOption[string]{Value: device.ID, Label: device.Name})
 	}
-	facts := [][2]string{
-		{a.tr("Source"), a.sourceName()},
-		{a.tr("System audio"), deviceOr(a.speaker, a.tr("Off"))},
-		{a.tr("Microphone"), deviceOr(a.microphone, a.tr("Off"))},
-		{a.tr("Model"), model},
-	}
-	ui.Row(c).FillWidth().Padding(14, 0, 0, 0).Gap(16).BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
-		for i, fact := range facts {
-			ui.Column(c.Key(i)).Grow(1).Width(0).MinWidth(0).Gap(4).Children(func() {
-				ui.Text(c, fact[0]).FontSize(11.5).TextColor(p.Ink3).SingleLine()
-				ui.Text(c, fact[1]).FontSize(12.5).TextColor(p.Ink).SingleLine().Tooltip(fact[1])
-			})
+	id := selected.ID
+	kit.Select(c, t, &id, options, a.tr(label), a.tr(label)+a.tr(" of the next recording"), icon, func(id string) {
+		*selected = capture.AudioDevice{}
+		for _, device := range devices {
+			if device.ID == id {
+				*selected = device
+			}
 		}
 	})
 }
 
-// deviceOr names a device, or the word for taking none.
-func deviceOr(device capture.AudioDevice, off string) string {
-	if device.ID == "" {
-		return off
+// modelSelect chooses the model that reads the recording, from the ones
+// installed; Settings ▸ Transcription is where they come from.
+func (a *App) modelSelect(c *ui.Context, t *ui.Theme) {
+	p := pal(t)
+	options := make([]kit.SelectOption[string], 0, len(a.modelList))
+	current := ""
+	for _, offer := range a.modelList {
+		if !offer.Installed {
+			continue
+		}
+		if current == "" {
+			current = offer.ID
+		}
+		if offer.Path == a.modelInUse {
+			current = offer.ID
+		}
+		options = append(options, kit.SelectOption[string]{Value: offer.ID, Label: shortModel(offer.Name)})
 	}
-	return device.Name
+	if len(options) == 0 {
+		ui.Text(c, a.tr("Install a model in Settings")).FontSize(12).TextColor(p.Ink3).SingleLine()
+		return
+	}
+	kit.Select(c, t, &current, options, a.tr("Model"), a.tr("Speech recognition model"), iconWaveform, func(id string) {
+		for _, offer := range a.modelList {
+			if offer.ID == id && offer.Installed && offer.Path != a.modelInUse {
+				a.useModel(offer)
+			}
+		}
+	})
 }
 
 // recordingStage is the picture of what is being recorded.

@@ -512,6 +512,11 @@ func (a *App) drain() {
 func (a *App) mirror(c *ui.Context) {
 	st := a.Rec.State()
 	switch {
+	case a.recording && st.Gone && !a.busy:
+		// The window being recorded closed. Nothing more will be written, so
+		// stop the way the Stop button does: the file is finished, saved, and
+		// opened with the lines the live pass already heard.
+		a.stopRecording(false)
 	case a.recording && !st.Recording && !a.busy:
 		// Stopped by something other than this window's Stop button.
 		a.recording, a.late, a.preview = false, nil, nil
@@ -589,19 +594,6 @@ func (a *App) reviseLive(sub asr.LiveSubtitle) {
 	}
 	if sub.Final {
 		a.translateLiveLine(sub.Utterance, sub.Text)
-	}
-	// Keep the newest six finalized lines. Provisional ones do not count, so
-	// the line being spoken is never scrolled away.
-	finals := 0
-	for i := len(a.late) - 1; i >= 0; i-- {
-		if !a.late[i].final {
-			continue
-		}
-		finals++
-		if finals > 6 {
-			a.late = a.late[i+1:]
-			break
-		}
 	}
 }
 

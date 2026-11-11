@@ -137,26 +137,8 @@ func (a *App) transcribingPanel(c *ui.Context, t *ui.Theme, m library.Media) {
 			})
 			ui.Text(c, a.tr("The transcript opens here when it is done.")).FontSize(11.5).TextColor(p.Ink3)
 			if a.provisionalID == m.ID && len(a.provisional) > 0 {
-				ui.Row(c).FillWidth().Padding(8, 12).Gap(8).AlignItems(ui.Center).Radius(kit.RadiusCard).
-					BorderStyle(ui.BorderDashed).Border(1, p.Line2).Background(p.Sunk).Children(func() {
-					ui.Icon(c, iconCaptions).FontSize(14).TextColor(p.Ink3)
-					ui.Text(c, a.tr("Live transcript shown until the full pass replaces it.")).FontSize(12).TextColor(p.Ink2)
-				})
-				for _, line := range a.provisional {
-					if !line.final {
-						continue
-					}
-					ui.Row(c.Key(line.utterance)).FillWidth().Gap(12).AlignItems(ui.Start).Opacity(0.75).Children(func() {
-						kit.UnknownAvatar(c, t, 24)
-						ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
-							ui.Row(c).Gap(8).Children(func() {
-								ui.Text(c, a.tr("Unknown speaker")).FontSize(12).FontWeight(600).TextColor(p.Ink3)
-								mono(ui.Text(c, fmtDuration(line.at))).FontSize(11.5).TextColor(p.Ink3)
-							})
-							ui.Text(c, line.text).FontSize(13).TextColor(p.Ink2)
-						})
-					})
-				}
+				a.liveNote(c, t, a.tr("Live transcript shown until the full pass replaces it."))
+				a.provisionalLines(c, t, true)
 			}
 		})
 	})
@@ -295,4 +277,60 @@ func (a *App) autoTranscribe(m library.Media) {
 	if _, err := a.ASR.Transcribe(m.ID); err != nil {
 		a.trErr = err.Error()
 	}
+}
+
+// liveNote is the dashed band that says where the lines under it came from.
+func (a *App) liveNote(c *ui.Context, t *ui.Theme, text string) {
+	p := pal(t)
+	ui.Row(c).FillWidth().Padding(8, 12).Gap(8).AlignItems(ui.Center).Radius(kit.RadiusCard).
+		BorderStyle(ui.BorderDashed).Border(1, p.Line2).Background(p.Sunk).Children(func() {
+		ui.Icon(c, iconCaptions).FontSize(14).TextColor(p.Ink3)
+		ui.Text(c, text).FontSize(12).TextColor(p.Ink2)
+	})
+}
+
+// provisionalLines are the lines the live pass heard while the recording was
+// written. They carry no speaker until the full pass runs.
+func (a *App) provisionalLines(c *ui.Context, t *ui.Theme, dimmed bool) {
+	p := pal(t)
+	for _, line := range a.provisional {
+		if !line.final {
+			continue
+		}
+		row := ui.Row(c.Key(line.utterance)).FillWidth().Gap(12).AlignItems(ui.Start)
+		if dimmed {
+			row.Opacity(0.75)
+		}
+		row.Children(func() {
+			kit.UnknownAvatar(c, t, 24)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+				ui.Row(c).Gap(8).Children(func() {
+					ui.Text(c, a.tr("Unknown speaker")).FontSize(12).FontWeight(600).TextColor(p.Ink3)
+					mono(ui.Text(c, fmtDuration(line.at))).FontSize(11.5).TextColor(p.Ink3)
+				})
+				ui.Text(c, line.text).FontSize(13).TextColor(p.Ink2)
+			})
+		})
+	}
+}
+
+// liveTranscriptTab is the transcript a recording already has when it stops:
+// the lines heard live, with the full pass one click away.
+func (a *App) liveTranscriptTab(c *ui.Context, t *ui.Theme, m library.Media) {
+	p := pal(t)
+	ui.Column(c).Fill().MinHeight(0).Children(func() {
+		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+			ui.Column(c).Padding(12, 20, 16, 20).Gap(12).Children(func() {
+				a.liveNote(c, t, a.tr("Transcribed live while recording. The full pass adds speakers and fixes mistakes."))
+				a.provisionalLines(c, t, false)
+			})
+		})
+		ui.Row(c).FillWidth().Shrink(0).Padding(12, 20).Gap(8).AlignItems(ui.Center).
+			BorderWidth(1, 0, 0, 0).BorderColor(p.Line).Children(func() {
+			ui.Text(c, a.tr("No speakers yet.")).FontSize(11.5).TextColor(p.Ink3).Grow(1)
+			if kit.Button(c, t, kit.Secondary, iconRefresh, a.tr("Transcribe again"), false).Clicked() {
+				a.startTranscribe(m.ID)
+			}
+		})
+	})
 }

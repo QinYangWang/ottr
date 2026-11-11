@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -53,6 +54,11 @@ type State struct {
 	// Live is the current line of live text, as the live sink last revised
 	// it. Nil when there is none.
 	Live *LiveLine `json:"live,omitempty"`
+
+	// Gone is set when the source disappeared on its own — a recorded window
+	// that closed. Nothing more will arrive, so the window stops the
+	// recording and keeps what was written.
+	Gone bool `json:"gone,omitempty"`
 }
 
 // LiveLine is one revision of the line being spoken, mirrored from the live
@@ -111,6 +117,7 @@ type session struct {
 	preview  *preview
 	video    *videoInput
 	cancel   context.CancelFunc
+	gone     atomic.Bool
 	errMu    sync.Mutex
 	errCause error
 	done     chan error
@@ -153,7 +160,14 @@ func (r *Recorder) stateLocked() State {
 	if r.current == nil {
 		return State{}
 	}
-	return State{Recording: true, Paused: r.current.sink.paused.Load(), StartedAt: r.current.started, Name: filepath.Base(r.current.file), Live: r.current.live}
+	return State{
+		Recording: true,
+		Paused:    r.current.sink.paused.Load(),
+		StartedAt: r.current.started,
+		Name:      filepath.Base(r.current.file),
+		Live:      r.current.live,
+		Gone:      r.current.gone.Load(),
+	}
 }
 
 // SetPaused suspends encoded video and audio while leaving the source preview
@@ -280,7 +294,14 @@ func (r *Recorder) Start(cfg Config) error {
 		for {
 			f, err := stream.Next(ctx)
 			if err != nil {
-				if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				switch endOfStream(ctx, err) {
+				case streamGone:
+					// The window being recorded closed. Nothing more will
+					// arrive, so the window stops the session and the file it
+					// has written is the recording.
+					sess.gone.Store(true)
+					StateChanged.Broadcast(State{Recording: true, Gone: true, StartedAt: sess.started})
+				case streamFailed:
 					sess.fail(fmt.Errorf("capture stopped: %w", err))
 				}
 				return
@@ -385,6 +406,28 @@ func (r *Recorder) Stop() (library.Media, error) {
 	}
 	StateChanged.Broadcast(State{})
 	return m, nil
+}
+
+// streamEnd is how a capture stream ended.
+type streamEnd int
+
+const (
+	streamStopped streamEnd = iota // we asked it to stop
+	streamGone                     // the source went away: a window closed
+	streamFailed                   // the source or the backend broke
+)
+
+// endOfStream reads a stream error: a cancelled context and an EOF are a
+// normal stop, a vanished source is the end of the recording rather than a
+// failure, and anything else is a failure.
+func endOfStream(ctx context.Context, err error) streamEnd {
+	switch {
+	case ctx.Err() != nil, errors.Is(err, io.EOF):
+		return streamStopped
+	case errors.Is(err, ErrSourceGone):
+		return streamGone
+	}
+	return streamFailed
 }
 
 // fail records why the session ended and stops the encoder, whose exit the

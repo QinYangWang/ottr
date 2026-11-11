@@ -149,6 +149,12 @@ treated as **failed**: audio and preview are closed, the partial file is
 deleted, and `recording:state{error:...}` is broadcast. A failed recording can
 never be reported as successful.
 
+A source that goes away on its own — a recorded window that closes — is not a
+failure. The stream ends with `ErrSourceGone`, the session marks itself
+`gone`, and state says `recording:true, gone:true`; nothing more is written.
+The window sees that and calls `Stop()`, so the file is finalized, saved and
+opened with the live lines it already has.
+
 `Stop()`:
 
 1. Clear `r.current` so the watchdog treats the exit as expected.
@@ -158,8 +164,8 @@ never be reported as successful.
    the file.
 5. Verify the file exists and is non-empty; otherwise delete and error.
 6. Probe and insert into the library with `source = "recording"`.
-7. If the media has audio and an ASR service is configured, start background
-   transcription. This pass replaces the live text with the accurate one.
+7. The window opens the recording with the live lines it heard, if any; the
+   full pass runs when the user asks for it with `Transcribe again`.
 
 ## Live preview
 

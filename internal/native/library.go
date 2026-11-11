@@ -802,11 +802,12 @@ func (a *App) stopRecording(discard bool) {
 				a.removeMedia(m.ID, true)
 				return
 			}
+			// What the live pass heard is the transcript for now; the full pass
+			// (speakers, mistakes fixed) is one click away on its transcript tab.
 			a.provisional, a.provisionalID = lines, m.ID
 			a.reload()
 			a.selectMedia(m.ID)
 			a.tab = 0
-			a.autoTranscribe(m)
 			a.reload()
 			a.loadDetails() // the recording took room on the disk
 			a.showPreview() // back to showing the source, not the recording
