@@ -145,15 +145,15 @@ func (a *App) transcribingPanel(c *ui.Context, t *ui.Theme, m library.Media) {
 }
 
 // pipelineStage is one numbered stage of the pipeline card; the active one has
-// an amber number and its details under it.
+// an accent number and its details under it.
 func (a *App) pipelineStage(c *ui.Context, t *ui.Theme, n int, label, note string, active bool, details func()) {
 	p := pal(t)
 	ui.Row(c.Key(n)).FillWidth().Gap(10).AlignItems(ui.Start).Children(func() {
 		num := ui.Column(c).Size(22, 22).Radius(kit.RadiusControl).Center().Shrink(0)
 		ink := p.Ink3
 		if active {
-			num.Background(p.Amber)
-			ink = ui.Hex("#121417")
+			num.Background(p.Accent)
+			ink = p.BtnInk
 		} else {
 			num.Background(p.Hover)
 		}
@@ -192,8 +192,8 @@ func (a *App) stepRow(c *ui.Context, t *ui.Theme, i int, step transcribeStep, jo
 				mark.Background(p.GreenSoft)
 				ui.Icon(c, iconCheck).FontSize(11).TextColor(p.Green)
 			case stepActive:
-				mark.Background(p.AmberSoft)
-				ui.Box(c).Size(6, 6).Radius(3).Background(p.Amber)
+				mark.Background(p.AccentSoft)
+				ui.Box(c).Size(6, 6).Radius(3).Background(p.Accent)
 			default:
 				mark.Background(p.Hover)
 			}

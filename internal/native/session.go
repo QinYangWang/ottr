@@ -402,8 +402,8 @@ func (a *App) activeSegment(m library.Media) int64 {
 }
 
 // transcriptRow is one line: the speaker's avatar, name and time, the text,
-// and the translation under it. The line playing gets the highlighter: an
-// amber-soft fill and a 3px amber bar.
+// and the translation under it. The line playing gets the mark: an
+// accent-soft fill and a 3px teal bar.
 func (a *App) transcriptRow(c *ui.Context, t *ui.Theme, m library.Media, seg asr.Segment, translation string, active, currentHit bool) {
 	p := pal(t)
 	at := fmtDuration(seg.StartMs)
@@ -411,7 +411,7 @@ func (a *App) transcriptRow(c *ui.Context, t *ui.Theme, m library.Media, seg asr
 		Padding(9, 10, 9, 10).Radius(kit.RadiusCard).Cursor(ui.CursorPointer)
 	switch {
 	case active:
-		row.Background(p.AmberSoft)
+		row.Background(p.AccentSoft)
 	case row.Hovered():
 		row.Background(p.Sunk)
 	}
@@ -420,7 +420,7 @@ func (a *App) transcriptRow(c *ui.Context, t *ui.Theme, m library.Media, seg asr
 	}
 	row.Children(func() {
 		if active {
-			ui.Box(c).Absolute().Left(0).Top(8).Bottom(8).Width(3).Radius(2).Background(p.Amber)
+			ui.Box(c).Absolute().Left(0).Top(8).Bottom(8).Width(3).Radius(2).Background(p.Accent)
 		}
 		a.lineContent(c, t, seg.Speaker, at, seg.Text, translation, active, currentHit)
 	})
@@ -460,7 +460,7 @@ func (a *App) lineContent(c *ui.Context, t *ui.Theme, speaker int, at, text, tra
 				}
 				ink := p.Ink3
 				if active {
-					ink = p.AmberInk
+					ink = p.AccentInk
 				}
 				mono(ui.Text(c, at)).FontSize(11.5).TextColor(ink)
 			})
@@ -472,8 +472,8 @@ func (a *App) lineContent(c *ui.Context, t *ui.Theme, speaker int, at, text, tra
 	})
 }
 
-// highlightedText draws text with the search query marked: amber-soft with an
-// amber underline, and solid amber on the match shown.
+// highlightedText draws text with the search query marked: an accent-soft
+// fill with a teal underline, and solid teal on the match shown.
 func (a *App) highlightedText(c *ui.Context, t *ui.Theme, text string, size float32, ink ui.Color, current bool) {
 	p := pal(t)
 	q := strings.TrimSpace(a.segQuery)
@@ -493,9 +493,9 @@ func (a *App) highlightedText(c *ui.Context, t *ui.Theme, text string, size floa
 			spans = append(spans, ui.Span{Text: text[:i], Color: ink, Size: size})
 		}
 		hit := ui.Span{Text: text[i : i+len(lq)], Color: ink, Size: size,
-			Background: p.AmberSoft, Underline: true, DecorationColor: p.Amber, DecorationThickness: 2}
+			Background: p.AccentSoft, Underline: true, DecorationColor: p.Accent, DecorationThickness: 2}
 		if current {
-			hit.Background, hit.Color, hit.Underline = p.Amber, ui.Hex("#121417"), false
+			hit.Background, hit.Color, hit.Underline = p.Accent, p.BtnInk, false
 		}
 		spans = append(spans, hit)
 		text, lower = text[i+len(lq):], lower[i+len(lq):]
@@ -531,7 +531,7 @@ func (a *App) searchBar(c *ui.Context, t *ui.Theme, m library.Media, hits []int6
 	ui.Row(c).FillWidth().Height(48).Shrink(0).Padding(0, 12, 0, 20).Gap(6).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(p.Line).Children(func() {
 		ui.Row(c).Grow(1).MinWidth(0).Height(32).Padding(0, 10).Gap(8).AlignItems(ui.Center).
-			Radius(kit.RadiusControl).Border(1, p.Amber).Shadow(0, 0, 0, 3, p.AmberSoft).
+			Radius(kit.RadiusControl).Border(1, p.Accent).Shadow(0, 0, 0, 3, p.AccentSoft).
 			Background(p.Sheet).Children(func() {
 			ui.Icon(c, iconSearch).FontSize(16).TextColor(p.Ink3)
 			field := ui.TextInputBase(c, &a.segQuery).Label(a.tr("Search the subtitles")).
@@ -731,7 +731,7 @@ func (a *App) timedRow(c *ui.Context, t *ui.Theme, m library.Media, at int64, ti
 	}
 	row.Children(func() {
 		ui.Row(c).Gap(12).AlignItems(ui.Start).Children(func() {
-			mono(ui.Text(c, clock)).FontSize(11.5).TextColor(p.AmberInk).Width(44).Shrink(0)
+			mono(ui.Text(c, clock)).FontSize(11.5).TextColor(p.AccentInk).Width(44).Shrink(0)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 				ui.Text(c, title).FontSize(13).TextColor(p.Ink)
 				if detail != "" {
@@ -745,18 +745,18 @@ func (a *App) timedRow(c *ui.Context, t *ui.Theme, m library.Media, at int64, ti
 	}
 }
 
-// highlight is a key moment as a quote in the highlighter, its time under it
+// highlight is a key moment as a quote in the accent, its time under it
 // seeking there.
 func (a *App) highlight(c *ui.Context, t *ui.Theme, m library.Media, at int64, note string) {
 	p := pal(t)
 	clock := fmtDuration(at)
 	quote := ui.ButtonBase(c).Label(a.tr("Seek to ")+clock).Tooltip(a.tr("Seek to ")+clock).FillWidth().
 		Padding(12, 14).Radius(0, kit.RadiusControl, kit.RadiusControl, 0).BorderWidth(0, 0, 0, 3).
-		BorderColor(p.Amber).Background(p.AmberSoft).Justify(ui.Start).Cursor(ui.CursorPointer)
+		BorderColor(p.Accent).Background(p.AccentSoft).Justify(ui.Start).Cursor(ui.CursorPointer)
 	quote.Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Text(c, "“"+note+"”").FontSize(13).TextColor(p.Ink).Selectable()
-			mono(ui.Text(c, clock)).FontSize(11.5).TextColor(p.AmberInk)
+			mono(ui.Text(c, clock)).FontSize(11.5).TextColor(p.AccentInk)
 		})
 	})
 	if quote.Clicked() {
@@ -807,7 +807,7 @@ func (a *App) working(c *ui.Context, t *ui.Theme, title, detail string) {
 	})
 }
 
-// progressBar is the 6px amber bar of a job; a negative value is a bar of
+// progressBar is the 6px teal bar of a job; a negative value is a bar of
 // unknown length.
 func progressBar(c *ui.Context, t *ui.Theme, value float64, width float32) {
 	p := pal(t)
@@ -823,7 +823,7 @@ func progressBar(c *ui.Context, t *ui.Theme, value float64, width float32) {
 	}
 	fraction := float32(min(max(value, 0), 1))
 	bar.Draw(func(pt *ui.Painter, r ui.Rect) {
-		pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * fraction, H: r.H}, p.Amber, 3)
+		pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * fraction, H: r.H}, p.Accent, 3)
 	})
 }
 

@@ -38,10 +38,10 @@ var registerFonts = sync.OnceValue(func() error {
 	return nil
 })
 
-// themeFor maps the "studio console + highlighter" palette onto the colours
-// MyGo's own widgets read. The accent of ui.Theme is the ink, because that is
-// what fills a primary button, a checked control and a selected tab; the
-// highlighter amber is drawn by the app itself (kit.Palette).
+// themeFor maps the "ink and marks" palette onto the colours MyGo's own
+// widgets read. The accent of ui.Theme is the ink, because that is what fills a
+// primary button, a checked control and a selected tab; the teal mark is drawn
+// by the app itself (kit.Palette).
 func themeFor(dark bool) *ui.Theme {
 	t := ui.LightTheme()
 	if dark {
@@ -65,10 +65,10 @@ func themeFor(dark bool) *ui.Theme {
 	t.AccentPressed = p.Btn.Mix(ui.RGB(128, 128, 128), 0.24)
 	t.AccentText = p.BtnInk
 	t.Danger = p.Red
-	t.Warning = p.Amber
+	// Warning keeps the framework's ochre: no screen here draws one.
 	t.Success = p.Green
-	t.Selection = p.Amber.Alpha(0.35)
-	t.Focus = p.Amber
+	t.Selection = p.Accent.Alpha(0.35)
+	t.Focus = p.Accent
 	t.Inverse = p.Ink
 	t.InverseText = p.Sheet
 	t.Scrollbar = p.Ink.Alpha(0.18)

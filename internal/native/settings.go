@@ -27,9 +27,9 @@ func (a *App) openSettings() {
 // themeBackground is the window background of the look chosen.
 func themeBackground() string {
 	if mygo.Theme.IsDark() {
-		return "#16181B"
+		return "#171B1E"
 	}
-	return "#FFFFFF"
+	return "#FCFDFD"
 }
 
 // settingsSections are the pages Settings offers, in the order they are shown,
@@ -173,9 +173,9 @@ func (a *App) appearanceSettings(c *ui.Context, t *ui.Theme) {
 			})
 		})
 		kit.GroupRow(c, t, false, a.tr("Accent"), a.tr("Highlights the line playing, search matches and selection."), func() {
-			ui.Row(c).Height(24).Padding(0, 8).Gap(6).Radius(9999).AlignItems(ui.Center).Background(p.AmberSoft).Children(func() {
-				ui.Box(c).Size(10, 10).Radius(3).Background(p.Amber)
-				ui.Text(c, a.tr("Highlighter")).FontSize(11.5).FontWeight(500).TextColor(p.AmberInk)
+			ui.Row(c).Height(24).Padding(0, 8).Gap(6).Radius(9999).AlignItems(ui.Center).Background(p.AccentSoft).Children(func() {
+				ui.Box(c).Size(10, 10).Radius(3).Background(p.Accent)
+				ui.Text(c, a.tr("Teal")).FontSize(11.5).FontWeight(500).TextColor(p.AccentInk)
 			})
 		})
 	})
@@ -219,14 +219,14 @@ func (a *App) themeCard(c *ui.Context, t *ui.Theme, source, label string) {
 	}
 }
 
-// themeMock draws a miniature window — a sidebar, an amber line and two grey
+// themeMock draws a miniature window — a sidebar, a teal line and two grey
 // ones — in the colours of one look.
 func themeMock(c *ui.Context, dark bool) {
 	q := kit.P(&ui.Theme{Dark: dark})
 	ui.Row(c).Grow(1).FillHeight().AlignItems(ui.Stretch).Background(q.Sheet).Children(func() {
 		ui.Box(c).Width(22).Shrink(0).FillHeight().Background(q.Paper).BorderWidth(0, 1, 0, 0).BorderColor(q.Line)
 		ui.Column(c).Grow(1).Padding(10, 8).Gap(5).AlignItems(ui.Start).Children(func() {
-			ui.Box(c).Height(4).Width(30).Radius(2).Background(q.Amber)
+			ui.Box(c).Height(4).Width(30).Radius(2).Background(q.Accent)
 			ui.Box(c).Height(3).Width(46).Radius(2).Background(q.Line2)
 			ui.Box(c).Height(3).Width(34).Radius(2).Background(q.Line2)
 		})
@@ -292,8 +292,8 @@ func (a *App) transcriptionSettings(c *ui.Context, t *ui.Theme) {
 	}
 	if a.modelLoaded && !a.modelLoading && a.modelInUse == "" {
 		ui.Row(c).FillWidth().Padding(12, 14).Gap(10).AlignItems(ui.Start).
-			Radius(kit.RadiusCard).Border(1, p.AmberLine).Background(p.AmberSoft).Children(func() {
-			ui.Icon(c, iconDownload).FontSize(16).TextColor(p.AmberInk).Shrink(0)
+			Radius(kit.RadiusCard).Border(1, p.AccentLine).Background(p.AccentSoft).Children(func() {
+			ui.Icon(c, iconDownload).FontSize(16).TextColor(p.AccentInk).Shrink(0)
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				ui.Text(c, a.tr("No speech recognition model yet")).FontSize(13).FontWeight(600).TextColor(p.Ink)
 				ui.Text(c, a.tr("Download one below to transcribe on this computer.")).FontSize(12.5).TextColor(p.Ink2)

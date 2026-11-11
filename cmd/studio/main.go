@@ -85,9 +85,9 @@ func main() {
 		mygo.Theme.SetSource(mygo.ThemeSource(prefs.Get(settings.Theme)))
 		// The paper of the palette (kit.Palette), so that the first frame
 		// does not flash a different ground.
-		background := "#F3F4F5"
+		background := "#F4F7F7"
 		if mygo.Theme.IsDark() {
-			background = "#0E0F11"
+			background = "#0F1214"
 		}
 
 		win := mygo.NewWindow(mygo.WindowOptions{

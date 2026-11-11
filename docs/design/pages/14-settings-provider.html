@@ -2,12 +2,12 @@
 *{margin:0;box-sizing:border-box}
 :root{--r-ctl:6px;--r-card:10px;--r-panel:12px}
 body{font-family:"Geist","Segoe UI Variable Text","Noto Sans SC","Microsoft YaHei UI",sans-serif;font-size:13px;line-height:1.45;color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;overflow:hidden;
---paper:#F3F4F5;--sheet:#FFFFFF;--sunk:#F7F8F9;--hover:#EEF0F2;--ink:#121417;--ink2:#4A5058;--ink3:#7C838C;--ink4:#A6ACB3;--line:#E4E6E9;--line2:#CDD1D6;
---amber:#FFB020;--amber-ink:#8A5600;--amber-soft:#FFF4DB;--amber-line:#F5C46B;--red:#E5383B;--red-ink:#C42B2E;--red-soft:#FDECEC;--green:#1F9D61;--green-soft:#E4F5EC;
---btn:#121417;--btn-ink:#FFFFFF;--media:#1B1E22;--shadow:0 12px 32px rgba(17,20,23,.14),0 2px 6px rgba(17,20,23,.06)}
-body.dark{--paper:#0E0F11;--sheet:#16181B;--sunk:#1B1E22;--hover:#22262B;--ink:#EDEEF0;--ink2:#A9AFB7;--ink3:#737A83;--ink4:#555B62;--line:#2A2E33;--line2:#3A3F46;
---amber:#FFB020;--amber-ink:#FFC453;--amber-soft:#33270F;--amber-line:#6B4E14;--red:#E5383B;--red-ink:#FF6B6E;--red-soft:#3A1516;--green:#3DD68C;--green-soft:#12301F;
---btn:#EDEEF0;--btn-ink:#121417;--media:#0A0B0D;--shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3)}
+--paper:#F4F7F7;--sheet:#FCFDFD;--sunk:#F0F4F5;--hover:#E9EFF0;--ink:#1F2328;--ink2:#5D6064;--ink3:#8A9095;--ink4:#B9BEC1;--line:#E9EDED;--line2:#D4DADB;
+--accent:#297893;--accent-ink:#1B5B6F;--accent-soft:#E3EFF3;--accent-line:#A8C9D5;--red:#D5283D;--red-ink:#A31D2F;--red-soft:#FBEAEC;--green:#5F7208;--green-soft:#EFF3DB;
+--btn:#1F2328;--btn-ink:#FCFDFD;--media:#171B1F;--shadow:0 12px 32px rgba(31,35,40,.14),0 2px 6px rgba(31,35,40,.06)}
+body.dark{--paper:#0F1214;--sheet:#171B1E;--sunk:#1C2124;--hover:#242A2E;--ink:#E7EAEB;--ink2:#ACB3B6;--ink3:#8A9296;--ink4:#5C6367;--line:#293035;--line2:#394146;
+--accent:#4FA3BE;--accent-ink:#8AC4D6;--accent-soft:#102F3A;--accent-line:#2B5D6E;--red:#E5485B;--red-ink:#FF8896;--red-soft:#3A161B;--green:#B3C155;--green-soft:#262C12;
+--btn:#E7EAEB;--btn-ink:#141719;--media:#080A0C;--shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3)}
 .i{flex:none;display:block}
 .mono{font-family:"Geist Mono","Cascadia Mono",monospace;font-variant-numeric:tabular-nums;letter-spacing:0}
 .lbl{font-family:"Geist Mono","Cascadia Mono",monospace;font-size:10.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
@@ -17,7 +17,7 @@ body.dark{--paper:#0E0F11;--sheet:#16181B;--sunk:#1B1E22;--hover:#22262B;--ink:#
 /* window chrome */
 .tb{height:40px;display:flex;align-items:center;padding-left:16px;background:var(--paper);border-bottom:1px solid var(--line);position:relative}
 .wm{display:flex;align-items:center;gap:7px;font-weight:600;font-size:15px;letter-spacing:-.3px;color:var(--ink)}
-.wm .dot{width:9px;height:9px;border-radius:3px;background:var(--amber)}
+.wm .dot{width:9px;height:9px;border-radius:3px;background:var(--accent)}
 .tb .ctx{margin-left:14px;color:var(--ink3);font-size:12px;display:flex;gap:6px;align-items:center}
 .wc{margin-left:auto;display:flex;height:40px}
 .wc span{width:46px;display:flex;align-items:center;justify-content:center;color:var(--ink2)}
@@ -36,7 +36,7 @@ body.dark{--paper:#0E0F11;--sheet:#16181B;--sunk:#1B1E22;--hover:#22262B;--ink:#
 /* chips */
 .chip{height:20px;padding:0 7px;border-radius:999px;font-size:11px;font-weight:500;display:inline-flex;align-items:center;gap:4px;background:var(--hover);color:var(--ink2);white-space:nowrap}
 .chip.ok{background:var(--green-soft);color:var(--green)}
-.chip.am{background:var(--amber-soft);color:var(--amber-ink)}
+.chip.ac{background:var(--accent-soft);color:var(--accent-ink)}
 .chip.bad{background:var(--red-soft);color:var(--red-ink)}
 .chip.line{background:transparent;border:1px solid var(--line2)}
 /* switch */
@@ -44,12 +44,12 @@ body.dark{--paper:#0E0F11;--sheet:#16181B;--sunk:#1B1E22;--hover:#22262B;--ink:#
 .sw:after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
 .sw.on{background:var(--ink)}
 .sw.on:after{left:16px}
-body.dark .sw.on{background:var(--amber)} body.dark .sw.on:after{background:#121417}
+body.dark .sw.on{background:var(--accent)} body.dark .sw.on:after{background:#141719}
 /* select / field */
 .sel{height:32px;border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--sheet);display:flex;align-items:center;gap:8px;padding:0 10px;font-size:13px;color:var(--ink)}
 .sel .i:last-child{margin-left:auto;color:var(--ink3)}
 .field{height:32px;border:1px solid var(--line2);border-radius:var(--r-ctl);background:var(--sheet);display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--ink3);font-size:13px}
-.field.focus{border-color:var(--amber);box-shadow:0 0 0 3px var(--amber-soft);color:var(--ink)}
+.field.focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);color:var(--ink)}
 /* sidebar */
 .sb{width:232px;background:var(--paper);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:12px 10px}
 .sb .lbl{padding:14px 10px 6px}
@@ -78,7 +78,7 @@ body.dark .ni.on{background:var(--hover);box-shadow:none}
 .scr .side{width:22%;background:#F3F5F7;padding:6% 4%;display:flex;flex-direction:column;gap:7%}
 .scr .main{flex:1;padding:6%;display:flex;flex-direction:column;gap:6%}
 .ln{height:5%;min-height:3px;border-radius:2px;background:#D5DAE0}
-.ln.d{background:#9AA3AE}.ln.a{background:#FFB020}
+.ln.d{background:#9AA3AE}.ln.a{background:var(--accent)}
 .tiles{position:absolute;inset:6%;display:grid;grid-template-columns:1fr 1fr;gap:4%}
 .tiles>div{border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;position:relative}
 .mchip{position:absolute;left:6px;bottom:6px;display:flex;gap:4px}
@@ -105,7 +105,7 @@ html,body{width:1280px;height:800px}
 .tile.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
 .radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line2);flex:none}
 .radio.on{border:5px solid var(--ink)}
-body.dark .radio.on{border-color:var(--amber)}
+body.dark .radio.on{border-color:var(--accent)}
 </style></head><body class=""><div class="tb"><div class="wm">ottr</div><div class="wc"><span><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></svg></span><span><svg class="i " width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg></span><span><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></svg></span></div></div><div class="row" style="height:760px;align-items:stretch"><aside class="sb"><div class="ni" data-doop-on="click" data-doop-action="navigate:8Gr6-Ve2G5" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14" /> <path d="M12 6v14" /> <path d="M8 8v12" /> <path d="M4 4v16" /></svg><span>Library</span><span class="n">35</span></div><div class="lbl">Settings</div><div class="ni" data-doop-on="click" data-doop-action="navigate:K5zn4aFdP4" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" /> <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /> <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /> <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /> <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /></svg><span>Appearance</span></div><div class="ni" data-doop-on="click" data-doop-action="navigate:Ld93QswHO6" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="14" x="3" y="5" rx="2" ry="2" /> <path d="M7 15h4M15 15h2M7 11h2M13 11h4" /></svg><span>Transcription</span></div><div class="ni on" data-doop-on="click" data-doop-action="navigate:oLhMUylrdm" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2" /> <rect width="20" height="8" x="2" y="14" rx="2" ry="2" /> <line x1="6" x2="6.01" y1="6" y2="6" /> <line x1="6" x2="6.01" y1="18" y2="18" /></svg><span>Provider</span></div><div class="ni" data-doop-on="click" data-doop-action="navigate:oM7uRXDq4A" data-doop-transition="dissolve" data-doop-duration="250"><svg class="i " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /></svg><span>Speakers</span><span class="n">12</span></div><div class="stat" style="margin-bottom:8px">
 <div><div class="k row">Disk usage<span class="mono" style="margin-left:auto">182 GB free</span></div><div class="meter" style="margin-top:6px"><b style="width:62%"></b></div></div></div></aside><section class="scont"><div class="st">Provider</div><div class="sd">Used for translation and summaries. Audio and transcription never leave this computer.</div>
 <div class="row" style="gap:10px;margin-top:18px;align-items:stretch"><div class="tile" style="gap:4px;padding:12px"><div class="row" style="gap:8px"><span class="radio"></span><span style="font-size:13px;font-weight:500">Free online</span></div><div style="font-size:11.5px;color:var(--ink3);padding-left:24px">No key. Rate-limited.</div></div><div class="tile on" style="gap:4px;padding:12px"><div class="row" style="gap:8px"><span class="radio on"></span><span style="font-size:13px;font-weight:500">OpenAI-compatible</span></div><div style="font-size:11.5px;color:var(--ink3);padding-left:24px">Any compatible chat endpoint.</div></div><div class="tile" style="gap:4px;padding:12px"><div class="row" style="gap:8px"><span class="radio"></span><span style="font-size:13px;font-weight:500">Custom AI model</span></div><div style="font-size:11.5px;color:var(--ink3);padding-left:24px">Your endpoint and prompts.</div></div></div>

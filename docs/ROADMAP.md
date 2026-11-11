@@ -300,12 +300,12 @@ The Doop frames of 2026-11-06 show two things with no code behind them:
 
 ## 17. Redesign gaps between the canvas and the window — `partial`
 
-The window follows the "studio console + highlighter" canvas of 2026-11-06
+The window follows the "ink and marks" canvas (palette of Nov 2026)
 (tokens, fonts, layout at 1280 / 900 / 420, every screen in
 [docs/design](design/README.md)). These parts of the frames have no code
 behind them yet, or are drawn differently:
 
-- **中文 flag and "Has 中文" filter.** Rows of translated media carry an amber
+- **中文 flag and "Has 中文" filter.** Rows of translated media carry a teal
   中文 chip and the library has a "Has 中文" chip; translations are not
   counted per media in the library query, so neither exists.
 - **Speed chip.** The transport's "1×" chip: the player has no playback rate.

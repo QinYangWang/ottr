@@ -1,5 +1,5 @@
 // Package kit contains Ottr's reusable native UI components, drawn in the
-// "studio console + highlighter" system (palette.go, docs/design/tokens.css).
+// "ink and marks" system (palette.go, docs/design/tokens.css).
 package kit
 
 import (
@@ -181,7 +181,7 @@ type ChipKind int
 const (
 	ChipNeutral ChipKind = iota
 	ChipOK               // Transcribed, In use, Works
-	ChipAmber            // 中文, Translated, the accent
+	ChipAccent           // 中文, Translated, the accent
 	ChipBad              // Failed, Can't be used
 	ChipLine             // an outlined filter
 	ChipRec              // recording in progress
@@ -194,8 +194,8 @@ func Chip(c *ui.Context, t *ui.Theme, kind ChipKind, text string) ui.Element {
 	switch kind {
 	case ChipOK:
 		fill, ink = p.GreenSoft, p.Green
-	case ChipAmber:
-		fill, ink = p.AmberSoft, p.AmberInk
+	case ChipAccent:
+		fill, ink = p.AccentSoft, p.AccentInk
 	case ChipBad, ChipRec:
 		fill, ink = p.RedSoft, p.RedInk
 	case ChipLine:
@@ -234,8 +234,8 @@ func FilterChip(c *ui.Context, t *ui.Theme, text string, on bool) ui.Element {
 
 // ----------------------------------------------------------------- switch
 
-// Switch is the 32×18 switch: line2 when off, ink (amber in the dark look)
-// when on, a white knob.
+// Switch is the 32×18 switch: line2 when off, SwitchOn (ink, or the mark
+// colour in the dark look) when on, a white knob.
 func Switch(c *ui.Context, t *ui.Theme, on *bool, label string) ui.Element {
 	p := P(t)
 	sw := ui.SwitchBase(c, on).Label(label).Size(32, 18).Radius(9).Cursor(ui.CursorPointer)
@@ -537,7 +537,7 @@ func UnknownAvatar(c *ui.Context, t *ui.Theme, size float32) {
 // ----------------------------------------------------------------- fields
 
 // Field is the bordered text input of the system (.field in tokens.css): a
-// 32px sheet with a control border that turns amber while it has focus, an
+// 32px sheet with a control border that turns teal while it has focus, an
 // optional leading icon, and the bare input growing inside it. The input is
 // returned so the caller can add a placeholder, Password or a font.
 func Field(c *ui.Context, t *ui.Theme, value *string, label string, icon *ui.SVG) ui.Element {
@@ -547,7 +547,7 @@ func Field(c *ui.Context, t *ui.Theme, value *string, label string, icon *ui.SVG
 		AlignItems(ui.Center).Radius(RadiusControl).Background(p.Sheet)
 	border := p.Line2
 	if box.FocusWithin() {
-		border = p.Amber
+		border = p.Accent
 	}
 	box.Border(1, border).Children(func() {
 		if icon != nil {

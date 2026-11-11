@@ -276,8 +276,8 @@ func (a *App) emptyLibrary(c *ui.Context, t *ui.Theme) {
 			} {
 				ui.Column(c.Key(i)).Width(184).Padding(14).Gap(6).Radius(kit.RadiusCard).Border(1, p.Line).
 					Background(p.Sheet).Children(func() {
-					ui.Column(c).Size(20, 20).Radius(kit.RadiusControl).Center().Background(p.AmberSoft).Children(func() {
-						mono(ui.Text(c, itoa(int64(i+1)))).FontSize(11).FontWeight(600).TextColor(p.AmberInk)
+					ui.Column(c).Size(20, 20).Radius(kit.RadiusControl).Center().Background(p.AccentSoft).Children(func() {
+						mono(ui.Text(c, itoa(int64(i+1)))).FontSize(11).FontWeight(600).TextColor(p.AccentInk)
 					})
 					ui.Text(c, step.title).FontSize(13).FontWeight(600).TextColor(p.Ink).Padding(4, 0, 0, 0)
 					ui.Text(c, step.detail).FontSize(12).TextColor(p.Ink3)
@@ -305,7 +305,7 @@ func (a *App) emptyLibrary(c *ui.Context, t *ui.Theme) {
 }
 
 // emptyIllustration is a screen with a transcript card beside it, its active
-// line in the highlighter: what Ottr makes of a recording.
+// line marked in the accent: what Ottr makes of a recording.
 func emptyIllustration(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
 	ui.Row(c).Gap(0).AlignItems(ui.Center).Children(func() {
@@ -324,7 +324,7 @@ func emptyIllustration(c *ui.Context, t *ui.Theme) {
 			for i := 0; i < 3; i++ {
 				row := ui.Row(c.Key(i)).Gap(6).Padding(4).Radius(4).AlignItems(ui.Center)
 				if i == 1 {
-					row.Background(p.AmberSoft).BorderWidth(0, 0, 0, 2).BorderColor(p.Amber)
+					row.Background(p.AccentSoft).BorderWidth(0, 0, 0, 2).BorderColor(p.Accent)
 				}
 				row.Children(func() {
 					ui.Box(c).Size(12, 12).Radius(6).Background(kit.SpeakerColors[i])
@@ -416,7 +416,7 @@ func (a *App) statusChips(c *ui.Context, t *ui.Theme, m library.Media) {
 	case "done":
 		kit.Chip(c, t, kit.ChipOK, a.tr("Transcribed"))
 	case "pending":
-		kit.Chip(c, t, kit.ChipAmber, a.tr("Transcribing"))
+		kit.Chip(c, t, kit.ChipAccent, a.tr("Transcribing"))
 	case "error":
 		kit.Chip(c, t, kit.ChipBad, a.tr("Failed"))
 	}
@@ -493,14 +493,14 @@ func (a *App) mediaThumb(c *ui.Context, t *ui.Theme, m library.Media) {
 // the two things to do about it: add them back, or delete them.
 func (a *App) orphanNotice(c *ui.Context, t *ui.Theme) {
 	p := pal(t)
-	ui.Row(c).FillWidth().Padding(10, 14).Gap(10).Radius(kit.RadiusCard).Border(1, p.AmberLine).
-		Background(p.AmberSoft).AlignItems(ui.Center).Margin(12, 0, 0, 0).Children(func() {
+	ui.Row(c).FillWidth().Padding(10, 14).Gap(10).Radius(kit.RadiusCard).Border(1, p.AccentLine).
+		Background(p.AccentSoft).AlignItems(ui.Center).Margin(12, 0, 0, 0).Children(func() {
 		n := len(a.orphans)
 		said := a.trf("%d recording files are not in the library.", n)
 		if n == 1 {
 			said = a.tr("1 recording file is not in the library.")
 		}
-		ui.Icon(c, iconAlertTriangle).FontSize(16).TextColor(p.AmberInk).Shrink(0)
+		ui.Icon(c, iconAlertTriangle).FontSize(16).TextColor(p.AccentInk).Shrink(0)
 		ui.Text(c, said).FontSize(12.5).TextColor(p.Ink).Grow(1).MinWidth(0)
 		if kit.Button(c, t, kit.Secondary, nil, a.tr("Add back"), false).Tooltip(a.tr("Add these files to the library again")).Clicked() {
 			a.addOrphans()

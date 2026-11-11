@@ -5,9 +5,9 @@ are drawn with. These pages are **design references only**: the shipped app is n
 in [`internal/native`](../../internal/native) and never renders HTML. Use this folder to check
 spacing, colour and state behaviour, then mirror the change in Go.
 
-The system is **"studio console + highlighter"**: graphite ink on cool paper-grey, one amber
-accent for what is current (the playing line, the playhead, a search hit, a focused field),
-red only for recording and destruction, green only for "done" and level meters.
+The system is **"ink and marks"**: graphite ink on near-white paper, and three quiet
+marks — teal for what is current (the playing line, the playhead, a search hit, a focused
+field), olive only for "done", red only for recording and destruction.
 
 ## Screens
 
@@ -26,7 +26,7 @@ Open any file in `pages/` in a browser. Each one is the frame's own HTML, self-c
 | `09-search` | 1280×800 | Transcript search with hit ticks on the seek bar |
 | `10-library-grid` | 1280×800 | Library as a grid |
 | `11-library-empty` | 1280×800 | First run: record or import, three steps |
-| `12-settings-appearance` | 1280×800 | Settings in the main window: language, font, theme, highlighter |
+| `12-settings-appearance` | 1280×800 | Settings in the main window: language, font, theme, accent |
 | `13-settings-transcription` | 1280×800 | Speech recognition models and the spoken language |
 | `14-settings-provider` | 1280×800 | Provider tiles, bordered fields, import chain, prompts |
 | `15-settings-speakers` | 1280×800 | Speaker library with search and rename |
@@ -58,17 +58,17 @@ The main window opens at **1280×800** with a **40px** title bar the view draws 
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
-| paper | `#F3F4F5` | `#0E0F11` | Window chrome, sidebar, rail |
-| sheet | `#FFFFFF` | `#16181B` | Content, cards, fields |
-| sunk / hover | `#F7F8F9` / `#EEF0F2` | `#1B1E22` / `#22262B` | Inset wells / hover fills |
-| ink · ink2 · ink3 · ink4 | `#121417` `#4A5058` `#7C838C` `#A6ACB3` | `#EDEEF0` `#A9AFB7` `#737A83` `#555B62` | Text: primary, secondary, meta (≥11px only), disabled |
-| line / line2 | `#E4E6E9` / `#CDD1D6` | `#2A2E33` / `#3A3F46` | Dividers and card borders / control borders |
-| amber | `#FFB020` | `#FFB020` | The highlighter: current line, playhead, focus |
-| amber-soft / amber-ink | `#FFF4DB` / `#8A5600` | `#33270F` / `#FFC453` | Active-line fill / text on it (amber itself is never text) |
-| red / red-soft | `#E5383B` / `#FDECEC` | `#E5383B` / `#3A1516` | Recording and destructive only |
-| green / green-soft | `#1F9D61` / `#E4F5EC` | `#3DD68C` / `#12301F` | Done chips, level meters |
-| btn | `#121417` | `#EDEEF0` | Primary button fill |
-| media | `#1B1E22` | `#0A0B0D` | Stage and thumbnails |
+| paper | `#F4F7F7` | `#0F1214` | Window chrome, sidebar, rail |
+| sheet | `#FCFDFD` | `#171B1E` | Content, cards, fields |
+| sunk / hover | `#F0F4F5` / `#E9EFF0` | `#1C2124` / `#242A2E` | Inset wells / hover fills |
+| ink · ink2 · ink3 · ink4 | `#1F2328` `#5D6064` `#8A9095` `#B9BEC1` | `#E7EAEB` `#ACB3B6` `#8A9296` `#5C6367` | Text: primary, secondary, meta (≥11px only), disabled |
+| line / line2 | `#E9EDED` / `#D4DADB` | `#293035` / `#394146` | Dividers and card borders / control borders |
+| accent | `#297893` | `#4FA3BE` | The mark: current line, playhead, focus |
+| accent-soft / accent-ink | `#E3EFF3` / `#1B5B6F` | `#102F3A` / `#8AC4D6` | Active-line fill / text on it (the accent itself is never text) |
+| red / red-soft | `#D5283D` / `#FBEAEC` | `#E5485B` / `#3A161B` | Recording and destructive only |
+| green / green-soft | `#5F7208` / `#EFF3DB` | `#B3C155` / `#262C12` | Done chips, level meters |
+| btn | `#1F2328` | `#E7EAEB` | Primary button fill |
+| media | `#171B1F` | `#080A0C` | Stage and thumbnails |
 
 Radii: controls **6**, cards **10**, panels and groups **12**, pills full. Controls are **32px**
 tall. One shadow (`--shadow`) for dialogs and popovers; cards use 1px borders, never shadows.

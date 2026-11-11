@@ -10,7 +10,7 @@ which must be able to draw everything the canvas shows. Do the canvas first, fin
 then port. The doop-canvas skill covers frame mechanics (pushing HTML, prototype wiring,
 `build.js`); this skill is the order of work and the decisions around it.
 
-The current system is **"studio console + highlighter"** (docs/design/README.md). Read it
+The current system is **"ink and marks"** (docs/design/README.md). Read it
 before proposing another; a redesign must earn its departure from it.
 
 ## 1. Audit (read-only)
@@ -36,13 +36,13 @@ is mute-only; no editing features.
 1. Try `search_inspiration` for an exemplar; if it is not configured, say so and derive the
    brief from the audit.
 2. List four or five mood candidates as physical metaphors (maritime chart, darkroom,
-   newsroom, field recorder, studio console + highlighter). Reject the first instinct if
+   newsroom, field recorder, ink and marks). Reject the first instinct if
    it is the generic one ("blue tech").
 3. Pick one and justify it by mapping every colour to an object. For Ottr: paper = desk
-   paper, ink = graphite pen, amber = the highlighter you mark a transcript with, red =
-   the tally light of a recording camera, green = the level meter.
-4. Name the hero device (for Ottr: the active transcript line — amber-soft fill, 3px amber
-   bar, amber playhead and search ticks) and a one-line direction.
+   paper, ink = graphite pen, teal = the pen mark you annotate a transcript with, red =
+   the tally light of a recording camera, olive = the level meter.
+4. Name the hero device (for Ottr: the active transcript line — accent-soft fill, 3px teal
+   bar, teal playhead and search ticks) and a one-line direction.
 5. Decide the structural changes, not only the skin: what is persistent (sidebar), what
    docks (capture panel that becomes the live panel), what the library row says (first
    transcript line, pipeline chips), how the item page reads (stage + document panel).
@@ -88,8 +88,8 @@ For every frame, at its real size:
 - **CJK**: load a CJK web font explicitly, or 中文 renders in a mismatched fallback.
 - **CSS leaks**: scope nested selectors (`.tiles>div`), avoid generic class names that
   collide between components.
-- **Contrast**: meta grey only at ≥11px; amber is never text on white (use amber-ink on
-  amber-soft).
+- **Contrast**: meta grey only at ≥11px; the accent is never a fill behind body text (use
+  accent-ink on accent-soft).
 - **Realism**: real labels from i18n.go, real model names, specific content; no lorem.
 - **Dark**: check at least the recorder, recording and playback in dark.
 

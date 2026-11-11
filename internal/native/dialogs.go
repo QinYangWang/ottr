@@ -32,7 +32,7 @@ func dialogHead(c *ui.Context, t *ui.Theme, icon *ui.SVG, danger bool, title, de
 	p := pal(t)
 	ui.Row(c).FillWidth().Gap(14).AlignItems(ui.Start).Children(func() {
 		if icon != nil {
-			fill, ink := p.AmberSoft, p.AmberInk
+			fill, ink := p.AccentSoft, p.AccentInk
 			if danger {
 				fill, ink = p.RedSoft, p.Red
 			}

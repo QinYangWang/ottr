@@ -314,8 +314,8 @@ func (a *App) toggleMute() {
 }
 
 // playbackSeekSlider is the seek bar: the summary's chapters as segments with
-// gaps between them, what has played in ink, amber ticks where the search
-// found something, and the amber playhead. Changed moves the thumb at once;
+// gaps between them, what has played in ink, teal ticks where the search
+// found something, and the teal playhead. Changed moves the thumb at once;
 // release seeks.
 func (a *App) playbackSeekSlider(c *ui.Context, t *ui.Theme, m library.Media) {
 	if m.DurationMs <= 0 {
@@ -365,12 +365,12 @@ func (a *App) playbackSeekSlider(c *ui.Context, t *ui.Theme, m library.Media) {
 			}
 		}
 		for _, tick := range ticks {
-			pt.Fill(ui.Rect{X: r.X + r.W*tick - 1, Y: r.Y + r.H/2 - 5, W: 2, H: 10}, p.Amber, 1)
+			pt.Fill(ui.Rect{X: r.X + r.W*tick - 1, Y: r.Y + r.H/2 - 5, W: 2, H: 10}, p.Accent, 1)
 		}
 		head := ui.Rect{X: r.X + r.W*fraction - 6, Y: r.Y + r.H/2 - 6, W: 12, H: 12}
 		pt.Fill(head, p.Sheet, 6)
-		pt.Fill(ui.Rect{X: head.X + 2, Y: head.Y + 2, W: 8, H: 8}, p.Amber, 4)
-		pt.Stroke(head, p.Amber, 6, 1)
+		pt.Fill(ui.Rect{X: head.X + 2, Y: head.Y + 2, W: 8, H: 8}, p.Accent, 4)
+		pt.Stroke(head, p.Accent, 6, 1)
 	})
 	if slider.Changed() {
 		a.playback.seeking = true

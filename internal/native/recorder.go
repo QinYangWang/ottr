@@ -290,7 +290,7 @@ func (a *App) liveLanguageSelect(c *ui.Context, t *ui.Theme) {
 }
 
 // liveLineRow is one live line: its time, the text, and the translation under
-// a final line. The line still being spoken is dimmed, with an amber caret.
+// a final line. The line still being spoken is dimmed, with a teal caret.
 func (a *App) liveLineRow(c *ui.Context, t *ui.Theme, line liveLine, translated string) {
 	p := pal(t)
 	ui.Row(c).FillWidth().Gap(12).AlignItems(ui.Start).Children(func() {
@@ -303,7 +303,7 @@ func (a *App) liveLineRow(c *ui.Context, t *ui.Theme, line liveLine, translated 
 					text.TextColor(p.Ink)
 				} else {
 					text.TextColor(p.Ink3)
-					ui.Box(c).Size(2, 15).Background(p.Amber).Margin(0, 0, 2, 2)
+					ui.Box(c).Size(2, 15).Background(p.Accent).Margin(0, 0, 2, 2)
 				}
 			})
 			if translated != "" && line.final {

@@ -1,32 +1,34 @@
-/* Ottr tokens: "studio console + highlighter" (Nov 2026).
+/* Ottr tokens: "ink and marks" (Nov 2026).
  * Exported from the Doop canvas style guide (ottr-app-style); the Go mirror is
- * internal/native/theme.go. Amber is the only accent; red means recording or
- * destructive and nothing else. */
+ * internal/native/theme.go. Near-white paper, graphite ink, and three quiet
+ * marks: teal for what is current, olive for done, red for recording and
+ * destruction. The accent is a fill or a border, never body text: text on it
+ * uses accent-ink. */
 :root,
 body {
-  --paper:#F3F4F5;
-  --sheet:#FFFFFF;
-  --sunk:#F7F8F9;
-  --hover:#EEF0F2;
-  --ink:#121417;
-  --ink2:#4A5058;
-  --ink3:#7C838C;
-  --ink4:#A6ACB3;
-  --line:#E4E6E9;
-  --line2:#CDD1D6;
-  --amber:#FFB020;
-  --amber-ink:#8A5600;
-  --amber-soft:#FFF4DB;
-  --amber-line:#F5C46B;
-  --red:#E5383B;
-  --red-ink:#C42B2E;
-  --red-soft:#FDECEC;
-  --green:#1F9D61;
-  --green-soft:#E4F5EC;
-  --btn:#121417;
-  --btn-ink:#FFFFFF;
-  --media:#1B1E22;
-  --shadow:0 12px 32px rgba(17,20,23,.14),0 2px 6px rgba(17,20,23,.06);
+  --paper:#F4F7F7;
+  --sheet:#FCFDFD;
+  --sunk:#F0F4F5;
+  --hover:#E9EFF0;
+  --ink:#1F2328;
+  --ink2:#5D6064;
+  --ink3:#8A9095;
+  --ink4:#B9BEC1;
+  --line:#E9EDED;
+  --line2:#D4DADB;
+  --accent:#297893;
+  --accent-ink:#1B5B6F;
+  --accent-soft:#E3EFF3;
+  --accent-line:#A8C9D5;
+  --red:#D5283D;
+  --red-ink:#A31D2F;
+  --red-soft:#FBEAEC;
+  --green:#5F7208;
+  --green-soft:#EFF3DB;
+  --btn:#1F2328;
+  --btn-ink:#FCFDFD;
+  --media:#171B1F;
+  --shadow:0 12px 32px rgba(31,35,40,.14),0 2px 6px rgba(31,35,40,.06);
   --r-ctl: 6px;
   --r-card: 10px;
   --r-panel: 12px;
@@ -35,27 +37,27 @@ body {
 }
 
 body.dark {
-  --paper:#0E0F11;
-  --sheet:#16181B;
-  --sunk:#1B1E22;
-  --hover:#22262B;
-  --ink:#EDEEF0;
-  --ink2:#A9AFB7;
-  --ink3:#737A83;
-  --ink4:#555B62;
-  --line:#2A2E33;
-  --line2:#3A3F46;
-  --amber:#FFB020;
-  --amber-ink:#FFC453;
-  --amber-soft:#33270F;
-  --amber-line:#6B4E14;
-  --red:#E5383B;
-  --red-ink:#FF6B6E;
-  --red-soft:#3A1516;
-  --green:#3DD68C;
-  --green-soft:#12301F;
-  --btn:#EDEEF0;
-  --btn-ink:#121417;
-  --media:#0A0B0D;
+  --paper:#0F1214;
+  --sheet:#171B1E;
+  --sunk:#1C2124;
+  --hover:#242A2E;
+  --ink:#E7EAEB;
+  --ink2:#ACB3B6;
+  --ink3:#8A9296;
+  --ink4:#5C6367;
+  --line:#293035;
+  --line2:#394146;
+  --accent:#4FA3BE;
+  --accent-ink:#8AC4D6;
+  --accent-soft:#102F3A;
+  --accent-line:#2B5D6E;
+  --red:#E5485B;
+  --red-ink:#FF8896;
+  --red-soft:#3A161B;
+  --green:#B3C155;
+  --green-soft:#262C12;
+  --btn:#E7EAEB;
+  --btn-ink:#141719;
+  --media:#080A0C;
   --shadow:0 12px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3);
 }

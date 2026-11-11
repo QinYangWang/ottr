@@ -314,7 +314,7 @@ var zhCN = map[string]string{
 	"Imported · %s":       "导入 · %s",
 	"Recorded · %s":       "录制于 %s",
 	"Include translation": "包含翻译",
-	// The redesign (studio console + highlighter).
+	// The redesign (ink and marks).
 	"%d items": "%d 项",
 	"%d lines": "%d 行",
 	"%d of %d": "%d / %d",
@@ -350,7 +350,7 @@ var zhCN = map[string]string{
 	"Geist (default)":                                    "Geist（默认）",
 	"Generate the summary first":                         "请先生成摘要",
 	"Has summary":                                        "有摘要",
-	"Highlighter":                                        "荧光笔",
+	"Teal":                                               "青蓝",
 	"Highlights the line playing, search matches and selection.": "高亮正在播放的行、搜索结果和选中内容。",
 	"Include %s under each line":                                 "在每行下方附上%s",
 	"Jump to any line, translate into %s, and get action items.": "跳到任意一行，翻译成%s，并获取待办事项。",
