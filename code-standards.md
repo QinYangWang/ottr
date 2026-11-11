@@ -1,12 +1,18 @@
 # Code standards
 
-These are the rules a change in Ottr is held to. They describe the code that already
-exists; when in doubt, match the surrounding file.
+**Grep the rule you need; do not read this file end to end.** These are the rules a
+change in Ottr is held to, and a reviewer names the rule in the review comment. They
+describe the code that already exists; when in doubt, match the surrounding file.
+
+A rule arrives here from [LESSONS.md](LESSONS.md) when it has been seen on three
+separate days, or from an owner decision. Anything a tool can check belongs in
+`scripts/verify.sh`, not in prose.
 
 ## Go
 
 - **Formatting:** `gofmt` output only. `go vet ./...` is clean. No generated code without
-  a matching generator in the repo.
+  a matching generator in the repo. The checkout uses CRLF (`core.autocrlf=true`), so the
+  format check compares `gofmt` against the file with `\r` stripped; `verify.sh` does it.
 - **Dependencies:** the standard library first, then MyGo, then what is already in
   `go.mod`. A new dependency needs a reason in the PR; never add one for a few lines.
 - **Errors:** return them, wrap them (`fmt.Errorf("describe: %w", err)`), keep messages
@@ -86,3 +92,43 @@ exists; when in doubt, match the surrounding file.
    churn.
 10. Design and code agree, and a screen change carries its Doop frame plus the regenerated
     `docs/design` screenshot — if they do not agree, the PR says which one will follow.
+
+## Evidence matrix
+
+A change carries the evidence its kind can produce. "Tests pass" is not evidence.
+
+| Change | Evidence a reviewer accepts |
+|---|---|
+| Logic in a service | A test that fails on the parent commit and passes here, named in the body |
+| Beat, CSS, layout in `internal/native` | `OTTR_PREVIEW` PNGs before and after at 1280×800, 900×620, 420×800 |
+| A Doop frame | `get_frame_screenshot` of the edited frame, plus the regenerated `docs/design` files |
+| Capture, ASR, playback | The real media or device on Windows, with the command and its output |
+| Translation or summary | One real request's request/response pair, credentials redacted |
+| Performance or quality claim | The measured before and after, as `900956f` and `ce74dc0` did |
+| Tool or model pins | The upstream version, its archive, and the SHA-256 Ottr checks |
+| Schema | The new migration file and the test that reads rows written before it |
+| Docs only | The links that had to change, and the command output they quote |
+
+## Review checklist
+
+The reviewer does these, not only reads the diff:
+
+1. Find the runtime path the change claims to alter; confirm the diff is on it.
+2. Check the siblings: every other caller, provider, platform file, breakpoint or
+   locale that reads the changed thing.
+3. Run the named test on the parent commit; it must fail there.
+4. Break the change on purpose (invert a condition, drop a write, use the wrong unit) and
+   confirm a test goes red.
+5. Run `scripts/verify.sh` at the pushed head, or name the check that was not run.
+6. Compare a UI change against its Doop frame, side by side, at all three widths.
+7. Grep the new user-facing strings for an `i18n.go` entry in both languages.
+8. Say what was not run, and why, in the review comment.
+
+## Commits and merges
+
+- Header: `<type>(<scope>): <subject>` (`feat|fix|perf|docs|refactor|test|build|ci|chore`)
+  or an imperative sentence; at most 72 characters, no trailing period.
+- The body says *why*, names the measurement or the failing case, and lists `Refs #N`.
+- One goal per commit. A behavior change never hides under `chore` or a reformat.
+- The owner merges; the reviewed head is the merged head, and a force-push restarts the
+  review.

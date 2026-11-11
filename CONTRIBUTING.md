@@ -10,6 +10,7 @@ you want transcription to work. Build and test with cgo:
 CGO_ENABLED=1 go run ./cmd/studio
 go vet ./...
 go test ./...
+bash scripts/verify.sh   # the same gates plus the commit-header lint
 ```
 
 ## Workflow
@@ -37,6 +38,10 @@ go test ./...
   committed on purpose, but `ottr.exe`, `dist/`, `bin/` and model folders are not.
 
 ## What a PR must include
+
+The pull request template asks for the change kind, the base branch, the semantic change,
+the cost, the evidence block and the rollback; its checklist is the short form of
+[code-standards.md](code-standards.md):
 
 - [ ] `go vet ./...` and `go test ./...` pass with `CGO_ENABLED=1`
 - [ ] New behavior has a test, or the PR says why none is possible

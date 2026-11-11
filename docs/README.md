@@ -28,6 +28,8 @@ and a local video knowledge base.
 | [../AGENTS.md](../AGENTS.md) | Project overview and the documentation index for agents |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Contribution rules: branches, commits, review |
 | [../code-standards.md](../code-standards.md) | Code style and the acceptance bar for every PR |
+| [../LESSONS.md](../LESSONS.md) | What recent work got wrong, with the commit that proves it |
+| [nightly-review.md](nightly-review.md) | The daily review prompt, its range and its output |
 | [ROADMAP.md](ROADMAP.md) | What is not implemented yet |
 
 ## Status at a glance
