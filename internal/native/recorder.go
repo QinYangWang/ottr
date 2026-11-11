@@ -65,7 +65,7 @@ func (a *App) recordingHead(c *ui.Context, t *ui.Theme) {
 		if layoutOf(width) == "narrow" {
 			ui.Spacer(c)
 		} else {
-			ui.Text(c, name).Height(24).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
+			ui.Text(c, name).FontSize(18).FontWeight(600).LetterSpacing(-0.2).TextColor(p.Ink).
 				Grow(1).MinWidth(0).SingleLine()
 		}
 		if a.busy {
@@ -179,7 +179,7 @@ func (a *App) recordingStage(c *ui.Context, t *ui.Theme) {
 		ratio = float32(a.previewW) / float32(a.previewH)
 	}
 	pane := ui.Column(c).Label(a.tr("Recording preview")).FillWidth().AspectRatio(ratio).MinWidth(0).
-		Radius(kit.RadiusCard).Clip().Background(p.Media)
+		Radius(kit.RadiusCard).Background(p.Media)
 	pane.Children(func() {
 		if a.preview == nil {
 			ui.Column(c).Fill().Center().Gap(8).Children(func() {
@@ -188,7 +188,9 @@ func (a *App) recordingStage(c *ui.Context, t *ui.Theme) {
 			})
 			return
 		}
-		ui.Image(c, a.preview).Fit(ui.Contain).Grow(1)
+		// The radius rides on the picture: a clip mask rounds the same corners
+		// a pixel of antialiasing at a time, which reads as dots at 1x.
+		ui.Image(c, a.preview).Fit(ui.Contain).Grow(1).Radius(kit.RadiusCard)
 	})
 }
 

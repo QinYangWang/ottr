@@ -179,6 +179,8 @@ func TestPreview(t *testing.T) {
 	shoot("20-recorder-420", a.view, CompactWidth, CompactHeight, false)
 
 	// Settings, in the main window.
+	a.fontsLoaded = true
+	a.fontFamilies = []string{"Arial", "Georgia", "Inter", "Noto Sans", "Noto Sans SC", "Segoe UI", "Microsoft YaHei UI"}
 	a.loadedProvider = true
 	a.provider = providerSettings{
 		BaseURL: "https://api.deepseek.com/v1", Model: "deepseek-chat", APIKey: "sk-preview",

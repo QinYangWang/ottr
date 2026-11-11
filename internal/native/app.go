@@ -158,6 +158,11 @@ type App struct {
 	modelLoading bool
 	// The download under way, if any: the model, how much of it has arrived,
 	// and what the last attempt failed with.
+	// The display fonts installed on this machine, read once.
+	fontFamilies []string
+	fontsLoaded  bool
+	fontsLoading bool
+
 	modelDLID       string
 	modelDLProgress float64
 	modelDLErrID    string
@@ -462,7 +467,7 @@ func (a *App) recordingPill(c *ui.Context, t *ui.Theme) {
 		label = a.tr("Paused")
 	}
 	p := pal(t)
-	ui.Row(c).Height(24).Padding(0, 10).Radius(9999).Gap(7).AlignItems(ui.Center).AlignSelf(ui.Start).
+	ui.Row(c).Padding(4, 10).Radius(9999).Gap(7).AlignItems(ui.Center).AlignSelf(ui.Start).
 		Background(p.RedSoft).Children(func() {
 		dot := ui.Box(c).Size(8, 8).Radius(4).Background(p.Red)
 		dot.Opacity(float32(0.35 + 0.65*dot.Loop("pulse", 1100*time.Millisecond, ui.EaseInOut)))

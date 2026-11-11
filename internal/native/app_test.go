@@ -874,3 +874,24 @@ func TestTranscriptTabShowsTheLiveLines(t *testing.T) {
 		t.Errorf("the tab shows the empty state under the live lines: %q", tt.Texts())
 	}
 }
+
+// The display-font list is what the machine has: the default first, one entry
+// per family, sorted, without Windows' @-prefixed aliases, and with the font
+// in use kept even when it is no longer installed.
+func TestFontChoicesComeFromTheSystem(t *testing.T) {
+	a := &App{font: "Georgia"}
+	a.fontFamilies = uiFamilies("Segoe UI", "@SimSun", "Noto Sans", "segoe ui", "")
+	got := a.fontChoices()
+	want := []string{"Geist (default)", "Segoe UI", "@SimSun", "Noto Sans", "Georgia"}
+	if len(got) != len(want) {
+		t.Fatalf("font choices are %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("font choice %d is %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// uiFamilies is a family list as ui.FontFamilies hands it over.
+func uiFamilies(names ...string) []string { return names }

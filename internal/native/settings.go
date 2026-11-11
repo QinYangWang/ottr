@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -149,15 +148,16 @@ func (a *App) appearanceSettings(c *ui.Context, t *ui.Theme) {
 	})
 	kit.Group(c, t, func() {
 		kit.GroupRow(c, t, true, a.tr("Display font"), a.tr("Use Geist, or pick an installed family."), func() {
+			a.loadFontFamilies()
 			defaultFont := a.tr("Geist (default)")
 			font := a.font
 			if font == "" {
 				font = defaultFont
 			}
-			options := []string{defaultFont, "Inter", "Noto Sans", "Noto Sans SC", "Segoe UI", "Microsoft YaHei UI", "Georgia"}
-			if !slices.Contains(options, font) {
-				options = append(options, font)
+			if !a.fontsLoaded {
+				ui.Spinner(c).Label(a.tr("Looking for fonts")).Size(12, 12)
 			}
+			options := a.fontChoices()
 			choices := make([]kit.SelectOption[string], len(options))
 			for i, name := range options {
 				choices[i] = kit.SelectOption[string]{Value: name, Label: name}

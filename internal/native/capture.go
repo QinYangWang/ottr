@@ -275,10 +275,10 @@ func (a *App) sourcePreview(c *ui.Context, t *ui.Theme) {
 		label += " · " + strings.ReplaceAll(detail, "x", "×")
 	}
 	box := ui.Column(c).Label(a.tr("Source preview")).FillWidth().AspectRatio(16.0 / 9.0).
-		Radius(kit.RadiusCard).Clip().Background(p.Media)
+		Radius(kit.RadiusCard).Background(p.Media)
 	box.Children(func() {
 		if a.preview != nil {
-			ui.Image(c, a.preview).Fit(ui.Contain).Grow(1)
+			ui.Image(c, a.preview).Fit(ui.Contain).Grow(1).Radius(kit.RadiusCard)
 		} else {
 			ui.Column(c).Grow(1).Center().Padding(12).Gap(8).Children(func() {
 				ui.Icon(c, iconScreen).FontSize(26).TextColor(onMedia()).Opacity(0.6)
