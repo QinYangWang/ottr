@@ -18,8 +18,13 @@ two pages and do not rename it to anything but 中性.
 | `screens/02-recorder-dark.png` | `a4zaIZP-zl` | 1280×800 | 录制 · 深色 |
 | `screens/03-playback.png` | `wpFrqTobTk` | 1280×800 | 播放 · 浅色 — stage, chapters, transcript panel |
 | `screens/04-playback-dark.png` | `4ggD-pyLom` | 1280×800 | 播放 · 深色 |
-| `screens/05-recording.png` | `cx6vbyZZvc` | 1280×800 | 录制中 · 浅色 — REC strip, levels, live transcript |
+| `screens/05-recording.png` | `cx6vbyZZvc` | 1280×800 | 录制中 · 浅色 — REC strip, the live picture, the four fields, live transcript |
 | `screens/06-recording-dark.png` | `nGtt8pDKmL` | 1280×800 | 录制中 · 深色 |
+| `screens/07-settings-appearance.png` | `Bq9YBXj-RZ` | 1280×800 | 外观 · 浅色 — language, theme tiles, display font, accent |
+| `screens/08-settings-appearance-dark.png` | `Kk9ACEPEFc` | 1280×800 | 外观 · 深色 |
+| `screens/09-settings-transcription.png` | `veWf7gLZXA` | 1280×800 | 转写 · 浅色 — the three models, In use, download, spoken language |
+| `screens/10-settings-provider.png` | `eCOCENEaON` | 1280×800 | 服务商 · 浅色 — endpoints, the three fields, import chain, prompts |
+| `screens/11-settings-speakers.png` | `3K4bIKo85t` | 1280×800 | 说话人 · 浅色 — the voice library with rename and forget |
 
 `pages/<n>-<screen>.html` are those frames' own documents, exported from the canvas. They are
 self-contained (inline CSS, Google Fonts links) and are the fastest way to read or edit a
@@ -34,6 +39,8 @@ The page's start frame is `BMfF2objk0` (录制 · 浅色). Every link resolves; 
 录制(浅) --row click--> 播放(浅) --Library/back--> 录制(浅) --Start recording--> 录制中(浅) --Stop--> 播放(浅)
 录制(深) --row click--> 播放(深) --Library/back--> 录制(深) --Start recording--> 录制中(深) --Stop--> 播放(深)
 录制中(浅/深) --Library--> 录制(浅/深)
+every frame --Appearance--> 外观(浅);  every frame --Transcription/Provider/Speakers--> that 设置 page
+外观(浅/深) --Theme Light/Dark tile--> 录制(浅/深)
 ```
 
 Wiring is plain attributes in the frame HTML, as the doop-canvas skill describes:
@@ -93,12 +100,17 @@ window 1280×800
 ```
 
 The list is the flexible column: the right column is pinned to the panel's edge, so 1280
-gives 656px of list. Sidebar and right column never grow.
+gives 656px of list. Sidebar and right column never grow. Settings uses the same shell — the
+sidebar stays, the page takes the rest; there is no separate settings window in the app.
 
-`New capture` is a 360px column with 12px padding: source tiles (2×2, the checked one gets an
+`New capture` is a 360px column with 14px padding: source tiles (2×2, the checked one gets an
 inset 1px ink ring), a 16:9 preview on `#171717` with a white `Display 1 · 2560×1440` badge,
-a display select, then AUDIO and WHILE RECORDING groups, then the primary `Start recording`
-button with `Ctrl Shift R` kbd chips inside it, pushed to the bottom.
+a display select, then AUDIO (System audio, Microphone) and WHILE RECORDING (Live transcript,
+Translate) with the labels `capture.go` really draws, then a one-line summary of the choice
+above the primary `Start recording` button with `Ctrl Shift R` kbd chips inside it.
+
+The recording page drops the level meters the service cannot report; a mono line under the
+stage carries what it does know (`H.264 · 1080p · 412 MB`).
 
 The playback and recording screens share `stage` (16:9, `#171717`, radius 12), `facts`
 (4 columns, hairline above) or `recfields` (2×2 label + select), and the 440px `doc` column:
@@ -110,6 +122,16 @@ The active transcript row is `--hover` with a 2px `--fg` bar on the left; the se
 the only coloured text background (`#FFF085` with `#0A0A0A`).
 
 ## Things the frames already settled
+
+- Settings opens in the main window: 1280×800, the same 184px sidebar, one page of bordered
+  rows. It is why there are no 920×660 frames.
+- Sidebar labels are shown on the library and settings screens and collapse to a 64px rail
+  on the item pages, where the stage and the 440px document panel need the width.
+- The capture panel shows the controls `capture.go` has: two audio selects and two live
+  selects. Its 360px column is sized to fit 800px without scrolling.
+- The play button sits at the stage's centre, so speaker tiles put their name at the foot,
+  not the top left.
+- Transcript panels scroll; the rows stop above the footer instead of running under it.
 
 - The disk figure moved to the top bar (`338.2 GiB free` with a hard-drive icon); the
   sidebar has no disk card.
@@ -125,17 +147,19 @@ the only coloured text background (`#FFF085` with `#0A0A0A`).
 
 ## Next
 
-1. **More screens**, same page, same 2×2 rhythm: Settings (Appearance, Transcription,
-   Provider, Speakers), the transcribing pipeline card, ⌘K search palette, the three dialogs
-   (delete / export / transcription failed), first-run, empty library. Then 900×620 and
-   420×800 variants of recorder and playback. Reuse `template` markup patterns from the
-   existing pages rather than inventing new ones.
-2. **Decide the remaining questions** with the owner before going wide:
+1. **More screens**, same page, same 2×2 rhythm: the transcribing pipeline card (job state,
+   progress, Cancel), the ⌘K search palette, the three dialogs (delete / export / transcription
+   failed), first-run, empty library, and the download-in-progress variant of Transcription.
+   Then 900×620 and 420×800 variants of recorder and playback. The settings pages are done:
+   light for all four, dark only for Appearance until the others earn one.
+2. **A theme you can see in the prototype**: the Appearance tiles switch the recorder's theme;
+   the settings pages themselves only exist in light.
+3. **Decide the remaining questions** with the owner before going wide:
    - icons: the frames use Lucide line icons (what the app ships). The style's native set is
      Remix (line at rest, fill when selected). Switching is a one-pass change but touches
      every frame.
    - the wordmark: currently lowercase `ottr` + ring glyph, like the app today.
-3. **Then the Go port**: `internal/native/kit/palette.go` gains the neutral tokens beside the
+4. **Then the Go port**: `internal/native/kit/palette.go` gains the neutral tokens beside the
    current ones, `theme.go` picks one, and the recorder page is rebuilt first. Do not start in
    Go before the canvas frames for that screen exist and are approved.
 

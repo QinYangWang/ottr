@@ -2,13 +2,13 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>Ottr · 中性 · 录制（浅色）</title>
+<title>Ottr · 中性 · 录制 · 浅色</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&text=%C2%B7%C3%97%E2%80%94%E4%B8%AD%E6%96%87&display=swap" rel="stylesheet">
 <style>
 :root{
-  /* Godwit's semantic tokens: shadcn neutral on Tailwind v4 */
+  /* 中性 semantic tokens */
   --window:#EDEDED; --sidebar:#FAFAFA; --bg:#FFFFFF; --fg:#0A0A0A; --muted:#737373;
   --border:#E5E5E5; --input:#E5E5E5; --ring:rgba(161,161,161,.5);
   --hover:#F5F5F5; --selected:#F5F5F5; --card:#FAFAFA; --raised:#FFFFFF;
@@ -250,9 +250,228 @@ body{
 .ttrans{font-size:12.5px;line-height:1.45;color:var(--muted);margin-top:2px}
 .docfoot{height:40px;flex:none;display:flex;align-items:center;gap:6px;padding:0 12px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted)}
 .docfoot svg{width:14px;height:14px;color:var(--muted)}
+
+/* 中性 · 工作台 — first review pass */
+:root{--fg:#171717;--muted:#656565}
+body.dark{--bg:#141414;--sidebar:#191919;--card:#191919;--raised:#202020;--border:#303030;--input:#383838;--fg:#F5F5F5;--muted:#A3A3A3}
+button,select,input{font-family:inherit}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--fg);outline-offset:3px}
+button:disabled,[aria-disabled="true"]{cursor:not-allowed;opacity:.55}
+.panel,.btn,.select,.tile,.seg button.on{box-shadow:none}
+.side{width:184px;padding:16px 10px;gap:4px}
+.side .group{margin-top:24px;font-size:10px;letter-spacing:.09em}
+.nav{height:36px;gap:10px}
+.nav.on{background:var(--hover)}
+.side-note{margin-top:auto;border-top:1px solid var(--border);padding:16px 8px 4px;color:var(--muted);font-size:11px;line-height:1.7}
+.side-note strong{display:block;color:var(--fg);font-size:12px;font-weight:500}
+.list .head{padding:24px 24px 12px;gap:12px}
+.h1{font-size:22px;letter-spacing:-.6px}
+.sub{font-size:12px}
+.seg{background:transparent;padding:0;gap:4px;flex-wrap:wrap}
+.seg button{height:28px;font-size:12px;padding:0 10px}
+.seg button.on{background:var(--primary);color:var(--primary-text)}
+.rows{padding:0 16px 16px}
+.day{margin:18px 8px 8px;font-size:10px;letter-spacing:.08em}
+.rowitem{gap:14px;padding:12px 8px;min-height:88px;border-bottom:1px solid var(--border);border-radius:0}
+.rowitem.on{border-radius:8px;border-color:transparent}
+.thumb{width:88px;height:50px;margin-top:2px;border:1px solid #303030}
+.thumb .paper{inset:8px 12px}
+.thumb .dur{font-size:10px;line-height:15px;right:3px;bottom:3px}
+.rtitle{font-size:14px;font-weight:500}
+.rtime{font-size:11px}
+.rmeta{font-size:12px;margin-top:4px}
+.rchips{margin-top:7px}
+.chip{height:19px;font-size:10.5px;padding:0 5px}
+.chip.green{background:transparent;border-color:var(--border);color:var(--muted)}
+.chip.green:before{content:"";width:4px;height:4px;background:var(--green-text);border-radius:50%}
+.capture{padding:20px 16px 16px;gap:16px;background:var(--sidebar)}
+.capture .capture-title{font-size:17px;font-weight:600;letter-spacing:-.25px}
+.capture .section{gap:8px}
+.label{font-size:10px;letter-spacing:.08em}
+.capture .tiles{gap:6px}
+.capture .tile{height:54px;flex-direction:row;gap:8px}
+.capture .tile.soon{height:32px;flex-direction:row;font-size:11px;background:transparent}
+.capture .tile.soon svg{width:14px;height:14px}
+.capture .tile.soon .tag{order:3;font-size:8px}
+.capture .tile.on{background:var(--bg);border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.capture .preview{flex:none;aspect-ratio:16/9;margin-top:2px}
+.capture .preview .badge{font-size:9px;height:18px}
+.field-label{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px;margin:2px 0 6px}
+.capture .select{background:var(--bg);font-size:12px}
+.capture .send{border-top:1px solid var(--border);padding-top:14px;gap:10px}
+.capture .hint{font-size:10.5px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
+.setting-row strong{font-weight:500;font-size:13px;display:block}
+.setting-row small{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+.sw.off{background:var(--input)}
+.sw.off:after{right:16px;background:var(--bg)}
+.sw{border:0;cursor:pointer}
+[data-mode="playback"] .side,[data-mode="recording"] .side{width:64px;padding:16px 10px}
+[data-mode="playback"] .nav,[data-mode="recording"] .nav{height:40px;width:42px;justify-content:center;padding:0;font-size:0;gap:0}
+[data-mode="playback"] .nav svg,[data-mode="recording"] .nav svg{width:18px;height:18px}
+[data-mode="playback"] .side .group,[data-mode="recording"] .side .group{height:20px;margin:0;padding:0;font-size:0}
+[data-mode="playback"] .side .count,[data-mode="recording"] .side .count,[data-mode="playback"] .side-note,[data-mode="recording"] .side-note{display:none}
+.doc{width:480px;background:var(--bg)}
+.dochead{height:52px;padding:0 16px;gap:8px}
+.docsub{min-height:48px;padding:10px 20px}
+.dochead .tabs{gap:24px}
+.tab{font-size:14px}
+.trows{padding:12px 16px}
+.trow{gap:12px;padding:12px 10px}
+.trow.on:before{top:12px;bottom:12px}
+.ava{width:26px;height:26px;font-size:10px}
+.tmeta{justify-content:space-between}
+.tname{font-size:12px;font-weight:500}
+.ttext{font-size:14px;line-height:1.55;margin-top:4px}
+.ttrans{font-size:12px;line-height:1.6;margin-top:4px}
+.docfoot{height:44px;font-size:10px;padding:0 16px;gap:5px}
+.docfoot .mono{font-size:10px}
+.crumbs{height:40px;padding:0 16px}
+.head2{padding:4px 24px 18px;align-items:center}
+.title2{font-size:21px;letter-spacing:-.5px}
+.meta2{margin-top:5px;font-size:12px}
+.stage{margin:0 24px;flex:none;aspect-ratio:16/9}
+.playbig{background:#262626;border:1px solid #525252;backdrop-filter:none}
+.tile2.sel{box-shadow:inset 0 0 0 2px #D4D4D4}
+.transport{padding:14px 24px 0}
+.tbtns{padding:4px 20px 8px 24px}
+.seek .segm{flex:none}
+.seek .segm:nth-child(1){width:27.42%}
+.seek .segm:nth-child(2){width:30.11%}
+.seek .segm:nth-child(3){width:22.94%}
+.seek .segm:nth-child(4){flex:1}
+.chapters{padding:12px 24px}
+.chaphead{font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.chap{height:32px;padding:0 8px;gap:16px;font-size:12px;border-bottom:0;border-radius:6px;cursor:pointer}
+.chap.current{background:var(--hover);font-weight:500}
+.chap.current .ct{color:var(--fg)}
+.facts{margin-top:auto;padding:12px 24px;gap:16px;background:var(--sidebar)}
+.fact .v{font-size:12px}
+.recbar{height:68px;flex:none;padding:0 24px;gap:12px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.clock{font-size:22px;font-weight:500;letter-spacing:-.6px}
+.fname{display:none}
+.recchip{background:transparent;border:0;padding:0;font-size:12px}
+.stage.grow{flex:0 0 auto;aspect-ratio:16/9;min-height:0}
+.paperbig{width:80%;height:78%;box-shadow:none;display:block}
+.paperbig .pright i{flex:none}
+.levels{padding:14px 24px 0;gap:20px}
+.level{font-size:11px;gap:10px}
+.recfields{padding:20px 24px;gap:16px;grid-template-columns:1fr 1fr}
+.fieldrow{flex-direction:column;align-items:stretch;gap:7px}
+.fieldrow .nm{width:auto;font-size:11px}
+.fieldrow .select{flex:none;font-size:12px}
+.record-note{margin:auto 24px 20px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--sidebar);font-size:12px;line-height:1.6;color:var(--muted)}
+.record-note strong{display:block;font-weight:500;color:var(--fg);margin-bottom:2px}
+.live{padding:12px 16px}
+.lrow{padding:13px 8px;gap:12px}
+.lrow .lt{width:38px}
+.lrow .ltxt{font-size:14px;line-height:1.6}
+.lrow .ltr{font-size:12px;line-height:1.6;margin-top:5px}
+.lrow.prov{margin-top:4px;border-radius:8px;background:var(--hover)}
+.live-note{font-size:11px;color:var(--muted);padding:10px 20px;border-bottom:1px solid var(--border);line-height:1.6}
+.search-input{height:32px;border:1px solid var(--input);border-radius:6px;background:var(--bg);color:var(--fg);padding:0 10px;font-size:12px;min-width:0;flex:1}
+.prototype-toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);padding:12px 18px;border:1px solid var(--input);border-radius:8px;background:var(--raised);font-size:12px;z-index:20;box-shadow:var(--shadow-sm)}
+
+
+.capture{gap:12px}.capture>.select{flex:none}.capture .field-label{margin:0}.capture .section{flex:none;gap:6px}
+
+[data-mode="playback"] .crumbs{height:32px}
+[data-mode="playback"] .head2{padding-top:0;padding-bottom:14px}
+[data-mode="playback"] .title2{font-size:20px}
+[data-mode="playback"] .transport{padding-top:10px}
+[data-mode="playback"] .tbtns{padding-bottom:4px}
+.chapters{padding:8px 24px}.chap{height:28px}.chaphead{margin-bottom:4px}
+.facts{padding-top:10px;padding-bottom:10px}
+.trows{padding-top:10px;padding-bottom:10px}
+.trow{padding-top:10px;padding-bottom:10px}
+/* ---- Settings (920×660) ---- */
+[data-mode="settings"] .win{width:1280px;height:800px}
+.settings{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+.set-head{padding:26px 32px 18px;flex:none;display:flex;align-items:flex-start;gap:16px}
+.set-head .title2{font-size:20px}
+.set-head .meta2{margin-top:5px;font-size:12px}
+.set-body{flex:1;min-height:0;overflow-y:auto;padding:0 32px 28px;display:flex;flex-direction:column;gap:18px}
+.set-body::-webkit-scrollbar{width:0}
+.sect{font-size:10px;font-weight:500;letter-spacing:.08em;color:var(--muted);margin:2px 0 -8px 2px}
+.card{border:1px solid var(--border);border-radius:var(--r-xl);background:var(--bg);overflow:hidden}
+.srow{display:flex;align-items:center;gap:16px;padding:14px 16px;min-height:56px}
+.srow+.srow{border-top:1px solid var(--border)}
+.srow .grow{flex:1;min-width:0}
+.srow .t{font-size:13px;font-weight:500}
+.srow .d{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5}
+.srow .select{width:200px;flex:none}
+.themes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px 16px 16px}
+.theme{border:1px solid var(--input);border-radius:var(--r-lg);padding:8px;background:var(--bg);cursor:pointer}
+.theme.on{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.theme .shot{height:66px;border-radius:6px;overflow:hidden;display:flex;border:1px solid var(--border)}
+.theme .shot .sl{width:30%;border-right:1px solid rgba(0,0,0,.08)}
+.theme .shot .sr{flex:1;padding:8px;display:flex;flex-direction:column;gap:5px}
+.theme .shot i{display:block;height:4px;border-radius:2px;background:rgba(0,0,0,.14)}
+.theme .shot i.a{width:58%;background:rgba(0,0,0,.62)}
+.theme .shot i:nth-child(2){width:84%}
+.theme .shot i:nth-child(3){width:70%}
+.theme .shot.half{display:flex}
+.theme .shot.half>div{flex:1}
+.theme .cap{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;font-weight:500}
+.radio{width:14px;height:14px;border-radius:50%;border:1px solid var(--input);flex:none;position:relative}
+.radio.on{border-color:var(--fg)}
+.radio.on:after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--fg)}
+.providers{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px 16px 16px}
+.provider{display:flex;align-items:flex-start;gap:9px;padding:12px;border:1px solid var(--input);border-radius:var(--r-lg);background:var(--bg);cursor:pointer;min-width:0}
+.provider.on{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.provider .pn{font-size:12.5px;font-weight:500;margin-top:1px}
+.provider .ph{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.field{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--r-md);background:var(--bg);font-size:12px;color:var(--fg);min-width:0;flex:1}
+.field .mono{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.field svg{width:14px;height:14px;color:var(--muted);flex:none}
+.labelrow{padding:12px 16px 2px;font-size:10px;font-weight:500;letter-spacing:.08em;color:var(--muted)}
+.mrow{display:flex;align-items:center;gap:12px;padding:11px 16px;min-height:58px}
+.mrow+.mrow{border-top:1px solid var(--border)}
+.micon{width:30px;height:30px;border-radius:var(--r-md);background:var(--hover);display:flex;align-items:center;justify-content:center;flex:none}
+.micon svg{width:15px;height:15px;color:var(--muted)}
+.mname{font-size:13px;font-weight:500}
+.mdetail{font-size:11px;color:var(--muted);margin-top:3px;font-family:"Geist Mono",monospace}
+.mfoot{display:flex;align-items:center;gap:8px;padding:9px 16px;border-top:1px solid var(--border);background:var(--sidebar);font-size:11px;color:var(--muted)}
+.mfoot .mono{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+.search{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:var(--r-md);width:200px;flex:none;color:var(--muted);font-size:12px}
+.search svg{width:14px;height:14px}
+.spk{display:flex;align-items:center;gap:12px;padding:10px 16px;min-height:56px}
+.spk+.spk{border-top:1px solid var(--border)}
+.av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex:none}
+.spname{font-size:13px;font-weight:500}
+.spmeta{font-size:11px;color:var(--muted);margin-top:3px}
+.setnote{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);padding:0 2px}
+.setnote svg{width:14px;height:14px}
+.tilebtn{height:32px;padding:0 12px;border:1px solid var(--input);border-radius:var(--r-md);background:var(--bg);color:var(--fg);font:inherit;font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+.tilebtn svg{width:14px;height:14px}
+.tilebtn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-text)}
+
+/* fit and consistency pass */
+.grow{flex:1;min-width:0}
+.capture{padding:16px 14px 14px;gap:10px}
+.capture .section{gap:6px}
+.capture .tile{height:48px}
+.capture .tile.soon{height:28px}
+.capture .field-label{margin:0 0 4px;font-size:11.5px}
+.capture .send{padding-top:12px;gap:8px}
+.capture .send .hint{font-size:10px}
+.fname{display:inline;font-family:"Geist Mono",monospace;font-size:11px;color:var(--muted);white-space:nowrap}
+
+/* the REC strip and the stage's facts line */
+.fname{max-width:300px;overflow:hidden;text-overflow:ellipsis}
+.stagefacts{display:flex;justify-content:flex-end;padding:8px 24px 0;font-size:11px;color:var(--muted)}
+
+/* labels sit at the tile's foot, clear of the centred play button */
+.tile2 .name{top:auto;left:auto;right:8px;bottom:8px}
+.sw.off{background:var(--input);box-shadow:inset 0 0 0 1px var(--border)}
+
+/* a long transcript scrolls under the footer instead of clipping mid-row */
+.trows,.live{overflow-y:auto;scrollbar-width:none}
+.trows::-webkit-scrollbar,.live::-webkit-scrollbar{width:0;height:0}
+
 </style>
 </head>
-<body class="">
+<body class="" data-mode="library">
 <div class="win">
   <div class="top">
     <div class="lights"><i></i><i></i><i></i></div>
@@ -282,23 +501,22 @@ body{
         Library <span class="count">5</span>
       </button>
       <div class="group">SETTINGS</div>
-      <button class="nav">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      <button class="nav" data-doop-on="click" data-doop-action="navigate:Bq9YBXj-RZ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3a9 9 0 1 0 0 18 2 2 0 0 0 1.6-3.2 2 2 0 0 1 1.6-3.2H19a3 3 0 0 0 3-3A8.5 8.5 0 0 0 12 3Z"/><circle cx="7.5" cy="11" r=".9"/><circle cx="10" cy="7.3" r=".9"/><circle cx="14.5" cy="7.6" r=".9"/></svg>
         Appearance
       </button>
-      <button class="nav">
+      <button class="nav" data-doop-on="click" data-doop-action="navigate:veWf7gLZXA">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h10M7 14h6"/></svg>
         Transcription
       </button>
-      <button class="nav">
+      <button class="nav" data-doop-on="click" data-doop-action="navigate:eCOCENEaON">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 7h16M4 12h10M4 17h7"/></svg>
         Provider
       </button>
-      <button class="nav">
+      <button class="nav" data-doop-on="click" data-doop-action="navigate:3K4bIKo85t">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="9" cy="9" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M17 8a3 3 0 0 1 0 6"/></svg>
         Speakers <span class="count">4</span>
       </button>
-    </aside>
+    <div class="side-note"><strong>Saved on this computer</strong>Transcription runs locally</div></aside>
 
     <section class="list">
       <div class="head">
@@ -310,7 +528,7 @@ body{
             Import media
           </button>
         </div>
-        <div class="sub">5 items · 3 h 15 m</div>
+        <div class="sub">6 items · 3 h 12 m</div>
         <div class="seg">
           <button class="on">All</button><button>Recordings</button><button>Imports</button><button>Has summary</button><button>Failed</button>
         </div>
@@ -358,12 +576,20 @@ body{
             <div class="rchips"><span class="chip red">Failed</span></div>
           </div>
         </div>
+        <div class="rowitem" data-doop-on="click" data-doop-action="navigate:wpFrqTobTk">
+          <div class="thumb"><div class="paper"><i></i><i></i><i></i></div><span class="dur mono">27:14</span></div>
+          <div class="rmain">
+            <div class="rtop"><span class="rtitle">Offsite planning</span><span class="rtime mono">09:42</span></div>
+            <div class="rmeta">Recorded · Nov 10 · 3 speakers</div>
+            <div class="rchips"><span class="chip green">Transcribed</span></div>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="capture">
       <div class="section">
-        <div style="font-size:15px;font-weight:600">New capture</div>
+        <div class="capture-title">New capture</div>
         <div class="tiles">
           <div class="tile on">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
@@ -396,11 +622,13 @@ body{
 
       <div class="section">
         <div class="label">AUDIO</div>
+        <div class="field-label">System audio</div>
         <div class="select">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M11 5 6 9H3v6h3l5 4V5ZM16 9a4 4 0 0 1 0 6"/></svg>
           Speakers (Realtek Audio)
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </div>
+        <div class="field-label">Microphone</div>
         <div class="select">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
           Disabled
@@ -410,15 +638,21 @@ body{
 
       <div class="section">
         <div class="label">WHILE RECORDING</div>
+        <div class="field-label">Live transcript</div>
         <div class="select">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 12h3l2-5 3 10 2-5h6"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h5M7 15h9"/></svg>
+          Auto
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="field-label">Translate</div>
+        <div class="select">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></svg>
           Disabled
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </div>
       </div>
 
-      <div class="send">
-        <button class="btn primary lg block" style="justify-content:space-between;padding:0 8px 0 14px" data-doop-on="click" data-doop-action="navigate:cx6vbyZZvc">
+      <div class="send"><div class="hint">Display 1 · System audio · Microphone off</div><button class="btn primary lg block" style="justify-content:space-between;padding:0 8px 0 14px" data-doop-on="click" data-doop-action="navigate:cx6vbyZZvc">
           <span style="display:inline-flex;align-items:center;gap:8px"><i class="rec"></i>Start recording</span>
           <span style="display:inline-flex;align-items:center;gap:4px"><span class="kbd">Ctrl</span><span class="kbd">Shift</span><span class="kbd">R</span></span>
         </button>
@@ -427,5 +661,29 @@ body{
   </div>
 </div>
 
+
+
+<script>
+(()=>{
+ const $=s=>document.querySelector(s), all=s=>[...document.querySelectorAll(s)];
+ const mode=document.body.dataset.mode;
+ function toast(text){$('.prototype-toast')?.remove();const n=document.createElement('div');n.className='prototype-toast';n.setAttribute('role','status');n.textContent=text;document.body.append(n);setTimeout(()=>n.remove(),3200)}
+ function toggle(el){const off=el.classList.toggle('off');el.setAttribute('aria-pressed',String(!off));return !off}
+ all('.nav').forEach(b=>{const label=b.textContent.trim().replace(/\s+\d+$/,'');b.title=label;b.setAttribute('aria-label',label);if(b.dataset.doopAction)b.disabled=false;});
+ all('.tile.soon').forEach(t=>{t.setAttribute('aria-disabled','true');t.title='This capture source is not available yet'});
+ all('.sw').forEach(b=>{b.setAttribute('role','switch');b.setAttribute('tabindex','0');b.onclick=()=>{const enabled=toggle(b);if(b.closest('.docsub'))all('.ttrans').forEach(t=>t.hidden=!enabled);if(b.closest('.capture'))$('.setting-row small').textContent=enabled?'On this computer · SenseVoice':'Off';};});
+ all('.tile:not(.soon)').forEach(t=>{t.tabIndex=0;t.onclick=()=>{all('.tile').forEach(x=>x.classList.remove('on'));t.classList.add('on');const source=t.textContent.trim()==='Window'?'Ottr window':'Display 1';const s=$('.capture>.select');if(s){const text=[...s.childNodes].find(n=>n.nodeType===3&&n.textContent.trim());if(text)text.textContent=source;}$('.preview .badge').textContent=source+' · 2560×1440';$('.send .hint').textContent=source+' · System audio · Microphone off';};});
+ all('.seg button').forEach(b=>b.onclick=()=>{all('.seg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');const label=b.textContent;all('.rowitem').forEach(r=>{r.hidden=label==='Failed'?!r.textContent.includes('Failed'):label==='Has summary'?!r.textContent.includes('Summary'):label==='Imports'?!r.textContent.includes('Imported'):label==='Recordings'?!r.textContent.includes('Recorded'):false;r.style.display=r.hidden?'none':'';});});
+ all('.select').forEach(s=>{if(mode==='recording'&&s.closest('.recfields')){s.setAttribute('aria-disabled','true');s.title='Stop recording to change this setting';return;}s.tabIndex=0;s.setAttribute('role','button');s.onclick=()=>{const text=s.querySelector('.val')||[...s.childNodes].find(n=>n.nodeType===3&&n.textContent.trim());const current=text?.textContent.trim()||'';if(current==='Disabled'){text.textContent='Default microphone';s.closest('.capture')?.querySelector('.send .hint')?.replaceChildren(document.createTextNode('Display 1 · System audio · Microphone on'));}else if(current==='Default microphone'){text.textContent='Disabled';}else toast(current==='Auto'?'Spoken language: Auto-detect':current==='中文'?'Translation language: 中文':current==='English'?'Spoken language: English':'Selected: '+current);};});
+ all('.trow').forEach(r=>{r.tabIndex=0;r.setAttribute('role','button');r.onclick=()=>{all('.trow').forEach(x=>x.classList.remove('on'));r.classList.add('on');const tm=r.querySelector('.ttime').textContent;$('.time').textContent=tm+' / 42:00';const [m,s]=tm.split(':').map(Number);$('.head3').style.left=((m*60+s)/2520*100)+'%';all('.tile2').forEach(x=>x.classList.toggle('sel',x.querySelector('.name').textContent===r.querySelector('.tname').textContent));};});
+ all('.chap').forEach(c=>{c.tabIndex=0;c.onclick=()=>{all('.chap').forEach(x=>x.classList.remove('current'));c.classList.add('current');const tm=c.querySelector('.ct').textContent;$('.time').textContent=tm+' / 42:00';const [m,s]=tm.split(':').map(Number);$('.head3').style.left=((m*60+s)/2520*100)+'%';};});
+ all('.tab').forEach(b=>b.onclick=()=>{all('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');if(b.textContent==='Summary'){const rows=$('.trows');if(!rows.dataset.transcript)rows.dataset.transcript=rows.innerHTML;rows.innerHTML='<div style="padding:24px 12px"><strong style="font-size:17px">No summary yet</strong><p style="font-size:13px;line-height:1.7;color:var(--muted);margin-top:12px">Summaries are generated on request using your online provider.</p><button class="btn" disabled title="Configure your online provider first" style="margin-top:16px">Generate summary</button></div>';}else if($('.trows').dataset.transcript){$('.trows').innerHTML=$('.trows').dataset.transcript;}}); 
+ function search(button){const host=mode==='library'?$('.list .head'):$('.docsub');if(!host){toast('Search becomes available after recording');return;}if(host.querySelector('input')){host.querySelector('input').focus();return;}const input=document.createElement('input');input.className='search-input';input.placeholder=mode==='library'?'Search recordings…':'Search transcript…';input.setAttribute('aria-label',input.placeholder);host.append(input);input.focus();input.oninput=()=>all(mode==='library'?'.rowitem':'.trow').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(input.value.toLowerCase())?'':'none');}
+ all('button').forEach(b=>{if(b.dataset.doopAction||b.onclick||b.disabled)return;const label=(b.title||b.textContent).trim();if(label==='Search')b.onclick=()=>search(b);else if(label==='Pause')b.onclick=()=>{const paused=b.textContent.trim()==='Pause';b.childNodes[b.childNodes.length-1].textContent=paused?' Resume':' Pause';$('.recchip').lastChild.textContent=paused?'Paused':'Recording';};else if(label==='Show file'){b.disabled=true;b.title='Open the recording folder from the desktop app';}else if(label==='Delete'){b.disabled=true;b.title='Delete recordings from the desktop app';}else if(label==='Import media')b.onclick=()=>{const input=document.createElement('input');input.type='file';input.accept='video/*,audio/*';input.onchange=()=>{if(input.files[0])toast('Selected: '+input.files[0].name);};input.click();};else if(label==='Volume')b.onclick=()=>{const muted=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',String(muted));b.style.opacity=muted?'.35':'1';b.title=muted?'Unmute':'Volume';};else if(label==='Subtitles')b.onclick=()=>toast('Subtitles '+(b.classList.toggle('on')?'on':'off'));else if(label==='Fullscreen')b.onclick=()=>$('.stage').requestFullscreen?.();else if(label==='Export')b.onclick=()=>{const text=all('.trow').map(r=>r.innerText).join('\n\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));a.download='Weekly product sync.txt';a.click();URL.revokeObjectURL(a.href);};else if(label.includes('10 seconds'))b.onclick=()=>toast(label);else if(b.classList.contains('round'))b.onclick=()=>{const playing=b.classList.toggle('playing');b.setAttribute('aria-label',playing?'Pause':'Play');b.innerHTML=playing?'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM14 5h4v14h-4z"/></svg>':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7L8 5Z"/></svg>';$('.playbig').style.display=playing?'none':'';};});
+ $('.playbig')?.addEventListener('click',()=>$('.round').click());
+ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[tabindex="0"]'))e.target.click();if(e.key==='Escape'){all('.search-input').forEach(n=>n.remove());all('.trow,.rowitem').forEach(r=>r.style.display='');}if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();search();}});
+})();
+
+</script>
 </body>
 </html>
