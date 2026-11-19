@@ -1,10 +1,13 @@
 # In-window native playback implementation plan
 
-Status: **basic playback implemented**. MyGo v0.7.4 displays video and plays
-audio inside the Library item page, with play, pause, replay, slider/subtitle
-seeking and cleanup on media switch/delete. The current decoder is Ottr's
-existing FFmpeg invoked in process-bound pipes, never the system player.
-Volume, native demux/decode and the A/V-clock work below remain future phases.
+Status: **basic playback implemented**. MyGo v0.9.0 plays video through
+`ui/video`'s engine — Media Foundation on Windows — and audio-only media
+through `mygo/audio`'s in-Go decoders, inside the Library item page, with play,
+pause, replay, native seek and mute. No FFmpeg process is involved in
+playback. The custom decoder/A-V-clock phases below remain the fallback plan
+for platforms or formats the system engine and the Go decoders do not cover;
+Library thumbnails still decode their first frame with FFmpeg until the
+native-capture work replaces it.
 
 The interaction target is the
 [UI design reference](design/README.md): compact recorder, a card-grid Library

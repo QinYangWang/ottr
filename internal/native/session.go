@@ -386,7 +386,7 @@ func (a *App) docFooter(c *ui.Context, t *ui.Theme, children func()) {
 
 // activeSegment is the line under the playhead, or -1 when nothing plays.
 func (a *App) activeSegment(m library.Media) int64 {
-	if a.playback.id != m.ID || a.playback.loading || a.playback.err != "" {
+	if a.playback.id != m.ID || a.playback.loading || a.playbackError() != "" {
 		return -1
 	}
 	at := a.playbackPosition(m).Milliseconds()

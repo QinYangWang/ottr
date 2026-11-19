@@ -1,23 +1,31 @@
 package native
 
 import (
-	"context"
+	"errors"
+	"os"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/audio"
 	"github.com/egoist/mygo/ui"
+	vid "github.com/egoist/mygo/ui/video"
+
+	// Audio formats the in-window player decodes itself, registered like
+	// image formats. Video files play through ui/video's engine instead.
+	_ "github.com/egoist/mygo/audio/aac"
+	_ "github.com/egoist/mygo/audio/flac"
+	_ "github.com/egoist/mygo/audio/mp3"
+	_ "github.com/egoist/mygo/audio/mp4"
+	_ "github.com/egoist/mygo/audio/vorbis"
 
 	"ottr/internal/library"
 	"ottr/internal/native/kit"
-	player "ottr/internal/player"
 )
 
 type playback struct {
 	id          int64
-	video       *ui.VideoPlayer
-	audio       *audio.Player
-	cancel      context.CancelFunc
+	video       *ui.VideoPlayer // engine video; its sound plays with the picture
+	audio       *audio.Player   // audio-only media, decoded in Go
 	loading     bool
 	err         string
 	at          time.Time
@@ -31,9 +39,6 @@ func (a *App) closePlayback() {
 	a.playbackGen++
 	p := a.playback
 	a.playback = playback{}
-	if p.cancel != nil {
-		p.cancel()
-	}
 	if p.video != nil {
 		p.video.Close()
 	}
@@ -82,53 +87,50 @@ func (a *App) seekPlayback(m library.Media, position time.Duration) {
 	if a.playback.loading || m.DurationMs <= 0 {
 		return
 	}
-	resume := true
-	if a.playback.id == m.ID && (a.playback.video != nil || a.playback.audio != nil) {
-		resume = a.playbackPlaying()
+	position = max(0, min(position, time.Duration(m.DurationMs)*time.Millisecond))
+	if p := a.playback; p.id == m.ID && (p.video != nil || p.audio != nil) {
+		// Both players seek natively and keep their play state.
+		if p.video != nil {
+			p.video.Seek(position)
+		} else {
+			p.audio.Seek(position)
+		}
+		a.playback.offset = position
+		a.playback.at = time.Now()
+		return
 	}
-	a.openPlaybackAt(m, position, resume)
+	a.openPlaybackAt(m, position, true)
 }
 
 func (a *App) openPlaybackAt(m library.Media, position time.Duration, resume bool) {
 	a.closePlayback()
 	duration := time.Duration(m.DurationMs) * time.Millisecond
 	position = max(0, min(position, duration))
-	ctx, cancel := context.WithCancel(context.Background())
+	muted := a.muted
 	a.playbackGen++
 	gen := a.playbackGen
-	a.playback = playback{id: m.ID, cancel: cancel, loading: true, offset: position, seekSeconds: position.Seconds(), paused: !resume}
+	a.playback = playback{id: m.ID, loading: true, offset: position, seekSeconds: position.Seconds(), paused: !resume}
 	go func() {
 		var video *ui.VideoPlayer
-		if m.HasVideo {
-			decoder, err := player.OpenVideoAt(ctx, m.Path, m.Width, m.Height, position)
-			if err != nil {
-				cancel()
-				a.update(func() { a.playbackFailed(gen, m.ID, err) })
-				return
-			}
-			video, err = ui.NewVideoPlayer(decoder)
-			if err != nil {
-				decoder.Close()
-				a.update(func() { a.playbackFailed(gen, m.ID, err) })
-				return
-			}
-		}
 		var sound *audio.Player
-		if m.HasAudio {
-			pcm, err := player.OpenAudio(ctx, m.Path, time.Duration(m.DurationMs)*time.Millisecond)
+		var err error
+		if m.HasVideo {
+			video, err = vid.Open(m.Path)
+		} else if m.HasAudio {
+			var f *os.File
+			f, err = os.Open(m.Path)
 			if err == nil {
-				sound = audio.NewPlayer(pcm)
-				sound.Seek(position)
-				if a.muted {
-					audio.SetVolume(0)
+				sound, err = audio.OpenStream(f)
+				if err != nil {
+					f.Close()
 				}
-			} else {
-				if video != nil {
-					video.Close()
-				}
-				a.update(func() { a.playbackFailed(gen, m.ID, err) })
-				return
 			}
+		} else {
+			err = errNoPlayableStream
+		}
+		if err != nil {
+			a.update(func() { a.playbackFailed(gen, m.ID, err) })
+			return
 		}
 		a.update(func() {
 			if gen != a.playbackGen || a.sel != m.ID {
@@ -140,19 +142,46 @@ func (a *App) openPlaybackAt(m library.Media, position time.Duration, resume boo
 				}
 				return
 			}
-			a.playback = playback{id: m.ID, video: video, audio: sound, at: time.Now(), offset: position, seekSeconds: position.Seconds(), paused: !resume}
+			a.playback = playback{id: m.ID, video: video, audio: sound, offset: position, seekSeconds: position.Seconds(), paused: !resume}
 			if video != nil {
+				if position > 0 {
+					video.Seek(position)
+				}
+				video.SetMuted(muted)
 				if resume {
 					video.Play()
 				} else {
 					video.Pause()
 				}
 			}
-			if sound != nil && resume {
-				sound.Play()
+			if sound != nil {
+				if position > 0 {
+					sound.Seek(position)
+				}
+				if resume {
+					sound.Play()
+				}
 			}
 		})
 	}()
+}
+
+// errNoPlayableStream marks media whose container has neither a video nor a
+// decodable audio stream.
+var errNoPlayableStream = errors.New("no playable audio or video stream")
+
+// playbackError is why the open media cannot play: the open-time failure, or
+// the engine's once it reports one (an unsupported codec, a broken file).
+func (a *App) playbackError() string {
+	if a.playback.err != "" {
+		return a.playback.err
+	}
+	if a.playback.video != nil {
+		if err := a.playback.video.Err(); err != nil {
+			return err.Error()
+		}
+	}
+	return ""
 }
 
 func (a *App) playbackFailed(gen int64, id int64, err error) {
@@ -165,6 +194,11 @@ func (a *App) playbackFailed(gen int64, id int64, err error) {
 func (a *App) playbackPosition(m library.Media) time.Duration {
 	p := a.playback
 	duration := time.Duration(m.DurationMs) * time.Millisecond
+	// The players know their own position; the offset math is the fallback
+	// for a video whose engine has not produced its first frame yet.
+	if p.video != nil && p.video.Ready() {
+		return min(p.video.Position(), duration)
+	}
 	if p.audio != nil {
 		return min(p.audio.Position(), duration)
 	}
@@ -233,9 +267,9 @@ func (a *App) nativePlayerStage(c *ui.Context, t *ui.Theme, m library.Media) {
 				}
 			}
 		})
-		if a.playback.id == m.ID && a.playback.err != "" {
-			ui.Text(c, a.playback.err).FontSize(11.5).TextColor(p.Ink3).SingleLine().MinWidth(0).
-				Tooltip(a.playback.err)
+		if errText := a.playbackError(); a.playback.id == m.ID && errText != "" {
+			ui.Text(c, errText).FontSize(11.5).TextColor(p.Ink3).SingleLine().MinWidth(0).
+				Tooltip(errText)
 		}
 		if m.Source != "screenshot" {
 			a.playbackSeekSlider(c, t, m)
@@ -306,6 +340,11 @@ func (a *App) playbackControls(c *ui.Context, t *ui.Theme, m library.Media) {
 
 func (a *App) toggleMute() {
 	a.muted = !a.muted
+	// Engine video plays its own sound, outside the audio mixer the global
+	// volume reaches; mute it on the player itself.
+	if a.playback.video != nil {
+		a.playback.video.SetMuted(a.muted)
+	}
 	if a.muted {
 		audio.SetVolume(0)
 	} else {

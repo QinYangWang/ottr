@@ -61,25 +61,3 @@ func TestVideoDecoderOpensAtPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestAudioDecoderReadsPCM(t *testing.T) {
-	d, err := OpenAudio(context.Background(), testClip(t), 250*time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	if d.SampleRate() != audioRate || d.Channels() != 2 || d.Len() != 12000 {
-		t.Fatalf("unexpected format: rate=%d channels=%d len=%d", d.SampleRate(), d.Channels(), d.Len())
-	}
-	buf := make([]float32, 2048)
-	n, err := d.Read(buf)
-	if err != nil || n == 0 {
-		t.Fatalf("Read = %d, %v", n, err)
-	}
-	if err := d.SetPosition(0); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Read(buf); err != nil {
-		t.Fatal(err)
-	}
-}
